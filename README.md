@@ -548,4 +548,116 @@ trying to eval main
 The logging shows us managing to eval part of `main()`, but not all of it, as
 expected: We can eval the first `global.get`, but then we stop at the call to
 the imported function (because we don't know what that function will be when the
-wasm is actually run in a VM later). Note how in the o
+wasm is actually run in a VM later). Note how in the output wasm the global's
+value has been updated from 0 to 1, and that the first `global.get` has been
+removed: the wasm is now in a state that, when we run it in a VM, will seamlessly
+continue to run from the point at which `wasm-ctor-eval` stopped.
+
+In this tiny example we just saved a small amount of work. How much work can be
+saved depends on your program. (It can help to do pure computation up front, and
+leave calls to imports to as late as possible.)
+
+Note that `wasm-ctor-eval`'s name is related to global constructor functions,
+as mentioned earlier, but there is no limitation on what you can execute here.
+Any export from the wasm can be executed, if its contents are suitable. For
+example, in Emscripten `wasm-ctor-eval` is even run on `main()` when possible.
+
+## Testing
+
+```
+./check.py
+```
+
+(or `python check.py`) will run `wasm-shell`, `wasm-opt`, etc. on the testcases in `test/`, and verify their outputs.
+
+The `check.py` script supports some options:
+
+```
+./check.py [--interpreter=/path/to/interpreter] [TEST1] [TEST2]..
+```
+
+ * If an interpreter is provided, we run the output through it, checking for
+   parse errors.
+ * If tests are provided, we run exactly those. If none are provided, we run
+   them all. To see what tests are available, run `./check.py --list-suites`.
+ * Some tests require `emcc` or `nodejs` in the path. They will not run if the
+   tool cannot be found, and you'll see a warning.
+ * We have tests from upstream in `tests/spec`, in git submodules. Running
+   `./check.py` should update those.
+
+Note that we are trying to gradually port the legacy wasm-opt tests to use `lit`
+and `filecheck` as we modify them.  For `passes` tests that output wast, this
+can be done automatically with `scripts/port_passes_tests_to_lit.py` and for
+non-`passes` tests that output wast, see
+https://github.com/WebAssembly/binaryen/pull/4779 for an example of how to do a
+simple manual port.
+
+For lit tests the test expectations (the CHECK lines) can often be automatically
+updated as changes are made to binaryen.  See `scripts/update_lit_checks.py`.
+
+Non-lit tests can also be automatically updated in most cases.  See
+`scripts/auto_update_tests.py`.
+
+### Setting up dependencies
+
+```
+./third_party/setup.py [mozjs|v8|wabt|all]
+```
+
+(or `python third_party/setup.py`) installs required dependencies like the SpiderMonkey JS shell, the V8 JS shell
+and WABT in `third_party/`. Other scripts automatically pick these up when installed.
+
+Run `pip3 install -r requirements-dev.txt` to get the requirements for the `lit`
+tests. Note that you need to have the location `pip` installs to in your `$PATH`
+(on linux, `~/.local/bin`).
+
+### Fuzzing
+
+```
+./scripts/fuzz_opt.py [--binaryen-bin=build/bin]
+```
+
+(or `python scripts/fuzz_opt.py`) will run various fuzzing modes on random inputs with random passes until it finds
+a possible bug. See [the wiki page](https://github.com/WebAssembly/binaryen/wiki/Fuzzing) for all the details.
+
+## Design Principles
+
+ * **Interned strings for names**: It's very convenient to have names on nodes,
+   instead of just numeric indices etc. To avoid most of the performance
+   difference between strings and numeric indices, all strings are interned,
+   which means there is a single copy of each string in memory, string
+   comparisons are just a pointer comparison, etc.
+ * **Allocate in arenas**: Based on experience with other
+   optimizing/transformating toolchains, it's not worth the overhead to
+   carefully track memory of individual nodes. Instead, we allocate all elements
+   of a module in an arena, and the entire arena can be freed when the module is
+   no longer needed.
+
+## FAQ
+
+* Why the weird name for the project?
+
+"Binaryen" is a combination of **binary** - since WebAssembly is a binary format
+for the web - and **Emscripten** - with which it can integrate in order to
+compile C and C++ all the way to WebAssembly, via asm.js. Binaryen began as
+Emscripten's WebAssembly processing library (`wasm-emscripten`).
+
+"Binaryen" is pronounced [in the same manner](http://www.makinggameofthrones.com/production-diary/2011/2/11/official-pronunciation-guide-for-game-of-thrones.html) as "[Targaryen](https://en.wikipedia.org/wiki/List_of_A_Song_of_Ice_and_Fire_characters#House_Targaryen)": *bi-NAIR-ee-in*. Or something like that? Anyhow, however Targaryen is correctly pronounced, they should rhyme. Aside from pronunciation, the Targaryen house words, "Fire and Blood", have also inspired Binaryen's: "Code and Bugs."
+
+* Does it compile under Windows and/or Visual Studio?
+
+Yes, it does. Here's a step-by-step [tutorial][win32]  on how to compile it
+under **Windows 10 x64** with with **CMake** and **Visual Studio 2015**.
+However, Visual Studio 2017 may now be required. Help would be appreciated on
+Windows and OS X as most of the core devs are on Linux.
+
+[compiling to WebAssembly]: https://github.com/WebAssembly/binaryen/wiki/Compiling-to-WebAssembly-with-Binaryen
+[win32]: https://github.com/brakmic/bazaar/blob/master/webassembly/COMPILING_WIN32.md
+[C API]: https://github.com/WebAssembly/binaryen/wiki/Compiling-to-WebAssembly-with-Binaryen#c-api
+[control flow graph]: https://github.com/WebAssembly/binaryen/wiki/Compiling-to-WebAssembly-with-Binaryen#cfg-api
+[JS_API]: https://github.com/WebAssembly/binaryen/wiki/binaryen.js-API
+[compile_to_wasm]: https://github.com/WebAssembly/binaryen/wiki/Compiling-to-WebAssembly-with-Binaryen#what-do-i-need-to-have-in-order-to-use-binaryen-to-compile-to-webassembly
+[backend]: https://kripken.github.io/talks/binaryen.html#/9
+[minification]: https://kripken.github.io/talks/binaryen.html#/2
+[unreachable]: https://github.com/WebAssembly/binaryen/issues/903
+[binaryen_ir]: https://github.com/WebAssembly/binaryen/issues/663
