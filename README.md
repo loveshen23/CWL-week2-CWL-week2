@@ -231,4 +231,321 @@ Usage instructions for each are below.
 
 Binaryen contains
 [a lot of optimization passes](https://github.com/WebAssembly/binaryen/tree/main/src/passes)
-to make WebAssembly smaller and faster. You can run the Binaryen optimizer 
+to make WebAssembly smaller and faster. You can run the Binaryen optimizer by
+using ``wasm-opt``, but also they can be run while using other tools, like
+``wasm2js`` and ``wasm-metadce``.
+
+* The default optimization pipeline is set up by functions like
+  [`addDefaultFunctionOptimizationPasses`](https://github.com/WebAssembly/binaryen/blob/369b8bdd3d9d49e4d9e0edf62e14881c14d9e352/src/passes/pass.cpp#L396).
+* There are various
+  [pass options](https://github.com/WebAssembly/binaryen/blob/369b8bdd3d9d49e4d9e0edf62e14881c14d9e352/src/pass.h#L85)
+  that you can set, to adjust the optimization and shrink levels, whether to
+  ignore unlikely traps, inlining heuristics, fast-math, and so forth. See
+  ``wasm-opt --help`` for how to set them and other details.
+
+See each optimization pass for details of what it does, but here is a quick
+overview of some of the relevant ones:
+
+* **CoalesceLocals** - Key “register allocation” pass. Does a live range
+  analysis and then reuses locals in order to minimize their number, as well as
+  to remove copies between them.
+* **CodeFolding** - Avoids duplicate code by merging it (e.g. if two `if` arms
+  have some shared instructions at their end).
+* **CodePushing** - “Pushes” code forward past branch operations, potentially
+  allowing the code to not be run if the branch is taken.
+* **DeadArgumentElimination** - LTO pass to remove arguments to a function if it
+  is always called with the same constants.
+* **DeadCodeElimination**
+* **Directize** - Turn an indirect call into a normal call, when the table index
+  is constant.
+* **DuplicateFunctionElimination** - LTO pass.
+* **Inlining** - LTO pass.
+* **LocalCSE** - Simple local common subexpression elimination.
+* **LoopInvariantCodeMotion**
+* **MemoryPacking** - Key "optimize data segments" pass that combines segments,
+  removes unneeded parts, etc.
+* **MergeBlocks** - Merge a `block` to an outer one where possible, reducing
+  their number.
+* **MergeLocals** - When two locals have the same value in part of their
+  overlap, pick in a way to help CoalesceLocals do better later (split off from
+  CoalesceLocals to keep the latter simple).
+* **MinifyImportsAndExports** - Minifies them to “a”, “b”, etc.
+* **OptimizeAddedConstants** - Optimize a load/store with an added constant into
+  a constant offset.
+* **OptimizeInstructions** - Key peephole optimization pass with a constantly
+  increasing list of patterns.
+* **PickLoadSigns** - Adjust whether a load is signed or unsigned in order to
+  avoid sign/unsign operations later.
+* **Precompute** - Calculates constant expressions at compile time, using the
+  built-in interpreter (which is guaranteed to be able to handle any constant
+  expression).
+* **ReReloop** - Transforms wasm structured control flow to a CFG and then goes
+  back to structured form using the Relooper algorithm, which may find more
+  optimal shapes.
+* **RedundantSetElimination** - Removes a `local.set` of a value that is already
+  present in a local. (Overlaps with CoalesceLocals; this achieves the specific
+  operation just mentioned without all the other work CoalesceLocals does, and
+  therefore is useful in other places in the optimization pipeline.)
+* **RemoveUnsedBrs** - Key “minor control flow optimizations” pass, including
+  jump threading and various transforms that can get rid of a `br` or `br_table`
+  (like turning a `block` with a `br` in the middle into an `if` when possible).
+* **RemoveUnusedModuleElements** - “Global DCE”, an LTO pass that removes
+  imports, functions, globals, etc., when they are not used.
+* **ReorderFunctions** - Put more-called functions first, potentially allowing
+  the LEB emitted to call them to be smaller (in a very large program).
+* **ReorderLocals** - Put more-used locals first, potentially allowing the LEB
+  emitted to use them to be smaller (in a very large function). After the
+  sorting, it also removes locals not used at all.
+* **SimplifyGlobals** - Optimizes globals in various ways, for example,
+  coalescing them, removing mutability from a global never modified, applying a
+  constant value from an immutable global, etc.
+* **SimplifyLocals** - Key “`local.get/set/tee`” optimization pass, doing things
+  like replacing a set and a get with moving the set’s value to the get (and
+  creating a tee) where possible. Also creates `block/if/loop` return values
+  instead of using a local to pass the value.
+* **Vacuum** - Key “remove silly unneeded code” pass, doing things like removing
+  an `if` arm that has no contents, a drop of a constant value with no side
+  effects, a `block` with a single child, etc.
+
+“LTO” in the above means an optimization is Link Time Optimization-like in that
+it works across multiple functions, but in a sense Binaryen is always “LTO” as
+it usually is run on the final linked wasm.
+
+Advanced optimization techniques in the Binaryen optimizer include
+[SSAification](https://github.com/WebAssembly/binaryen/blob/main/src/passes/SSAify.cpp),
+[Flat IR](https://github.com/WebAssembly/binaryen/blob/main/src/ir/flat.h), and
+[Stack/Poppy IR](https://github.com/WebAssembly/binaryen/blob/main/src/ir/stack-utils.h).
+
+Binaryen also contains various passes that do other things than optimizations,
+like
+[legalization for JavaScript](https://github.com/WebAssembly/binaryen/blob/main/src/passes/LegalizeJSInterface.cpp),
+[Asyncify](https://github.com/WebAssembly/binaryen/blob/main/src/passes/Asyncify.cpp),
+etc.
+
+## Building
+
+Binaryen uses git submodules (at time of writing just for gtest), so before you build you will have to initialize the submodules:
+
+```
+git submodule init
+git submodule update
+```
+
+After that you can build with CMake:
+
+```
+cmake . && make
+```
+
+A C++17 compiler is required. Note that you can also use `ninja` as your generator: `cmake -G Ninja . && ninja`.
+
+To avoid the gtest dependency, you can pass `-DBUILD_TESTS=OFF` to cmake.
+
+Binaryen.js can be built using Emscripten, which can be installed via [the SDK](http://kripken.github.io/emscripten-site/docs/getting_started/downloads.html).
+
+```
+emcmake cmake . && emmake make binaryen_js
+```
+
+### Visual C++
+
+1. Using the Microsoft Visual Studio Installer, install the "Visual C++ tools for CMake" component.
+
+1. Generate the projects:
+
+   ```
+   mkdir build
+   cd build
+   "%VISUAL_STUDIO_ROOT%\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" ..
+   ```
+
+   Substitute VISUAL_STUDIO_ROOT with the path to your Visual Studio
+   installation. In case you are using the Visual Studio Build Tools, the path
+   will be "C:\Program Files (x86)\Microsoft Visual Studio\2017\BuildTools".
+
+1. From the Developer Command Prompt, build the desired projects:
+
+   ```
+   msbuild binaryen.vcxproj
+   ```
+
+   CMake generates a project named "ALL_BUILD.vcxproj" for conveniently building all the projects.
+
+## Running
+
+### wasm-opt
+
+Run
+
+````
+bin/wasm-opt [.wasm or .wat file] [options] [passes, see --help] [--help]
+````
+
+The wasm optimizer receives WebAssembly as input, and can run transformation
+passes on it, as well as print it (before and/or after the transformations). For
+example, try
+
+````
+bin/wasm-opt test/lit/passes/name-types.wast -all -S -o -
+````
+
+That will output one of the test cases in the test suite. To run a
+transformation pass on it, try
+
+````
+bin/wasm-opt test/lit/passes/name-types.wast --name-types -all -S -o -
+````
+
+The `name-types` pass ensures each type has a name and renames exceptionally long type names. You can see
+the change the transformation causes by comparing the output of the two commands.
+
+It's easy to add your own transformation passes to the shell, just add `.cpp`
+files into `src/passes`, and rebuild the shell. For example code, take a look at
+the [`name-types` pass](https://github.com/WebAssembly/binaryen/blob/main/src/passes/NameTypes.cpp).
+
+Some more notes:
+
+ * See `bin/wasm-opt --help` for the full list of options and passes.
+ * Passing `--debug` will emit some debugging info.  Individual debug channels
+   (defined in the source code via `#define DEBUG_TYPE xxx`) can be enabled by
+   passing them as list of comma-separated strings.  For example: `bin/wasm-opt
+   --debug=binary`.  These debug channels can also be enabled via the
+   `BINARYEN_DEBUG` environment variable.
+
+### wasm2js
+
+Run
+
+```
+bin/wasm2js [input.wasm file]
+```
+
+This will print out JavaScript to the console.
+
+For example, try
+
+```
+bin/wasm2js test/hello_world.wat
+```
+
+That output contains
+
+```
+ function add(x, y) {
+  x = x | 0;
+  y = y | 0;
+  return x + y | 0 | 0;
+ }
+```
+
+as a translation of
+
+```
+ (func $add (; 0 ;) (type $0) (param $x i32) (param $y i32) (result i32)
+  (i32.add
+   (local.get $x)
+   (local.get $y)
+  )
+ )
+```
+
+wasm2js's output is in ES6 module format - basically, it converts a wasm
+module into an ES6 module (to run on older browsers and Node.js versions
+you can use Babel etc. to convert it to ES5). Let's look at a full example
+of calling that hello world wat; first, create the main JS file:
+
+```javascript
+// main.mjs
+import { add } from "./hello_world.mjs";
+console.log('the sum of 1 and 2 is:', add(1, 2));
+```
+
+The run this (note that you need a new enough Node.js with ES6 module
+support):
+
+```shell
+$ bin/wasm2js test/hello_world.wat -o hello_world.mjs
+$ node --experimental-modules main.mjs
+the sum of 1 and 2 is: 3
+```
+
+Things keep to in mind with wasm2js's output:
+
+ * You should run wasm2js with optimizations for release builds, using `-O`
+   or another optimization level. That will optimize along the entire pipeline
+   (wasm and JS). It won't do everything a JS minifer would, though, like
+   minify whitespace, so you should still run a normal JS minifer afterwards.
+ * It is not possible to match WebAssembly semantics 100% precisely with fast
+   JavaScript code. For example, every load and store may trap, and to make
+   JavaScript do the same we'd need to add checks everywhere, which would be
+   large and slow. Instead, wasm2js assumes loads and stores do not trap, that
+   int/float conversions do not trap, and so forth. There may also be slight
+   differences in corner cases of conversions, like non-trapping float to int.
+
+### wasm-ctor-eval
+
+`wasm-ctor-eval` executes functions, or parts of them, at compile time.
+After doing so it serializes the runtime state into the wasm, which is like
+taking a "snapshot". When the wasm is later loaded and run in a VM, it will
+continue execution from that point, without re-doing the work that was already
+executed.
+
+For example, consider this small program:
+
+```wat
+(module
+ ;; A global variable that begins at 0.
+ (global $global (mut i32) (i32.const 0))
+
+ (import "import" "import" (func $import))
+
+ (func "main"
+  ;; Set the global to 1.
+  (global.set $global
+   (i32.const 1))
+
+  ;; Call the imported function. This *cannot* be executed at
+  ;; compile time.
+  (call $import)
+
+  ;; We will never get to this point, since we stop at the
+  ;; import.
+  (global.set $global
+   (i32.const 2))
+ )
+)
+```
+
+We can evaluate part of it at compile time like this:
+
+```
+wasm-ctor-eval input.wat --ctors=main -S -o -
+```
+
+This tells it that there is a single function that we want to execute ("ctor"
+is short for "global constructor", a name that comes from code that is executed
+before a program's entry point) and then to print it as text to `stdout`. The
+result is this:
+
+```wat
+trying to eval main
+  ...partial evalling successful, but stopping since could not eval: call import: import.import
+  ...stopping
+(module
+ (type $none_=>_none (func))
+ (import "import" "import" (func $import))
+ (global $global (mut i32) (i32.const 1))
+ (export "main" (func $0_0))
+ (func $0_0
+  (call $import)
+  (global.set $global
+   (i32.const 2)
+  )
+ )
+)
+```
+
+The logging shows us managing to eval part of `main()`, but not all of it, as
+expected: We can eval the first `global.get`, but then we stop at the call to
+the imported function (because we don't know what that function will be when the
+wasm is actually run in a VM later). Note how in the o
