@@ -155,4 +155,262 @@ def run_wasm_reduce_tests():
         print('..', os.path.basename(t))
         # convert to wasm
         support.run_command(shared.WASM_AS + [t, '-o', 'a.wasm', '-all'])
-        support.run_command(shared.WASM_REDUCE + ['a.wasm', '--command=
+        support.run_command(shared.WASM_REDUCE + ['a.wasm', '--command=%s b.wasm --fuzz-exec -all ' % shared.WASM_OPT[0], '-t', 'b.wasm', '-w', 'c.wasm', '--timeout=4'])
+        expected = t + '.txt'
+        support.run_command(shared.WASM_DIS + ['c.wasm', '-o', 'a.wat'])
+        with open('a.wat') as seen:
+            shared.fail_if_not_identical_to_file(seen.read(), expected)
+
+    # run on a nontrivial fuzz testcase, for general coverage
+    # this is very slow in ThreadSanitizer, so avoid it there
+    if 'fsanitize=thread' not in str(os.environ):
+        print('\n[ checking wasm-reduce fuzz testcase ]\n')
+        # TODO: re-enable multivalue once it is better optimized
+        support.run_command(shared.WASM_OPT + [os.path.join(shared.options.binaryen_test, 'signext.wast'), '-ttf', '-Os', '-o', 'a.wasm', '--detect-features', '--disable-multivalue'])
+        before = os.stat('a.wasm').st_size
+        support.run_command(shared.WASM_REDUCE + ['a.wasm', '--command=%s b.wasm --fuzz-exec --detect-features' % shared.WASM_OPT[0], '-t', 'b.wasm', '-w', 'c.wasm'])
+        after = os.stat('c.wasm').st_size
+        # This number is a custom threshold to check if we have shrunk the
+        # output sufficiently
+        assert after < 0.85 * before, [before, after]
+
+
+def run_spec_tests():
+    print('\n[ checking wasm-shell spec testcases... ]\n')
+
+    for wast in shared.options.spec_tests:
+        base = os.path.basename(wast)
+        print('..', base)
+        # windows has some failures that need to be investigated
+        if base == 'names.wast' and shared.skip_if_on_windows('spec: ' + base):
+            continue
+
+        def run_spec_test(wast):
+            cmd = shared.WASM_SHELL + [wast]
+            output = support.run_command(cmd, stderr=subprocess.PIPE)
+            # filter out binaryen interpreter logging that the spec suite
+            # doesn't expect
+            filtered = [line for line in output.splitlines() if not line.startswith('[trap')]
+            return '\n'.join(filtered) + '\n'
+
+        def run_opt_test(wast):
+            # check optimization validation
+            cmd = shared.WASM_OPT + [wast, '-O', '-all']
+            support.run_command(cmd)
+
+        def check_expected(actual, expected):
+            if expected and os.path.exists(expected):
+                expected = open(expected).read()
+                print('       (using expected output)')
+                actual = actual.strip()
+                expected = expected.strip()
+                if actual != expected:
+                    shared.fail(actual, expected)
+
+        expected = os.path.join(shared.get_test_dir('spec'), 'expected-output', base + '.log')
+
+        # some spec tests should fail (actual process failure, not just assert_invalid)
+        try:
+            actual = run_spec_test(wast)
+        except Exception as e:
+            if ('wasm-validator error' in str(e) or 'parse exception' in str(e)) and '.fail.' in base:
+                print('<< test failed as expected >>')
+                continue  # don't try all the binary format stuff TODO
+            else:
+                shared.fail_with_error(str(e))
+
+        check_expected(actual, expected)
+
+        # skip binary checks for tests that reuse previous modules by name, as that's a wast-only feature
+        if 'exports.wast' in base:  # FIXME
+            continue
+
+        run_spec_test(wast)
+
+        # check binary format. here we can verify execution of the final
+        # result, no need for an output verification
+        # some wast files cannot be split:
+        #     * comments.wast: contains characters that are not valid utf-8,
+        #       so our string splitting code fails there
+
+        # FIXME Remove reference type tests from this list after nullref is
+        # implemented in V8
+        if base not in ['comments.wast', 'ref_null.wast', 'ref_is_null.wast', 'ref_func.wast', 'old_select.wast']:
+            split_num = 0
+            actual = ''
+            with open('spec.wast', 'w') as transformed_spec_file:
+                for module, asserts in support.split_wast(wast):
+                    print('        testing split module', split_num)
+                    split_num += 1
+                    support.write_wast('split.wast', module, asserts)
+                    run_opt_test('split.wast')    # also that our optimizer doesn't break on it
+                    result_wast_file = shared.binary_format_check('split.wast', verify_final_result=False, original_wast=wast)
+                    with open(result_wast_file) as f:
+                        result_wast = f.read()
+                        # add the asserts, and verify that the test still passes
+                        transformed_spec_file.write(result_wast + '\n' + '\n'.join(asserts))
+
+            # compare all the outputs to the expected output
+            actual = run_spec_test('spec.wast')
+            check_expected(actual, os.path.join(shared.get_test_dir('spec'), 'expected-output', base + '.log'))
+
+
+def run_validator_tests():
+    print('\n[ running validation tests... ]\n')
+    # Ensure the tests validate by default
+    cmd = shared.WASM_AS + [os.path.join(shared.get_test_dir('validator'), 'invalid_export.wast'), '-o', 'a.wasm']
+    support.run_command(cmd)
+    cmd = shared.WASM_AS + [os.path.join(shared.get_test_dir('validator'), 'invalid_import.wast'), '-o', 'a.wasm']
+    support.run_command(cmd)
+    cmd = shared.WASM_AS + ['--validate=web', os.path.join(shared.get_test_dir('validator'), 'invalid_export.wast'), '-o', 'a.wasm']
+    support.run_command(cmd, expected_status=1)
+    cmd = shared.WASM_AS + ['--validate=web', os.path.join(shared.get_test_dir('validator'), 'invalid_import.wast'), '-o', 'a.wasm']
+    support.run_command(cmd, expected_status=1)
+    cmd = shared.WASM_AS + ['--validate=none', os.path.join(shared.get_test_dir('validator'), 'invalid_return.wast'), '-o', 'a.wasm']
+    support.run_command(cmd)
+    cmd = shared.WASM_AS + [os.path.join(shared.get_test_dir('validator'), 'invalid_number.wast'), '-o', 'a.wasm']
+    support.run_command(cmd, expected_status=1)
+
+
+def run_example_tests():
+    print('\n[ checking native example testcases...]\n')
+    if not shared.NATIVECC or not shared.NATIVEXX:
+        shared.fail_with_error('Native compiler (e.g. gcc/g++) was not found in PATH!')
+        return
+    # windows + gcc will need some work
+    if shared.skip_if_on_windows('example'):
+        return
+
+    for t in shared.get_tests(shared.get_test_dir('example')):
+        output_file = 'example'
+        cmd = ['-I' + os.path.join(shared.options.binaryen_root, 't'), '-g', '-pthread', '-o', output_file]
+        if not t.endswith(('.c', '.cpp')):
+            continue
+        src = os.path.join(shared.get_test_dir('example'), t)
+        expected = os.path.join(shared.get_test_dir('example'), '.'.join(t.split('.')[:-1]) + '.txt')
+        # build the C file separately
+        libpath = shared.options.binaryen_lib
+        extra = [shared.NATIVECC, src, '-c', '-o', 'example.o',
+                 '-I' + os.path.join(shared.options.binaryen_root, 'src'), '-g', '-L' + libpath, '-pthread']
+        if src.endswith('.cpp'):
+            extra += ['-std=c++' + str(shared.cxx_standard)]
+        if os.environ.get('COMPILER_FLAGS'):
+            for f in os.environ.get('COMPILER_FLAGS').split(' '):
+                extra.append(f)
+        print('build: ', ' '.join(extra))
+        subprocess.check_call(extra)
+        # Link against the binaryen C library DSO, using an executable-relative rpath
+        cmd = ['example.o', '-L' + libpath, '-lbinaryen'] + cmd + ['-Wl,-rpath,' + libpath]
+        print('  ', t, src, expected)
+        if os.environ.get('COMPILER_FLAGS'):
+            for f in os.environ.get('COMPILER_FLAGS').split(' '):
+                cmd.append(f)
+        cmd = [shared.NATIVEXX, '-std=c++' + str(shared.cxx_standard)] + cmd
+        print('link: ', ' '.join(cmd))
+        subprocess.check_call(cmd)
+        print('run...', output_file)
+        actual = subprocess.check_output([os.path.abspath(output_file)]).decode('utf-8')
+        os.remove(output_file)
+        shared.fail_if_not_identical_to_file(actual, expected)
+
+
+def run_unittest():
+    print('\n[ checking unit tests...]\n')
+
+    # equivalent to `python -m unittest discover -s ./test -v`
+    suite = unittest.defaultTestLoader.discover(os.path.dirname(shared.options.binaryen_test))
+    result = unittest.TextTestRunner(verbosity=2, failfast=shared.options.abort_on_first_failure).run(suite)
+    shared.num_failures += len(result.errors) + len(result.failures)
+    if shared.options.abort_on_first_failure and shared.num_failures:
+        raise Exception("unittest failed")
+
+
+def run_lit():
+    def run():
+        lit_script = os.path.join(shared.options.binaryen_bin, 'binaryen-lit')
+        lit_tests = os.path.join(shared.options.binaryen_root, 'test', 'lit')
+        # lit expects to be run as its own executable
+        cmd = [sys.executable, lit_script, lit_tests, '-vv']
+        result = subprocess.run(cmd)
+        if result.returncode != 0:
+            shared.num_failures += 1
+        if shared.options.abort_on_first_failure and shared.num_failures:
+            raise Exception("lit test failed")
+
+    shared.with_pass_debug(run)
+
+
+def run_gtest():
+    def run():
+        gtest = os.path.join(shared.options.binaryen_bin, 'binaryen-unittests')
+        if not os.path.isfile(gtest):
+            shared.warn('gtest binary not found - skipping tests')
+        else:
+            result = subprocess.run(gtest)
+            if result.returncode != 0:
+                shared.num_failures += 1
+            if shared.options.abort_on_first_failure and shared.num_failures:
+                raise Exception("gtest test failed")
+
+    shared.with_pass_debug(run)
+
+
+TEST_SUITES = OrderedDict([
+    ('version', run_version_tests),
+    ('wasm-opt', wasm_opt.test_wasm_opt),
+    ('wasm-dis', run_wasm_dis_tests),
+    ('crash', run_crash_tests),
+    ('dylink', run_dylink_tests),
+    ('ctor-eval', run_ctor_eval_tests),
+    ('wasm-metadce', run_wasm_metadce_tests),
+    ('wasm-reduce', run_wasm_reduce_tests),
+    ('spec', run_spec_tests),
+    ('lld', lld.test_wasm_emscripten_finalize),
+    ('wasm2js', wasm2js.test_wasm2js),
+    ('validator', run_validator_tests),
+    ('example', run_example_tests),
+    ('unit', run_unittest),
+    ('binaryenjs', binaryenjs.test_binaryen_js),
+    ('binaryenjs_wasm', binaryenjs.test_binaryen_wasm),
+    ('lit', run_lit),
+    ('gtest', run_gtest),
+])
+
+
+# Run all the tests
+def main():
+    all_suites = TEST_SUITES.keys()
+    skip_by_default = ['binaryenjs', 'binaryenjs_wasm']
+
+    if shared.options.list_suites:
+        for suite in all_suites:
+            print(suite)
+        return 0
+
+    for r in shared.requested:
+        if r not in all_suites:
+            print('invalid test suite: %s (see --list-suites)\n' % r)
+            return 1
+
+    if not shared.requested:
+        shared.requested = [s for s in all_suites if s not in skip_by_default]
+
+    for test in shared.requested:
+        TEST_SUITES[test]()
+
+    # Check/display the results
+    if shared.num_failures == 0:
+        print('\n[ success! ]')
+
+    if shared.warnings:
+        print('\n' + '\n'.join(shared.warnings))
+
+    if shared.num_failures > 0:
+        print('\n[ ' + str(shared.num_failures) + ' failures! ]')
+        return 1
+
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())
