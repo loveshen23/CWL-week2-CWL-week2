@@ -92,4 +92,48 @@ try:
             print('>>> trying to reduce:', ' '.join(passes), '  [' + str(len(passes)) + ']')
             for i in range(len(passes)):
                 smaller = passes[:i] + passes[i + 1:]
-                print('>>>>>> try to reduce to:', ' '.j
+                print('>>>>>> try to reduce to:', ' '.join(smaller), '  [' + str(len(smaller)) + ']')
+                try:
+                    apply_passes(smaller)
+                    assert run() == normal
+                except Exception:
+                    # this failed too, so it's a good reduction
+                    passes = smaller
+                    print('>>> reduction successful')
+                    more = True
+                    break
+        print('>>> reduced to:', ' '.join(passes))
+
+    tested = set()
+
+    def pick_passes():
+        # return '--waka'.split(' ')
+        ret = []
+        while 1:
+            str_ret = str(ret)
+            if random.random() < 0.5 and str_ret not in tested:
+                tested.add(str_ret)
+                return ret
+            ret.append('--' + random.choice(PASSES))
+
+    counter = 0
+
+    while 1:
+        passes = pick_passes()
+        print('>>> [' + str(counter) + '] testing:', ' '.join(passes))
+        counter += 1
+        try:
+            apply_passes(passes)
+        except Exception as e:
+            print(e)
+            simplify(passes)
+            break
+        seen = run()
+        if seen != normal:
+            print('>>> bad output:\n', seen)
+            simplify(passes)
+            break
+
+finally:
+    if original_wast:
+        shutil.move(original_wast, wast)
