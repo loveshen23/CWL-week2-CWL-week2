@@ -79,3 +79,22 @@ def update_lld_tests():
         is_passive = '.passive.' in input_path
         mem_file = input_path + '.mem'
         extension_arg_map = {
+            '.out': [],
+        }
+        if not is_passive:
+            extension_arg_map.update({
+                '.mem.out': ['--separate-data-segments', mem_file + '.mem'],
+            })
+        for ext, ext_args in extension_arg_map.items():
+            out_path = input_path + ext
+            if ext != '.out' and not os.path.exists(out_path):
+                continue
+            cmd = shared.WASM_EMSCRIPTEN_FINALIZE + ext_args
+            if '64' in input_path:
+                cmd += ['--enable-memory64', '--bigint']
+            cmd += [input_path, '-S']
+            cmd += args_for_finalize(os.path.basename(input_path))
+            actual = support.run_command(cmd)
+
+            with open(out_path, 'w') as o:
+                o.write(actual)
