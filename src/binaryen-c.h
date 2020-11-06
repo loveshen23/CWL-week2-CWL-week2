@@ -1,0 +1,417 @@
+/*
+ * Copyright 2016 WebAssembly Community Group participants
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+//================
+// Binaryen C API
+//
+// The first part of the API lets you create modules and their parts.
+//
+// The second part of the API lets you perform operations on modules.
+//
+// The third part of the API lets you provide a general control-flow
+//   graph (CFG) as input.
+//
+// The final part of the API contains miscellaneous utilities like
+//   debugging for the API itself.
+//
+// ---------------
+//
+// Thread safety: You can create Expressions in parallel, as they do not
+//                refer to global state. BinaryenAddFunction is also
+//                thread-safe, which means that you can create functions and
+//                their contents in multiple threads. This is important since
+//                functions are where the majority of the work is done.
+//                Other methods - creating imports, exports, etc. - are
+//                not currently thread-safe (as there is typically no need
+//                to parallelize them).
+//
+//================
+
+#ifndef wasm_binaryen_c_h
+#define wasm_binaryen_c_h
+
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+
+#ifdef __GNUC__
+#define WASM_DEPRECATED __attribute__((deprecated))
+#elif defined(_MSC_VER)
+#define WASM_DEPRECATED __declspec(deprecated)
+#else
+#define WASM_DEPRECATED
+#endif
+
+#if defined(__EMSCRIPTEN__)
+#include <emscripten.h>
+#define BINARYEN_API EMSCRIPTEN_KEEPALIVE
+#elif defined(_MSC_VER) && !defined(BUILD_STATIC_LIBRARY)
+#define BINARYEN_API __declspec(dllexport)
+#else
+#define BINARYEN_API
+#endif
+
+#ifdef __cplusplus
+#define BINARYEN_REF(NAME)                                                     \
+  namespace wasm {                                                             \
+  class NAME;                                                                  \
+  };                                                                           \
+  typedef class wasm::NAME* Binaryen##NAME##Ref;
+#else
+#define BINARYEN_REF(NAME) typedef struct Binaryen##NAME* Binaryen##NAME##Ref;
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+//
+// ========== Module Creation ==========
+//
+
+// BinaryenIndex
+//
+// Used for internal indexes and list sizes.
+
+typedef uint32_t BinaryenIndex;
+
+// Core types (call to get the value of each; you can cache them, they
+// never change)
+
+typedef uintptr_t BinaryenType;
+
+BINARYEN_API BinaryenType BinaryenTypeNone(void);
+BINARYEN_API BinaryenType BinaryenTypeInt32(void);
+BINARYEN_API BinaryenType BinaryenTypeInt64(void);
+BINARYEN_API BinaryenType BinaryenTypeFloat32(void);
+BINARYEN_API BinaryenType BinaryenTypeFloat64(void);
+BINARYEN_API BinaryenType BinaryenTypeVec128(void);
+BINARYEN_API BinaryenType BinaryenTypeFuncref(void);
+BINARYEN_API BinaryenType BinaryenTypeExternref(void);
+BINARYEN_API BinaryenType BinaryenTypeAnyref(void);
+BINARYEN_API BinaryenType BinaryenTypeEqref(void);
+BINARYEN_API BinaryenType BinaryenTypeI31ref(void);
+BINARYEN_API BinaryenType BinaryenTypeStructref(void);
+BINARYEN_API BinaryenType BinaryenTypeArrayref(void);
+BINARYEN_API BinaryenType BinaryenTypeStringref(void);
+BINARYEN_API BinaryenType BinaryenTypeStringviewWTF8(void);
+BINARYEN_API BinaryenType BinaryenTypeStringviewWTF16(void);
+BINARYEN_API BinaryenType BinaryenTypeStringviewIter(void);
+BINARYEN_API BinaryenType BinaryenTypeNullref(void);
+BINARYEN_API BinaryenType BinaryenTypeNullExternref(void);
+BINARYEN_API BinaryenType BinaryenTypeNullFuncref(void);
+BINARYEN_API BinaryenType BinaryenTypeUnreachable(void);
+// Not a real type. Used as the last parameter to BinaryenBlock to let
+// the API figure out the type instead of providing one.
+BINARYEN_API BinaryenType BinaryenTypeAuto(void);
+BINARYEN_API BinaryenType BinaryenTypeCreate(BinaryenType* valueTypes,
+                                             BinaryenIndex numTypes);
+BINARYEN_API uint32_t BinaryenTypeArity(BinaryenType t);
+BINARYEN_API void BinaryenTypeExpand(BinaryenType t, BinaryenType* buf);
+
+WASM_DEPRECATED BinaryenType BinaryenNone(void);
+WASM_DEPRECATED BinaryenType BinaryenInt32(void);
+WASM_DEPRECATED BinaryenType BinaryenInt64(void);
+WASM_DEPRECATED BinaryenType BinaryenFloat32(void);
+WASM_DEPRECATED BinaryenType BinaryenFloat64(void);
+WASM_DEPRECATED BinaryenType BinaryenUndefined(void);
+
+// Packed types (call to get the value of each; you can cache them)
+
+typedef uint32_t BinaryenPackedType;
+
+BINARYEN_API BinaryenPackedType BinaryenPackedTypeNotPacked(void);
+BINARYEN_API BinaryenPackedType BinaryenPackedTypeInt8(void);
+BINARYEN_API BinaryenPackedType BinaryenPackedTypeInt16(void);
+
+// Heap types
+
+typedef uintptr_t BinaryenHeapType;
+
+BINARYEN_API BinaryenHeapType BinaryenHeapTypeExt(void);
+BINARYEN_API BinaryenHeapType BinaryenHeapTypeFunc(void);
+BINARYEN_API BinaryenHeapType BinaryenHeapTypeAny(void);
+BINARYEN_API BinaryenHeapType BinaryenHeapTypeEq(void);
+BINARYEN_API BinaryenHeapType BinaryenHeapTypeI31(void);
+BINARYEN_API BinaryenHeapType BinaryenHeapTypeStruct(void);
+BINARYEN_API BinaryenHeapType BinaryenHeapTypeArray(void);
+BINARYEN_API BinaryenHeapType BinaryenHeapTypeString(void);
+BINARYEN_API BinaryenHeapType BinaryenHeapTypeStringviewWTF8(void);
+BINARYEN_API BinaryenHeapType BinaryenHeapTypeStringviewWTF16(void);
+BINARYEN_API BinaryenHeapType BinaryenHeapTypeStringviewIter(void);
+BINARYEN_API BinaryenHeapType BinaryenHeapTypeNone(void);
+BINARYEN_API BinaryenHeapType BinaryenHeapTypeNoext(void);
+BINARYEN_API BinaryenHeapType BinaryenHeapTypeNofunc(void);
+
+BINARYEN_API bool BinaryenHeapTypeIsBasic(BinaryenHeapType heapType);
+BINARYEN_API bool BinaryenHeapTypeIsSignature(BinaryenHeapType heapType);
+BINARYEN_API bool BinaryenHeapTypeIsStruct(BinaryenHeapType heapType);
+BINARYEN_API bool BinaryenHeapTypeIsArray(BinaryenHeapType heapType);
+BINARYEN_API bool BinaryenHeapTypeIsBottom(BinaryenHeapType heapType);
+BINARYEN_API BinaryenHeapType
+BinaryenHeapTypeGetBottom(BinaryenHeapType heapType);
+BINARYEN_API bool BinaryenHeapTypeIsSubType(BinaryenHeapType left,
+                                            BinaryenHeapType right);
+BINARYEN_API BinaryenIndex
+BinaryenStructTypeGetNumFields(BinaryenHeapType heapType);
+BINARYEN_API BinaryenType
+BinaryenStructTypeGetFieldType(BinaryenHeapType heapType, BinaryenIndex index);
+BINARYEN_API BinaryenPackedType BinaryenStructTypeGetFieldPackedType(
+  BinaryenHeapType heapType, BinaryenIndex index);
+BINARYEN_API bool BinaryenStructTypeIsFieldMutable(BinaryenHeapType heapType,
+                                                   BinaryenIndex index);
+BINARYEN_API BinaryenType
+BinaryenArrayTypeGetElementType(BinaryenHeapType heapType);
+BINARYEN_API BinaryenPackedType
+BinaryenArrayTypeGetElementPackedType(BinaryenHeapType heapType);
+BINARYEN_API bool BinaryenArrayTypeIsElementMutable(BinaryenHeapType heapType);
+BINARYEN_API BinaryenType
+BinaryenSignatureTypeGetParams(BinaryenHeapType heapType);
+BINARYEN_API BinaryenType
+BinaryenSignatureTypeGetResults(BinaryenHeapType heapType);
+
+BINARYEN_API BinaryenHeapType BinaryenTypeGetHeapType(BinaryenType type);
+BINARYEN_API bool BinaryenTypeIsNullable(BinaryenType type);
+BINARYEN_API BinaryenType BinaryenTypeFromHeapType(BinaryenHeapType heapType,
+                                                   bool nullable);
+
+// TypeSystem
+
+typedef uint32_t BinaryenTypeSystem;
+
+BINARYEN_API BinaryenTypeSystem BinaryenTypeSystemNominal(void);
+BINARYEN_API BinaryenTypeSystem BinaryenTypeSystemIsorecursive(void);
+BINARYEN_API BinaryenTypeSystem BinaryenGetTypeSystem(void);
+BINARYEN_API void BinaryenSetTypeSystem(BinaryenTypeSystem typeSystem);
+
+// Expression ids (call to get the value of each; you can cache them)
+
+typedef uint32_t BinaryenExpressionId;
+
+BINARYEN_API BinaryenExpressionId BinaryenInvalidId(void);
+
+#define DELEGATE(CLASS_TO_VISIT)                                               \
+  BINARYEN_API BinaryenExpressionId Binaryen##CLASS_TO_VISIT##Id(void);
+
+#include "wasm-delegations.def"
+
+// External kinds (call to get the value of each; you can cache them)
+
+typedef uint32_t BinaryenExternalKind;
+
+BINARYEN_API BinaryenExternalKind BinaryenExternalFunction(void);
+BINARYEN_API BinaryenExternalKind BinaryenExternalTable(void);
+BINARYEN_API BinaryenExternalKind BinaryenExternalMemory(void);
+BINARYEN_API BinaryenExternalKind BinaryenExternalGlobal(void);
+BINARYEN_API BinaryenExternalKind BinaryenExternalTag(void);
+
+// Features. Call to get the value of each; you can cache them. Use bitwise
+// operators to combine and test particular features.
+
+typedef uint32_t BinaryenFeatures;
+
+BINARYEN_API BinaryenFeatures BinaryenFeatureMVP(void);
+BINARYEN_API BinaryenFeatures BinaryenFeatureAtomics(void);
+BINARYEN_API BinaryenFeatures BinaryenFeatureBulkMemory(void);
+BINARYEN_API BinaryenFeatures BinaryenFeatureMutableGlobals(void);
+BINARYEN_API BinaryenFeatures BinaryenFeatureNontrappingFPToInt(void);
+BINARYEN_API BinaryenFeatures BinaryenFeatureSignExt(void);
+BINARYEN_API BinaryenFeatures BinaryenFeatureSIMD128(void);
+BINARYEN_API BinaryenFeatures BinaryenFeatureExceptionHandling(void);
+BINARYEN_API BinaryenFeatures BinaryenFeatureTailCall(void);
+BINARYEN_API BinaryenFeatures BinaryenFeatureReferenceTypes(void);
+BINARYEN_API BinaryenFeatures BinaryenFeatureMultivalue(void);
+BINARYEN_API BinaryenFeatures BinaryenFeatureGC(void);
+BINARYEN_API BinaryenFeatures BinaryenFeatureMemory64(void);
+BINARYEN_API BinaryenFeatures BinaryenFeatureRelaxedSIMD(void);
+BINARYEN_API BinaryenFeatures BinaryenFeatureExtendedConst(void);
+BINARYEN_API BinaryenFeatures BinaryenFeatureStrings(void);
+BINARYEN_API BinaryenFeatures BinaryenFeatureMultiMemories(void);
+BINARYEN_API BinaryenFeatures BinaryenFeatureAll(void);
+
+// Modules
+//
+// Modules contain lists of functions, imports, exports, function types. The
+// Add* methods create them on a module. The module owns them and will free
+// their memory when the module is disposed of.
+//
+// Expressions are also allocated inside modules, and freed with the module.
+// They are not created by Add* methods, since they are not added directly on
+// the module, instead, they are arguments to other expressions (and then they
+// are the children of that AST node), or to a function (and then they are the
+// body of that function).
+//
+// A module can also contain a function table for indirect calls, a memory,
+// and a start method.
+
+BINARYEN_REF(Module);
+
+BINARYEN_API BinaryenModuleRef BinaryenModuleCreate(void);
+BINARYEN_API void BinaryenModuleDispose(BinaryenModuleRef module);
+
+// Literals. These are passed by value.
+
+struct BinaryenLiteral {
+  uintptr_t type;
+  union {
+    int32_t i32;
+    int64_t i64;
+    float f32;
+    double f64;
+    uint8_t v128[16];
+    const char* func;
+  };
+};
+
+BINARYEN_API struct BinaryenLiteral BinaryenLiteralInt32(int32_t x);
+BINARYEN_API struct BinaryenLiteral BinaryenLiteralInt64(int64_t x);
+BINARYEN_API struct BinaryenLiteral BinaryenLiteralFloat32(float x);
+BINARYEN_API struct BinaryenLiteral BinaryenLiteralFloat64(double x);
+BINARYEN_API struct BinaryenLiteral BinaryenLiteralVec128(const uint8_t x[16]);
+BINARYEN_API struct BinaryenLiteral BinaryenLiteralFloat32Bits(int32_t x);
+BINARYEN_API struct BinaryenLiteral BinaryenLiteralFloat64Bits(int64_t x);
+
+// Expressions
+//
+// Some expressions have a BinaryenOp, which is the more
+// specific operation/opcode.
+//
+// Some expressions have optional parameters, like Return may not
+// return a value. You can supply a NULL pointer in those cases.
+//
+// For more information, see wasm.h
+
+typedef int32_t BinaryenOp;
+
+BINARYEN_API BinaryenOp BinaryenClzInt32(void);
+BINARYEN_API BinaryenOp BinaryenCtzInt32(void);
+BINARYEN_API BinaryenOp BinaryenPopcntInt32(void);
+BINARYEN_API BinaryenOp BinaryenNegFloat32(void);
+BINARYEN_API BinaryenOp BinaryenAbsFloat32(void);
+BINARYEN_API BinaryenOp BinaryenCeilFloat32(void);
+BINARYEN_API BinaryenOp BinaryenFloorFloat32(void);
+BINARYEN_API BinaryenOp BinaryenTruncFloat32(void);
+BINARYEN_API BinaryenOp BinaryenNearestFloat32(void);
+BINARYEN_API BinaryenOp BinaryenSqrtFloat32(void);
+BINARYEN_API BinaryenOp BinaryenEqZInt32(void);
+BINARYEN_API BinaryenOp BinaryenClzInt64(void);
+BINARYEN_API BinaryenOp BinaryenCtzInt64(void);
+BINARYEN_API BinaryenOp BinaryenPopcntInt64(void);
+BINARYEN_API BinaryenOp BinaryenNegFloat64(void);
+BINARYEN_API BinaryenOp BinaryenAbsFloat64(void);
+BINARYEN_API BinaryenOp BinaryenCeilFloat64(void);
+BINARYEN_API BinaryenOp BinaryenFloorFloat64(void);
+BINARYEN_API BinaryenOp BinaryenTruncFloat64(void);
+BINARYEN_API BinaryenOp BinaryenNearestFloat64(void);
+BINARYEN_API BinaryenOp BinaryenSqrtFloat64(void);
+BINARYEN_API BinaryenOp BinaryenEqZInt64(void);
+BINARYEN_API BinaryenOp BinaryenExtendSInt32(void);
+BINARYEN_API BinaryenOp BinaryenExtendUInt32(void);
+BINARYEN_API BinaryenOp BinaryenWrapInt64(void);
+BINARYEN_API BinaryenOp BinaryenTruncSFloat32ToInt32(void);
+BINARYEN_API BinaryenOp BinaryenTruncSFloat32ToInt64(void);
+BINARYEN_API BinaryenOp BinaryenTruncUFloat32ToInt32(void);
+BINARYEN_API BinaryenOp BinaryenTruncUFloat32ToInt64(void);
+BINARYEN_API BinaryenOp BinaryenTruncSFloat64ToInt32(void);
+BINARYEN_API BinaryenOp BinaryenTruncSFloat64ToInt64(void);
+BINARYEN_API BinaryenOp BinaryenTruncUFloat64ToInt32(void);
+BINARYEN_API BinaryenOp BinaryenTruncUFloat64ToInt64(void);
+BINARYEN_API BinaryenOp BinaryenReinterpretFloat32(void);
+BINARYEN_API BinaryenOp BinaryenReinterpretFloat64(void);
+BINARYEN_API BinaryenOp BinaryenConvertSInt32ToFloat32(void);
+BINARYEN_API BinaryenOp BinaryenConvertSInt32ToFloat64(void);
+BINARYEN_API BinaryenOp BinaryenConvertUInt32ToFloat32(void);
+BINARYEN_API BinaryenOp BinaryenConvertUInt32ToFloat64(void);
+BINARYEN_API BinaryenOp BinaryenConvertSInt64ToFloat32(void);
+BINARYEN_API BinaryenOp BinaryenConvertSInt64ToFloat64(void);
+BINARYEN_API BinaryenOp BinaryenConvertUInt64ToFloat32(void);
+BINARYEN_API BinaryenOp BinaryenConvertUInt64ToFloat64(void);
+BINARYEN_API BinaryenOp BinaryenPromoteFloat32(void);
+BINARYEN_API BinaryenOp BinaryenDemoteFloat64(void);
+BINARYEN_API BinaryenOp BinaryenReinterpretInt32(void);
+BINARYEN_API BinaryenOp BinaryenReinterpretInt64(void);
+BINARYEN_API BinaryenOp BinaryenExtendS8Int32(void);
+BINARYEN_API BinaryenOp BinaryenExtendS16Int32(void);
+BINARYEN_API BinaryenOp BinaryenExtendS8Int64(void);
+BINARYEN_API BinaryenOp BinaryenExtendS16Int64(void);
+BINARYEN_API BinaryenOp BinaryenExtendS32Int64(void);
+BINARYEN_API BinaryenOp BinaryenAddInt32(void);
+BINARYEN_API BinaryenOp BinaryenSubInt32(void);
+BINARYEN_API BinaryenOp BinaryenMulInt32(void);
+BINARYEN_API BinaryenOp BinaryenDivSInt32(void);
+BINARYEN_API BinaryenOp BinaryenDivUInt32(void);
+BINARYEN_API BinaryenOp BinaryenRemSInt32(void);
+BINARYEN_API BinaryenOp BinaryenRemUInt32(void);
+BINARYEN_API BinaryenOp BinaryenAndInt32(void);
+BINARYEN_API BinaryenOp BinaryenOrInt32(void);
+BINARYEN_API BinaryenOp BinaryenXorInt32(void);
+BINARYEN_API BinaryenOp BinaryenShlInt32(void);
+BINARYEN_API BinaryenOp BinaryenShrUInt32(void);
+BINARYEN_API BinaryenOp BinaryenShrSInt32(void);
+BINARYEN_API BinaryenOp BinaryenRotLInt32(void);
+BINARYEN_API BinaryenOp BinaryenRotRInt32(void);
+BINARYEN_API BinaryenOp BinaryenEqInt32(void);
+BINARYEN_API BinaryenOp BinaryenNeInt32(void);
+BINARYEN_API BinaryenOp BinaryenLtSInt32(void);
+BINARYEN_API BinaryenOp BinaryenLtUInt32(void);
+BINARYEN_API BinaryenOp BinaryenLeSInt32(void);
+BINARYEN_API BinaryenOp BinaryenLeUInt32(void);
+BINARYEN_API BinaryenOp BinaryenGtSInt32(void);
+BINARYEN_API BinaryenOp BinaryenGtUInt32(void);
+BINARYEN_API BinaryenOp BinaryenGeSInt32(void);
+BINARYEN_API BinaryenOp BinaryenGeUInt32(void);
+BINARYEN_API BinaryenOp BinaryenAddInt64(void);
+BINARYEN_API BinaryenOp BinaryenSubInt64(void);
+BINARYEN_API BinaryenOp BinaryenMulInt64(void);
+BINARYEN_API BinaryenOp BinaryenDivSInt64(void);
+BINARYEN_API BinaryenOp BinaryenDivUInt64(void);
+BINARYEN_API BinaryenOp BinaryenRemSInt64(void);
+BINARYEN_API BinaryenOp BinaryenRemUInt64(void);
+BINARYEN_API BinaryenOp BinaryenAndInt64(void);
+BINARYEN_API BinaryenOp BinaryenOrInt64(void);
+BINARYEN_API BinaryenOp BinaryenXorInt64(void);
+BINARYEN_API BinaryenOp BinaryenShlInt64(void);
+BINARYEN_API BinaryenOp BinaryenShrUInt64(void);
+BINARYEN_API BinaryenOp BinaryenShrSInt64(void);
+BINARYEN_API BinaryenOp BinaryenRotLInt64(void);
+BINARYEN_API BinaryenOp BinaryenRotRInt64(void);
+BINARYEN_API BinaryenOp BinaryenEqInt64(void);
+BINARYEN_API BinaryenOp BinaryenNeInt64(void);
+BINARYEN_API BinaryenOp BinaryenLtSInt64(void);
+BINARYEN_API BinaryenOp BinaryenLtUInt64(void);
+BINARYEN_API BinaryenOp BinaryenLeSInt64(void);
+BINARYEN_API BinaryenOp BinaryenLeUInt64(void);
+BINARYEN_API BinaryenOp BinaryenGtSInt64(void);
+BINARYEN_API BinaryenOp BinaryenGtUInt64(void);
+BINARYEN_API BinaryenOp BinaryenGeSInt64(void);
+BINARYEN_API BinaryenOp BinaryenGeUInt64(void);
+BINARYEN_API BinaryenOp BinaryenAddFloat32(void);
+BINARYEN_API BinaryenOp BinaryenSubFloat32(void);
+BINARYEN_API BinaryenOp BinaryenMulFloat32(void);
+BINARYEN_API BinaryenOp BinaryenDivFloat32(void);
+BINARYEN_API BinaryenOp BinaryenCopySignFloat32(void);
+BINARYEN_API BinaryenOp BinaryenMinFloat32(void);
+BINARYEN_API BinaryenOp BinaryenMaxFloat32(void);
+BINARYEN_API BinaryenOp BinaryenEqFloat32(void);
+BINARYEN_API BinaryenOp BinaryenNeFloat32(void);
+BINARYEN_API BinaryenOp BinaryenLtFloat32(void);
+BINARYEN_API BinaryenOp BinaryenLeFloat32(void);
+BINARYEN_API BinaryenOp BinaryenGtFloat32(void);
+BINARYEN_API BinaryenOp BinaryenGeFloat32(void);
+BINARYEN_API BinaryenOp BinaryenAddFloat64(void);
+BINARYEN_API BinaryenOp BinaryenSubFloat64(void);
+BINARYEN_API BinaryenOp BinaryenMulFloat64(void);
+BINARYEN_API Binaryen
