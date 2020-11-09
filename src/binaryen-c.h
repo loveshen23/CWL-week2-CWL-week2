@@ -634,4 +634,208 @@ BINARYEN_API BinaryenOp BinaryenExtAddPairwiseSVecI16x8ToI32x4(void);
 BINARYEN_API BinaryenOp BinaryenExtAddPairwiseUVecI16x8ToI32x4(void);
 BINARYEN_API BinaryenOp BinaryenTruncSatSVecF32x4ToVecI32x4(void);
 BINARYEN_API BinaryenOp BinaryenTruncSatUVecF32x4ToVecI32x4(void);
-BINARYEN_API BinaryenOp BinaryenConvertSVecI32x4ToV
+BINARYEN_API BinaryenOp BinaryenConvertSVecI32x4ToVecF32x4(void);
+BINARYEN_API BinaryenOp BinaryenConvertUVecI32x4ToVecF32x4(void);
+BINARYEN_API BinaryenOp BinaryenLoad8SplatVec128(void);
+BINARYEN_API BinaryenOp BinaryenLoad16SplatVec128(void);
+BINARYEN_API BinaryenOp BinaryenLoad32SplatVec128(void);
+BINARYEN_API BinaryenOp BinaryenLoad64SplatVec128(void);
+BINARYEN_API BinaryenOp BinaryenLoad8x8SVec128(void);
+BINARYEN_API BinaryenOp BinaryenLoad8x8UVec128(void);
+BINARYEN_API BinaryenOp BinaryenLoad16x4SVec128(void);
+BINARYEN_API BinaryenOp BinaryenLoad16x4UVec128(void);
+BINARYEN_API BinaryenOp BinaryenLoad32x2SVec128(void);
+BINARYEN_API BinaryenOp BinaryenLoad32x2UVec128(void);
+BINARYEN_API BinaryenOp BinaryenLoad32ZeroVec128(void);
+BINARYEN_API BinaryenOp BinaryenLoad64ZeroVec128(void);
+BINARYEN_API BinaryenOp BinaryenLoad8LaneVec128(void);
+BINARYEN_API BinaryenOp BinaryenLoad16LaneVec128(void);
+BINARYEN_API BinaryenOp BinaryenLoad32LaneVec128(void);
+BINARYEN_API BinaryenOp BinaryenLoad64LaneVec128(void);
+BINARYEN_API BinaryenOp BinaryenStore8LaneVec128(void);
+BINARYEN_API BinaryenOp BinaryenStore16LaneVec128(void);
+BINARYEN_API BinaryenOp BinaryenStore32LaneVec128(void);
+BINARYEN_API BinaryenOp BinaryenStore64LaneVec128(void);
+BINARYEN_API BinaryenOp BinaryenNarrowSVecI16x8ToVecI8x16(void);
+BINARYEN_API BinaryenOp BinaryenNarrowUVecI16x8ToVecI8x16(void);
+BINARYEN_API BinaryenOp BinaryenNarrowSVecI32x4ToVecI16x8(void);
+BINARYEN_API BinaryenOp BinaryenNarrowUVecI32x4ToVecI16x8(void);
+BINARYEN_API BinaryenOp BinaryenExtendLowSVecI8x16ToVecI16x8(void);
+BINARYEN_API BinaryenOp BinaryenExtendHighSVecI8x16ToVecI16x8(void);
+BINARYEN_API BinaryenOp BinaryenExtendLowUVecI8x16ToVecI16x8(void);
+BINARYEN_API BinaryenOp BinaryenExtendHighUVecI8x16ToVecI16x8(void);
+BINARYEN_API BinaryenOp BinaryenExtendLowSVecI16x8ToVecI32x4(void);
+BINARYEN_API BinaryenOp BinaryenExtendHighSVecI16x8ToVecI32x4(void);
+BINARYEN_API BinaryenOp BinaryenExtendLowUVecI16x8ToVecI32x4(void);
+BINARYEN_API BinaryenOp BinaryenExtendHighUVecI16x8ToVecI32x4(void);
+BINARYEN_API BinaryenOp BinaryenExtendLowSVecI32x4ToVecI64x2(void);
+BINARYEN_API BinaryenOp BinaryenExtendHighSVecI32x4ToVecI64x2(void);
+BINARYEN_API BinaryenOp BinaryenExtendLowUVecI32x4ToVecI64x2(void);
+BINARYEN_API BinaryenOp BinaryenExtendHighUVecI32x4ToVecI64x2(void);
+BINARYEN_API BinaryenOp BinaryenConvertLowSVecI32x4ToVecF64x2(void);
+BINARYEN_API BinaryenOp BinaryenConvertLowUVecI32x4ToVecF64x2(void);
+BINARYEN_API BinaryenOp BinaryenTruncSatZeroSVecF64x2ToVecI32x4(void);
+BINARYEN_API BinaryenOp BinaryenTruncSatZeroUVecF64x2ToVecI32x4(void);
+BINARYEN_API BinaryenOp BinaryenDemoteZeroVecF64x2ToVecF32x4(void);
+BINARYEN_API BinaryenOp BinaryenPromoteLowVecF32x4ToVecF64x2(void);
+BINARYEN_API BinaryenOp BinaryenRelaxedTruncSVecF32x4ToVecI32x4(void);
+BINARYEN_API BinaryenOp BinaryenRelaxedTruncUVecF32x4ToVecI32x4(void);
+BINARYEN_API BinaryenOp BinaryenRelaxedTruncZeroSVecF64x2ToVecI32x4(void);
+BINARYEN_API BinaryenOp BinaryenRelaxedTruncZeroUVecF64x2ToVecI32x4(void);
+BINARYEN_API BinaryenOp BinaryenSwizzleVecI8x16(void);
+BINARYEN_API BinaryenOp BinaryenRelaxedSwizzleVecI8x16(void);
+BINARYEN_API BinaryenOp BinaryenRelaxedMinVecF32x4(void);
+BINARYEN_API BinaryenOp BinaryenRelaxedMaxVecF32x4(void);
+BINARYEN_API BinaryenOp BinaryenRelaxedMinVecF64x2(void);
+BINARYEN_API BinaryenOp BinaryenRelaxedMaxVecF64x2(void);
+BINARYEN_API BinaryenOp BinaryenRelaxedQ15MulrSVecI16x8(void);
+BINARYEN_API BinaryenOp BinaryenDotI8x16I7x16SToVecI16x8(void);
+BINARYEN_API BinaryenOp BinaryenRefAsNonNull(void);
+BINARYEN_API BinaryenOp BinaryenRefAsExternInternalize(void);
+BINARYEN_API BinaryenOp BinaryenRefAsExternExternalize(void);
+BINARYEN_API BinaryenOp BinaryenBrOnNull(void);
+BINARYEN_API BinaryenOp BinaryenBrOnNonNull(void);
+BINARYEN_API BinaryenOp BinaryenBrOnCast(void);
+BINARYEN_API BinaryenOp BinaryenBrOnCastFail(void);
+BINARYEN_API BinaryenOp BinaryenStringNewUTF8(void);
+BINARYEN_API BinaryenOp BinaryenStringNewWTF8(void);
+BINARYEN_API BinaryenOp BinaryenStringNewReplace(void);
+BINARYEN_API BinaryenOp BinaryenStringNewWTF16(void);
+BINARYEN_API BinaryenOp BinaryenStringNewUTF8Array(void);
+BINARYEN_API BinaryenOp BinaryenStringNewWTF8Array(void);
+BINARYEN_API BinaryenOp BinaryenStringNewReplaceArray(void);
+BINARYEN_API BinaryenOp BinaryenStringNewWTF16Array(void);
+BINARYEN_API BinaryenOp BinaryenStringNewFromCodePoint(void);
+BINARYEN_API BinaryenOp BinaryenStringMeasureUTF8(void);
+BINARYEN_API BinaryenOp BinaryenStringMeasureWTF8(void);
+BINARYEN_API BinaryenOp BinaryenStringMeasureWTF16(void);
+BINARYEN_API BinaryenOp BinaryenStringMeasureIsUSV(void);
+BINARYEN_API BinaryenOp BinaryenStringMeasureWTF16View(void);
+BINARYEN_API BinaryenOp BinaryenStringEncodeUTF8(void);
+BINARYEN_API BinaryenOp BinaryenStringEncodeWTF8(void);
+BINARYEN_API BinaryenOp BinaryenStringEncodeWTF16(void);
+BINARYEN_API BinaryenOp BinaryenStringEncodeUTF8Array(void);
+BINARYEN_API BinaryenOp BinaryenStringEncodeWTF8Array(void);
+BINARYEN_API BinaryenOp BinaryenStringEncodeWTF16Array(void);
+BINARYEN_API BinaryenOp BinaryenStringAsWTF8(void);
+BINARYEN_API BinaryenOp BinaryenStringAsWTF16(void);
+BINARYEN_API BinaryenOp BinaryenStringAsIter(void);
+BINARYEN_API BinaryenOp BinaryenStringIterMoveAdvance(void);
+BINARYEN_API BinaryenOp BinaryenStringIterMoveRewind(void);
+BINARYEN_API BinaryenOp BinaryenStringSliceWTF8(void);
+BINARYEN_API BinaryenOp BinaryenStringSliceWTF16(void);
+BINARYEN_API BinaryenOp BinaryenStringEqEqual(void);
+BINARYEN_API BinaryenOp BinaryenStringEqCompare(void);
+
+BINARYEN_REF(Expression);
+
+// Block: name can be NULL. Specifying BinaryenUndefined() as the 'type'
+//        parameter indicates that the block's type shall be figured out
+//        automatically instead of explicitly providing it. This conforms
+//        to the behavior before the 'type' parameter has been introduced.
+BINARYEN_API BinaryenExpressionRef
+BinaryenBlock(BinaryenModuleRef module,
+              const char* name,
+              BinaryenExpressionRef* children,
+              BinaryenIndex numChildren,
+              BinaryenType type);
+// If: ifFalse can be NULL
+BINARYEN_API BinaryenExpressionRef BinaryenIf(BinaryenModuleRef module,
+                                              BinaryenExpressionRef condition,
+                                              BinaryenExpressionRef ifTrue,
+                                              BinaryenExpressionRef ifFalse);
+BINARYEN_API BinaryenExpressionRef BinaryenLoop(BinaryenModuleRef module,
+                                                const char* in,
+                                                BinaryenExpressionRef body);
+// Break: value and condition can be NULL
+BINARYEN_API BinaryenExpressionRef
+BinaryenBreak(BinaryenModuleRef module,
+              const char* name,
+              BinaryenExpressionRef condition,
+              BinaryenExpressionRef value);
+// Switch: value can be NULL
+BINARYEN_API BinaryenExpressionRef
+BinaryenSwitch(BinaryenModuleRef module,
+               const char** names,
+               BinaryenIndex numNames,
+               const char* defaultName,
+               BinaryenExpressionRef condition,
+               BinaryenExpressionRef value);
+// Call: Note the 'returnType' parameter. You must declare the
+//       type returned by the function being called, as that
+//       function might not have been created yet, so we don't
+//       know what it is.
+BINARYEN_API BinaryenExpressionRef BinaryenCall(BinaryenModuleRef module,
+                                                const char* target,
+                                                BinaryenExpressionRef* operands,
+                                                BinaryenIndex numOperands,
+                                                BinaryenType returnType);
+BINARYEN_API BinaryenExpressionRef
+BinaryenCallIndirect(BinaryenModuleRef module,
+                     const char* table,
+                     BinaryenExpressionRef target,
+                     BinaryenExpressionRef* operands,
+                     BinaryenIndex numOperands,
+                     BinaryenType params,
+                     BinaryenType results);
+BINARYEN_API BinaryenExpressionRef
+BinaryenReturnCall(BinaryenModuleRef module,
+                   const char* target,
+                   BinaryenExpressionRef* operands,
+                   BinaryenIndex numOperands,
+                   BinaryenType returnType);
+BINARYEN_API BinaryenExpressionRef
+BinaryenReturnCallIndirect(BinaryenModuleRef module,
+                           const char* table,
+                           BinaryenExpressionRef target,
+                           BinaryenExpressionRef* operands,
+                           BinaryenIndex numOperands,
+                           BinaryenType params,
+                           BinaryenType results);
+
+// LocalGet: Note the 'type' parameter. It might seem redundant, since the
+//           local at that index must have a type. However, this API lets you
+//           build code "top-down": create a node, then its parents, and so
+//           on, and finally create the function at the end. (Note that in fact
+//           you do not mention a function when creating ExpressionRefs, only
+//           a module.) And since LocalGet is a leaf node, we need to be told
+//           its type. (Other nodes detect their type either from their
+//           type or their opcode, or failing that, their children. But
+//           LocalGet has no children, it is where a "stream" of type info
+//           begins.)
+//           Note also that the index of a local can refer to a param or
+//           a var, that is, either a parameter to the function or a variable
+//           declared when you call BinaryenAddFunction. See BinaryenAddFunction
+//           for more details.
+BINARYEN_API BinaryenExpressionRef BinaryenLocalGet(BinaryenModuleRef module,
+                                                    BinaryenIndex index,
+                                                    BinaryenType type);
+BINARYEN_API BinaryenExpressionRef BinaryenLocalSet(
+  BinaryenModuleRef module, BinaryenIndex index, BinaryenExpressionRef value);
+BINARYEN_API BinaryenExpressionRef BinaryenLocalTee(BinaryenModuleRef module,
+                                                    BinaryenIndex index,
+                                                    BinaryenExpressionRef value,
+                                                    BinaryenType type);
+BINARYEN_API BinaryenExpressionRef BinaryenGlobalGet(BinaryenModuleRef module,
+                                                     const char* name,
+                                                     BinaryenType type);
+BINARYEN_API BinaryenExpressionRef BinaryenGlobalSet(
+  BinaryenModuleRef module, const char* name, BinaryenExpressionRef value);
+// Load: align can be 0, in which case it will be the natural alignment (equal
+// to bytes)
+BINARYEN_API BinaryenExpressionRef BinaryenLoad(BinaryenModuleRef module,
+                                                uint32_t bytes,
+                                                bool signed_,
+                                                uint32_t offset,
+                                                uint32_t align,
+                                                BinaryenType type,
+                                                BinaryenExpressionRef ptr,
+                                                const char* memoryName);
+// Store: align can be 0, in which case it will be the natural alignment (equal
+// to bytes)
+BINARYEN_API BinaryenExpressionRef BinaryenStore(BinaryenModuleRef module,
+                                                 uint32_t bytes,
+                                                 uint32_t offset,
+                                                 uint32_t align,
+                                                 BinaryenExpressionRef ptr,
+                                                 BinaryenExpressionRef value,
