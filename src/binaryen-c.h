@@ -1291,4 +1291,226 @@ BINARYEN_API BinaryenIndex BinaryenSwitchAppendName(BinaryenExpressionRef expr,
 BINARYEN_API void BinaryenSwitchInsertNameAt(BinaryenExpressionRef expr,
                                              BinaryenIndex index,
                                              const char* name);
-// Removes the name at the specified index of a `br_table` expres
+// Removes the name at the specified index of a `br_table` expression, moving
+// all subsequent names one index down. Returns the name.
+BINARYEN_API const char* BinaryenSwitchRemoveNameAt(BinaryenExpressionRef expr,
+                                                    BinaryenIndex index);
+// Gets the default name (target label), if any, of a `br_table` expression.
+BINARYEN_API const char*
+BinaryenSwitchGetDefaultName(BinaryenExpressionRef expr);
+// Sets the default name (target label), if any, of a `br_table` expression.
+BINARYEN_API void BinaryenSwitchSetDefaultName(BinaryenExpressionRef expr,
+                                               const char* name);
+// Gets the condition expression of a `br_table` expression.
+BINARYEN_API BinaryenExpressionRef
+BinaryenSwitchGetCondition(BinaryenExpressionRef expr);
+// Sets the condition expression of a `br_table` expression.
+BINARYEN_API void BinaryenSwitchSetCondition(BinaryenExpressionRef expr,
+                                             BinaryenExpressionRef condExpr);
+// Gets the value expression, if any, of a `br_table` expression.
+BINARYEN_API BinaryenExpressionRef
+BinaryenSwitchGetValue(BinaryenExpressionRef expr);
+// Sets the value expression, if any, of a `br_table` expression.
+BINARYEN_API void BinaryenSwitchSetValue(BinaryenExpressionRef expr,
+                                         BinaryenExpressionRef valueExpr);
+
+// Call
+
+// Gets the target function name of a `call` expression.
+BINARYEN_API const char* BinaryenCallGetTarget(BinaryenExpressionRef expr);
+// Sets the target function name of a `call` expression.
+BINARYEN_API void BinaryenCallSetTarget(BinaryenExpressionRef expr,
+                                        const char* target);
+// Gets the number of operands of a `call` expression.
+BINARYEN_API BinaryenIndex
+BinaryenCallGetNumOperands(BinaryenExpressionRef expr);
+// Gets the operand expression at the specified index of a `call` expression.
+BINARYEN_API BinaryenExpressionRef
+BinaryenCallGetOperandAt(BinaryenExpressionRef expr, BinaryenIndex index);
+// Sets the operand expression at the specified index of a `call` expression.
+BINARYEN_API void BinaryenCallSetOperandAt(BinaryenExpressionRef expr,
+                                           BinaryenIndex index,
+                                           BinaryenExpressionRef operandExpr);
+// Appends an operand expression to a `call` expression, returning its insertion
+// index.
+BINARYEN_API BinaryenIndex BinaryenCallAppendOperand(
+  BinaryenExpressionRef expr, BinaryenExpressionRef operandExpr);
+// Inserts an operand expression at the specified index of a `call` expression,
+// moving existing operands including the one previously at that index one index
+// up.
+BINARYEN_API void
+BinaryenCallInsertOperandAt(BinaryenExpressionRef expr,
+                            BinaryenIndex index,
+                            BinaryenExpressionRef operandExpr);
+// Removes the operand expression at the specified index of a `call` expression,
+// moving all subsequent operands one index down. Returns the operand
+// expression.
+BINARYEN_API BinaryenExpressionRef
+BinaryenCallRemoveOperandAt(BinaryenExpressionRef expr, BinaryenIndex index);
+// Gets whether the specified `call` expression is a tail call.
+BINARYEN_API bool BinaryenCallIsReturn(BinaryenExpressionRef expr);
+// Sets whether the specified `call` expression is a tail call.
+BINARYEN_API void BinaryenCallSetReturn(BinaryenExpressionRef expr,
+                                        bool isReturn);
+
+// CallIndirect
+
+// Gets the target expression of a `call_indirect` expression.
+BINARYEN_API BinaryenExpressionRef
+BinaryenCallIndirectGetTarget(BinaryenExpressionRef expr);
+// Sets the target expression of a `call_indirect` expression.
+BINARYEN_API void
+BinaryenCallIndirectSetTarget(BinaryenExpressionRef expr,
+                              BinaryenExpressionRef targetExpr);
+// Gets the table name of a `call_indirect` expression.
+BINARYEN_API const char*
+BinaryenCallIndirectGetTable(BinaryenExpressionRef expr);
+// Sets the table name of a `call_indirect` expression.
+BINARYEN_API void BinaryenCallIndirectSetTable(BinaryenExpressionRef expr,
+                                               const char* table);
+// Gets the number of operands of a `call_indirect` expression.
+BINARYEN_API BinaryenIndex
+BinaryenCallIndirectGetNumOperands(BinaryenExpressionRef expr);
+// Gets the operand expression at the specified index of a `call_indirect`
+// expression.
+BINARYEN_API BinaryenExpressionRef BinaryenCallIndirectGetOperandAt(
+  BinaryenExpressionRef expr, BinaryenIndex index);
+// Sets the operand expression at the specified index of a `call_indirect`
+// expression.
+BINARYEN_API void
+BinaryenCallIndirectSetOperandAt(BinaryenExpressionRef expr,
+                                 BinaryenIndex index,
+                                 BinaryenExpressionRef operandExpr);
+// Appends an operand expression to a `call_indirect` expression, returning its
+// insertion index.
+BINARYEN_API BinaryenIndex BinaryenCallIndirectAppendOperand(
+  BinaryenExpressionRef expr, BinaryenExpressionRef operandExpr);
+// Inserts an operand expression at the specified index of a `call_indirect`
+// expression, moving existing operands including the one previously at that
+// index one index up.
+BINARYEN_API void
+BinaryenCallIndirectInsertOperandAt(BinaryenExpressionRef expr,
+                                    BinaryenIndex index,
+                                    BinaryenExpressionRef operandExpr);
+// Removes the operand expression at the specified index of a `call_indirect`
+// expression, moving all subsequent operands one index down. Returns the
+// operand expression.
+BINARYEN_API BinaryenExpressionRef BinaryenCallIndirectRemoveOperandAt(
+  BinaryenExpressionRef expr, BinaryenIndex index);
+// Gets whether the specified `call_indirect` expression is a tail call.
+BINARYEN_API bool BinaryenCallIndirectIsReturn(BinaryenExpressionRef expr);
+// Sets whether the specified `call_indirect` expression is a tail call.
+BINARYEN_API void BinaryenCallIndirectSetReturn(BinaryenExpressionRef expr,
+                                                bool isReturn);
+// Gets the parameter types of the specified `call_indirect` expression.
+BINARYEN_API BinaryenType
+BinaryenCallIndirectGetParams(BinaryenExpressionRef expr);
+// Sets the parameter types of the specified `call_indirect` expression.
+BINARYEN_API void BinaryenCallIndirectSetParams(BinaryenExpressionRef expr,
+                                                BinaryenType params);
+// Gets the result types of the specified `call_indirect` expression.
+BINARYEN_API BinaryenType
+BinaryenCallIndirectGetResults(BinaryenExpressionRef expr);
+// Sets the result types of the specified `call_indirect` expression.
+BINARYEN_API void BinaryenCallIndirectSetResults(BinaryenExpressionRef expr,
+                                                 BinaryenType params);
+
+// LocalGet
+
+// Gets the local index of a `local.get` expression.
+BINARYEN_API BinaryenIndex BinaryenLocalGetGetIndex(BinaryenExpressionRef expr);
+// Sets the local index of a `local.get` expression.
+BINARYEN_API void BinaryenLocalGetSetIndex(BinaryenExpressionRef expr,
+                                           BinaryenIndex index);
+
+// LocalSet
+
+// Gets whether a `local.set` tees its value (is a `local.tee`). True if the
+// expression has a type other than `none`.
+BINARYEN_API bool BinaryenLocalSetIsTee(BinaryenExpressionRef expr);
+// Gets the local index of a `local.set` or `local.tee` expression.
+BINARYEN_API BinaryenIndex BinaryenLocalSetGetIndex(BinaryenExpressionRef expr);
+// Sets the local index of a `local.set` or `local.tee` expression.
+BINARYEN_API void BinaryenLocalSetSetIndex(BinaryenExpressionRef expr,
+                                           BinaryenIndex index);
+// Gets the value expression of a `local.set` or `local.tee` expression.
+BINARYEN_API BinaryenExpressionRef
+BinaryenLocalSetGetValue(BinaryenExpressionRef expr);
+// Sets the value expression of a `local.set` or `local.tee` expression.
+BINARYEN_API void BinaryenLocalSetSetValue(BinaryenExpressionRef expr,
+                                           BinaryenExpressionRef valueExpr);
+
+// GlobalGet
+
+// Gets the name of the global being accessed by a `global.get` expression.
+BINARYEN_API const char* BinaryenGlobalGetGetName(BinaryenExpressionRef expr);
+// Sets the name of the global being accessed by a `global.get` expression.
+BINARYEN_API void BinaryenGlobalGetSetName(BinaryenExpressionRef expr,
+                                           const char* name);
+
+// GlobalSet
+
+// Gets the name of the global being accessed by a `global.set` expression.
+BINARYEN_API const char* BinaryenGlobalSetGetName(BinaryenExpressionRef expr);
+// Sets the name of the global being accessed by a `global.set` expression.
+BINARYEN_API void BinaryenGlobalSetSetName(BinaryenExpressionRef expr,
+                                           const char* name);
+// Gets the value expression of a `global.set` expression.
+BINARYEN_API BinaryenExpressionRef
+BinaryenGlobalSetGetValue(BinaryenExpressionRef expr);
+// Sets the value expression of a `global.set` expression.
+BINARYEN_API void BinaryenGlobalSetSetValue(BinaryenExpressionRef expr,
+                                            BinaryenExpressionRef valueExpr);
+
+// TableGet
+
+// Gets the name of the table being accessed by a `table.get` expression.
+BINARYEN_API const char* BinaryenTableGetGetTable(BinaryenExpressionRef expr);
+// Sets the name of the table being accessed by a `table.get` expression.
+BINARYEN_API void BinaryenTableGetSetTable(BinaryenExpressionRef expr,
+                                           const char* table);
+// Gets the index expression of a `table.get` expression.
+BINARYEN_API BinaryenExpressionRef
+BinaryenTableGetGetIndex(BinaryenExpressionRef expr);
+// Sets the index expression of a `table.get` expression.
+BINARYEN_API void BinaryenTableGetSetIndex(BinaryenExpressionRef expr,
+                                           BinaryenExpressionRef indexExpr);
+
+// TableSet
+
+// Gets the name of the table being accessed by a `table.set` expression.
+BINARYEN_API const char* BinaryenTableSetGetTable(BinaryenExpressionRef expr);
+// Sets the name of the table being accessed by a `table.set` expression.
+BINARYEN_API void BinaryenTableSetSetTable(BinaryenExpressionRef expr,
+                                           const char* table);
+// Gets the index expression of a `table.set` expression.
+BINARYEN_API BinaryenExpressionRef
+BinaryenTableSetGetIndex(BinaryenExpressionRef expr);
+// Sets the index expression of a `table.set` expression.
+BINARYEN_API void BinaryenTableSetSetIndex(BinaryenExpressionRef expr,
+                                           BinaryenExpressionRef indexExpr);
+// Gets the value expression of a `table.set` expression.
+BINARYEN_API BinaryenExpressionRef
+BinaryenTableSetGetValue(BinaryenExpressionRef expr);
+// Sets the value expression of a `table.set` expression.
+BINARYEN_API void BinaryenTableSetSetValue(BinaryenExpressionRef expr,
+                                           BinaryenExpressionRef valueExpr);
+
+// TableSize
+
+// Gets the name of the table being accessed by a `table.size` expression.
+BINARYEN_API const char* BinaryenTableSizeGetTable(BinaryenExpressionRef expr);
+// Sets the name of the table being accessed by a `table.size` expression.
+BINARYEN_API void BinaryenTableSizeSetTable(BinaryenExpressionRef expr,
+                                            const char* table);
+
+// TableGrow
+
+// Gets the name of the table being accessed by a `table.grow` expression.
+BINARYEN_API const char* BinaryenTableGrowGetTable(BinaryenExpressionRef expr);
+// Sets the name of the table being accessed by a `table.grow` expression.
+BINARYEN_API void BinaryenTableGrowSetTable(BinaryenExpressionRef expr,
+                                            const char* table);
+// Gets the value expression of a `table.grow` expression.
+BINARYEN_API BinaryenExpressionRef
+BinaryenTableGrowGetValue(BinaryenEx
