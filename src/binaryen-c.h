@@ -1063,4 +1063,232 @@ BinaryenStructNew(BinaryenModuleRef module,
                   BinaryenExpressionRef* operands,
                   BinaryenIndex numOperands,
                   BinaryenHeapType type);
-BI
+BINARYEN_API BinaryenExpressionRef BinaryenStructGet(BinaryenModuleRef module,
+                                                     BinaryenIndex index,
+                                                     BinaryenExpressionRef ref,
+                                                     BinaryenType type,
+                                                     bool signed_);
+BINARYEN_API BinaryenExpressionRef
+BinaryenStructSet(BinaryenModuleRef module,
+                  BinaryenIndex index,
+                  BinaryenExpressionRef ref,
+                  BinaryenExpressionRef value);
+BINARYEN_API BinaryenExpressionRef BinaryenArrayNew(BinaryenModuleRef module,
+                                                    BinaryenHeapType type,
+                                                    BinaryenExpressionRef size,
+                                                    BinaryenExpressionRef init);
+
+// TODO: BinaryenArrayNewSeg
+
+BINARYEN_API BinaryenExpressionRef
+BinaryenArrayNewFixed(BinaryenModuleRef module,
+                      BinaryenHeapType type,
+                      BinaryenExpressionRef* values,
+                      BinaryenIndex numValues);
+BINARYEN_API BinaryenExpressionRef BinaryenArrayGet(BinaryenModuleRef module,
+                                                    BinaryenExpressionRef ref,
+                                                    BinaryenExpressionRef index,
+                                                    BinaryenType type,
+                                                    bool signed_);
+BINARYEN_API BinaryenExpressionRef
+BinaryenArraySet(BinaryenModuleRef module,
+                 BinaryenExpressionRef ref,
+                 BinaryenExpressionRef index,
+                 BinaryenExpressionRef value);
+BINARYEN_API BinaryenExpressionRef BinaryenArrayLen(BinaryenModuleRef module,
+                                                    BinaryenExpressionRef ref);
+BINARYEN_API BinaryenExpressionRef
+BinaryenArrayCopy(BinaryenModuleRef module,
+                  BinaryenExpressionRef destRef,
+                  BinaryenExpressionRef destIndex,
+                  BinaryenExpressionRef srcRef,
+                  BinaryenExpressionRef srcIndex,
+                  BinaryenExpressionRef length);
+BINARYEN_API BinaryenExpressionRef
+BinaryenStringNew(BinaryenModuleRef module,
+                  BinaryenOp op,
+                  BinaryenExpressionRef ptr,
+                  BinaryenExpressionRef length,
+                  BinaryenExpressionRef start,
+                  BinaryenExpressionRef end,
+                  bool try_);
+BINARYEN_API BinaryenExpressionRef BinaryenStringConst(BinaryenModuleRef module,
+                                                       const char* name);
+BINARYEN_API BinaryenExpressionRef BinaryenStringMeasure(
+  BinaryenModuleRef module, BinaryenOp op, BinaryenExpressionRef ref);
+BINARYEN_API BinaryenExpressionRef
+BinaryenStringEncode(BinaryenModuleRef module,
+                     BinaryenOp op,
+                     BinaryenExpressionRef ref,
+                     BinaryenExpressionRef ptr,
+                     BinaryenExpressionRef start);
+BINARYEN_API BinaryenExpressionRef
+BinaryenStringConcat(BinaryenModuleRef module,
+                     BinaryenExpressionRef left,
+                     BinaryenExpressionRef right);
+BINARYEN_API BinaryenExpressionRef
+BinaryenStringEq(BinaryenModuleRef module,
+                 BinaryenOp op,
+                 BinaryenExpressionRef left,
+                 BinaryenExpressionRef right);
+BINARYEN_API BinaryenExpressionRef BinaryenStringAs(BinaryenModuleRef module,
+                                                    BinaryenOp op,
+                                                    BinaryenExpressionRef ref);
+BINARYEN_API BinaryenExpressionRef
+BinaryenStringWTF8Advance(BinaryenModuleRef module,
+                          BinaryenExpressionRef ref,
+                          BinaryenExpressionRef pos,
+                          BinaryenExpressionRef bytes);
+BINARYEN_API BinaryenExpressionRef
+BinaryenStringWTF16Get(BinaryenModuleRef module,
+                       BinaryenExpressionRef ref,
+                       BinaryenExpressionRef pos);
+BINARYEN_API BinaryenExpressionRef
+BinaryenStringIterNext(BinaryenModuleRef module, BinaryenExpressionRef ref);
+BINARYEN_API BinaryenExpressionRef
+BinaryenStringIterMove(BinaryenModuleRef module,
+                       BinaryenOp op,
+                       BinaryenExpressionRef ref,
+                       BinaryenExpressionRef num);
+BINARYEN_API BinaryenExpressionRef
+BinaryenStringSliceWTF(BinaryenModuleRef module,
+                       BinaryenOp op,
+                       BinaryenExpressionRef ref,
+                       BinaryenExpressionRef start,
+                       BinaryenExpressionRef end);
+BINARYEN_API BinaryenExpressionRef
+BinaryenStringSliceIter(BinaryenModuleRef module,
+                        BinaryenExpressionRef ref,
+                        BinaryenExpressionRef num);
+
+// Expression
+
+// Gets the id (kind) of the given expression.
+BINARYEN_API BinaryenExpressionId
+BinaryenExpressionGetId(BinaryenExpressionRef expr);
+// Gets the type of the given expression.
+BINARYEN_API BinaryenType BinaryenExpressionGetType(BinaryenExpressionRef expr);
+// Sets the type of the given expression.
+BINARYEN_API void BinaryenExpressionSetType(BinaryenExpressionRef expr,
+                                            BinaryenType type);
+// Prints text format of the given expression to stdout.
+BINARYEN_API void BinaryenExpressionPrint(BinaryenExpressionRef expr);
+// Re-finalizes an expression after it has been modified.
+BINARYEN_API void BinaryenExpressionFinalize(BinaryenExpressionRef expr);
+// Makes a deep copy of the given expression.
+BINARYEN_API BinaryenExpressionRef
+BinaryenExpressionCopy(BinaryenExpressionRef expr, BinaryenModuleRef module);
+
+// Block
+
+// Gets the name (label) of a `block` expression.
+BINARYEN_API const char* BinaryenBlockGetName(BinaryenExpressionRef expr);
+// Sets the name (label) of a `block` expression.
+BINARYEN_API void BinaryenBlockSetName(BinaryenExpressionRef expr,
+                                       const char* name);
+// Gets the number of child expressions of a `block` expression.
+BINARYEN_API BinaryenIndex
+BinaryenBlockGetNumChildren(BinaryenExpressionRef expr);
+// Gets the child expression at the specified index of a `block` expression.
+BINARYEN_API BinaryenExpressionRef
+BinaryenBlockGetChildAt(BinaryenExpressionRef expr, BinaryenIndex index);
+// Sets (replaces) the child expression at the specified index of a `block`
+// expression.
+BINARYEN_API void BinaryenBlockSetChildAt(BinaryenExpressionRef expr,
+                                          BinaryenIndex index,
+                                          BinaryenExpressionRef childExpr);
+// Appends a child expression to a `block` expression, returning its insertion
+// index.
+BINARYEN_API BinaryenIndex BinaryenBlockAppendChild(
+  BinaryenExpressionRef expr, BinaryenExpressionRef childExpr);
+// Inserts a child expression at the specified index of a `block` expression,
+// moving existing children including the one previously at that index one index
+// up.
+BINARYEN_API void BinaryenBlockInsertChildAt(BinaryenExpressionRef expr,
+                                             BinaryenIndex index,
+                                             BinaryenExpressionRef childExpr);
+// Removes the child expression at the specified index of a `block` expression,
+// moving all subsequent children one index down. Returns the child expression.
+BINARYEN_API BinaryenExpressionRef
+BinaryenBlockRemoveChildAt(BinaryenExpressionRef expr, BinaryenIndex index);
+
+// If
+
+// Gets the condition expression of an `if` expression.
+BINARYEN_API BinaryenExpressionRef
+BinaryenIfGetCondition(BinaryenExpressionRef expr);
+// Sets the condition expression of an `if` expression.
+BINARYEN_API void BinaryenIfSetCondition(BinaryenExpressionRef expr,
+                                         BinaryenExpressionRef condExpr);
+// Gets the ifTrue (then) expression of an `if` expression.
+BINARYEN_API BinaryenExpressionRef
+BinaryenIfGetIfTrue(BinaryenExpressionRef expr);
+// Sets the ifTrue (then) expression of an `if` expression.
+BINARYEN_API void BinaryenIfSetIfTrue(BinaryenExpressionRef expr,
+                                      BinaryenExpressionRef ifTrueExpr);
+// Gets the ifFalse (else) expression, if any, of an `if` expression.
+BINARYEN_API BinaryenExpressionRef
+BinaryenIfGetIfFalse(BinaryenExpressionRef expr);
+// Sets the ifFalse (else) expression, if any, of an `if` expression.
+BINARYEN_API void BinaryenIfSetIfFalse(BinaryenExpressionRef expr,
+                                       BinaryenExpressionRef ifFalseExpr);
+
+// Loop
+
+// Gets the name (label) of a `loop` expression.
+BINARYEN_API const char* BinaryenLoopGetName(BinaryenExpressionRef expr);
+// Sets the name (label) of a `loop` expression.
+BINARYEN_API void BinaryenLoopSetName(BinaryenExpressionRef expr,
+                                      const char* name);
+// Gets the body expression of a `loop` expression.
+BINARYEN_API BinaryenExpressionRef
+BinaryenLoopGetBody(BinaryenExpressionRef expr);
+// Sets the body expression of a `loop` expression.
+BINARYEN_API void BinaryenLoopSetBody(BinaryenExpressionRef expr,
+                                      BinaryenExpressionRef bodyExpr);
+
+// Break
+
+// Gets the name (target label) of a `br` or `br_if` expression.
+BINARYEN_API const char* BinaryenBreakGetName(BinaryenExpressionRef expr);
+// Sets the name (target label) of a `br` or `br_if` expression.
+BINARYEN_API void BinaryenBreakSetName(BinaryenExpressionRef expr,
+                                       const char* name);
+// Gets the condition expression, if any, of a `br_if` expression. No condition
+// indicates a `br` expression.
+BINARYEN_API BinaryenExpressionRef
+BinaryenBreakGetCondition(BinaryenExpressionRef expr);
+// Sets the condition expression, if any, of a `br_if` expression. No condition
+// makes it a `br` expression.
+BINARYEN_API void BinaryenBreakSetCondition(BinaryenExpressionRef expr,
+                                            BinaryenExpressionRef condExpr);
+// Gets the value expression, if any, of a `br` or `br_if` expression.
+BINARYEN_API BinaryenExpressionRef
+BinaryenBreakGetValue(BinaryenExpressionRef expr);
+// Sets the value expression, if any, of a `br` or `br_if` expression.
+BINARYEN_API void BinaryenBreakSetValue(BinaryenExpressionRef expr,
+                                        BinaryenExpressionRef valueExpr);
+
+// Switch
+
+// Gets the number of names (target labels) of a `br_table` expression.
+BINARYEN_API BinaryenIndex
+BinaryenSwitchGetNumNames(BinaryenExpressionRef expr);
+// Gets the name (target label) at the specified index of a `br_table`
+// expression.
+BINARYEN_API const char* BinaryenSwitchGetNameAt(BinaryenExpressionRef expr,
+                                                 BinaryenIndex index);
+// Sets the name (target label) at the specified index of a `br_table`
+// expression.
+BINARYEN_API void BinaryenSwitchSetNameAt(BinaryenExpressionRef expr,
+                                          BinaryenIndex index,
+                                          const char* name);
+// Appends a name to a `br_table` expression, returning its insertion index.
+BINARYEN_API BinaryenIndex BinaryenSwitchAppendName(BinaryenExpressionRef expr,
+                                                    const char* name);
+// Inserts a name at the specified index of a `br_table` expression, moving
+// existing names including the one previously at that index one index up.
+BINARYEN_API void BinaryenSwitchInsertNameAt(BinaryenExpressionRef expr,
+                                             BinaryenIndex index,
+                                             const char* name);
+// Removes the name at the specified index of a `br_table` expres
