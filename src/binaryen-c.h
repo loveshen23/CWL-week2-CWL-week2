@@ -1733,4 +1733,221 @@ BINARYEN_API BinaryenOp BinaryenAtomicRMWGetOp(BinaryenExpressionRef expr);
 BINARYEN_API void BinaryenAtomicRMWSetOp(BinaryenExpressionRef expr,
                                          BinaryenOp op);
 // Gets the number of bytes affected by an atomic read-modify-write expression.
-BINARYEN_
+BINARYEN_API uint32_t BinaryenAtomicRMWGetBytes(BinaryenExpressionRef expr);
+// Sets the number of bytes affected by an atomic read-modify-write expression.
+BINARYEN_API void BinaryenAtomicRMWSetBytes(BinaryenExpressionRef expr,
+                                            uint32_t bytes);
+// Gets the constant offset of an atomic read-modify-write expression.
+BINARYEN_API uint32_t BinaryenAtomicRMWGetOffset(BinaryenExpressionRef expr);
+// Sets the constant offset of an atomic read-modify-write expression.
+BINARYEN_API void BinaryenAtomicRMWSetOffset(BinaryenExpressionRef expr,
+                                             uint32_t offset);
+// Gets the pointer expression of an atomic read-modify-write expression.
+BINARYEN_API BinaryenExpressionRef
+BinaryenAtomicRMWGetPtr(BinaryenExpressionRef expr);
+// Sets the pointer expression of an atomic read-modify-write expression.
+BINARYEN_API void BinaryenAtomicRMWSetPtr(BinaryenExpressionRef expr,
+                                          BinaryenExpressionRef ptrExpr);
+// Gets the value expression of an atomic read-modify-write expression.
+BINARYEN_API BinaryenExpressionRef
+BinaryenAtomicRMWGetValue(BinaryenExpressionRef expr);
+// Sets the value expression of an atomic read-modify-write expression.
+BINARYEN_API void BinaryenAtomicRMWSetValue(BinaryenExpressionRef expr,
+                                            BinaryenExpressionRef valueExpr);
+
+// AtomicCmpxchg
+
+// Gets the number of bytes affected by an atomic compare and exchange
+// expression.
+BINARYEN_API uint32_t BinaryenAtomicCmpxchgGetBytes(BinaryenExpressionRef expr);
+// Sets the number of bytes affected by an atomic compare and exchange
+// expression.
+BINARYEN_API void BinaryenAtomicCmpxchgSetBytes(BinaryenExpressionRef expr,
+                                                uint32_t bytes);
+// Gets the constant offset of an atomic compare and exchange expression.
+BINARYEN_API uint32_t
+BinaryenAtomicCmpxchgGetOffset(BinaryenExpressionRef expr);
+// Sets the constant offset of an atomic compare and exchange expression.
+BINARYEN_API void BinaryenAtomicCmpxchgSetOffset(BinaryenExpressionRef expr,
+                                                 uint32_t offset);
+// Gets the pointer expression of an atomic compare and exchange expression.
+BINARYEN_API BinaryenExpressionRef
+BinaryenAtomicCmpxchgGetPtr(BinaryenExpressionRef expr);
+// Sets the pointer expression of an atomic compare and exchange expression.
+BINARYEN_API void BinaryenAtomicCmpxchgSetPtr(BinaryenExpressionRef expr,
+                                              BinaryenExpressionRef ptrExpr);
+// Gets the expression representing the expected value of an atomic compare and
+// exchange expression.
+BINARYEN_API BinaryenExpressionRef
+BinaryenAtomicCmpxchgGetExpected(BinaryenExpressionRef expr);
+// Sets the expression representing the expected value of an atomic compare and
+// exchange expression.
+BINARYEN_API void
+BinaryenAtomicCmpxchgSetExpected(BinaryenExpressionRef expr,
+                                 BinaryenExpressionRef expectedExpr);
+// Gets the replacement expression of an atomic compare and exchange expression.
+BINARYEN_API BinaryenExpressionRef
+BinaryenAtomicCmpxchgGetReplacement(BinaryenExpressionRef expr);
+// Sets the replacement expression of an atomic compare and exchange expression.
+BINARYEN_API void
+BinaryenAtomicCmpxchgSetReplacement(BinaryenExpressionRef expr,
+                                    BinaryenExpressionRef replacementExpr);
+
+// AtomicWait
+
+// Gets the pointer expression of an `memory.atomic.wait` expression.
+BINARYEN_API BinaryenExpressionRef
+BinaryenAtomicWaitGetPtr(BinaryenExpressionRef expr);
+// Sets the pointer expression of an `memory.atomic.wait` expression.
+BINARYEN_API void BinaryenAtomicWaitSetPtr(BinaryenExpressionRef expr,
+                                           BinaryenExpressionRef ptrExpr);
+// Gets the expression representing the expected value of an
+// `memory.atomic.wait` expression.
+BINARYEN_API BinaryenExpressionRef
+BinaryenAtomicWaitGetExpected(BinaryenExpressionRef expr);
+// Sets the expression representing the expected value of an
+// `memory.atomic.wait` expression.
+BINARYEN_API void
+BinaryenAtomicWaitSetExpected(BinaryenExpressionRef expr,
+                              BinaryenExpressionRef expectedExpr);
+// Gets the timeout expression of an `memory.atomic.wait` expression.
+BINARYEN_API BinaryenExpressionRef
+BinaryenAtomicWaitGetTimeout(BinaryenExpressionRef expr);
+// Sets the timeout expression of an `memory.atomic.wait` expression.
+BINARYEN_API void
+BinaryenAtomicWaitSetTimeout(BinaryenExpressionRef expr,
+                             BinaryenExpressionRef timeoutExpr);
+// Gets the expected type of an `memory.atomic.wait` expression.
+BINARYEN_API BinaryenType
+BinaryenAtomicWaitGetExpectedType(BinaryenExpressionRef expr);
+// Sets the expected type of an `memory.atomic.wait` expression.
+BINARYEN_API void BinaryenAtomicWaitSetExpectedType(BinaryenExpressionRef expr,
+                                                    BinaryenType expectedType);
+
+// AtomicNotify
+
+// Gets the pointer expression of an `memory.atomic.notify` expression.
+BINARYEN_API BinaryenExpressionRef
+BinaryenAtomicNotifyGetPtr(BinaryenExpressionRef expr);
+// Sets the pointer expression of an `memory.atomic.notify` expression.
+BINARYEN_API void BinaryenAtomicNotifySetPtr(BinaryenExpressionRef expr,
+                                             BinaryenExpressionRef ptrExpr);
+// Gets the notify count expression of an `memory.atomic.notify` expression.
+BINARYEN_API BinaryenExpressionRef
+BinaryenAtomicNotifyGetNotifyCount(BinaryenExpressionRef expr);
+// Sets the notify count expression of an `memory.atomic.notify` expression.
+BINARYEN_API void
+BinaryenAtomicNotifySetNotifyCount(BinaryenExpressionRef expr,
+                                   BinaryenExpressionRef notifyCountExpr);
+
+// AtomicFence
+
+// Gets the order of an `atomic.fence` expression.
+BINARYEN_API uint8_t BinaryenAtomicFenceGetOrder(BinaryenExpressionRef expr);
+// Sets the order of an `atomic.fence` expression.
+BINARYEN_API void BinaryenAtomicFenceSetOrder(BinaryenExpressionRef expr,
+                                              uint8_t order);
+
+// SIMDExtract
+
+// Gets the operation being performed by a SIMD extract expression.
+BINARYEN_API BinaryenOp BinaryenSIMDExtractGetOp(BinaryenExpressionRef expr);
+// Sets the operation being performed by a SIMD extract expression.
+BINARYEN_API void BinaryenSIMDExtractSetOp(BinaryenExpressionRef expr,
+                                           BinaryenOp op);
+// Gets the vector expression a SIMD extract expression extracts from.
+BINARYEN_API BinaryenExpressionRef
+BinaryenSIMDExtractGetVec(BinaryenExpressionRef expr);
+// Sets the vector expression a SIMD extract expression extracts from.
+BINARYEN_API void BinaryenSIMDExtractSetVec(BinaryenExpressionRef expr,
+                                            BinaryenExpressionRef vecExpr);
+// Gets the index of the extracted lane of a SIMD extract expression.
+BINARYEN_API uint8_t BinaryenSIMDExtractGetIndex(BinaryenExpressionRef expr);
+// Sets the index of the extracted lane of a SIMD extract expression.
+BINARYEN_API void BinaryenSIMDExtractSetIndex(BinaryenExpressionRef expr,
+                                              uint8_t index);
+
+// SIMDReplace
+
+// Gets the operation being performed by a SIMD replace expression.
+BINARYEN_API BinaryenOp BinaryenSIMDReplaceGetOp(BinaryenExpressionRef expr);
+// Sets the operation being performed by a SIMD replace expression.
+BINARYEN_API void BinaryenSIMDReplaceSetOp(BinaryenExpressionRef expr,
+                                           BinaryenOp op);
+// Gets the vector expression a SIMD replace expression replaces in.
+BINARYEN_API BinaryenExpressionRef
+BinaryenSIMDReplaceGetVec(BinaryenExpressionRef expr);
+// Sets the vector expression a SIMD replace expression replaces in.
+BINARYEN_API void BinaryenSIMDReplaceSetVec(BinaryenExpressionRef expr,
+                                            BinaryenExpressionRef vecExpr);
+// Gets the index of the replaced lane of a SIMD replace expression.
+BINARYEN_API uint8_t BinaryenSIMDReplaceGetIndex(BinaryenExpressionRef expr);
+// Sets the index of the replaced lane of a SIMD replace expression.
+BINARYEN_API void BinaryenSIMDReplaceSetIndex(BinaryenExpressionRef expr,
+                                              uint8_t index);
+// Gets the value expression a SIMD replace expression replaces with.
+BINARYEN_API BinaryenExpressionRef
+BinaryenSIMDReplaceGetValue(BinaryenExpressionRef expr);
+// Sets the value expression a SIMD replace expression replaces with.
+BINARYEN_API void BinaryenSIMDReplaceSetValue(BinaryenExpressionRef expr,
+                                              BinaryenExpressionRef valueExpr);
+
+// SIMDShuffle
+
+// Gets the left expression of a SIMD shuffle expression.
+BINARYEN_API BinaryenExpressionRef
+BinaryenSIMDShuffleGetLeft(BinaryenExpressionRef expr);
+// Sets the left expression of a SIMD shuffle expression.
+BINARYEN_API void BinaryenSIMDShuffleSetLeft(BinaryenExpressionRef expr,
+                                             BinaryenExpressionRef leftExpr);
+// Gets the right expression of a SIMD shuffle expression.
+BINARYEN_API BinaryenExpressionRef
+BinaryenSIMDShuffleGetRight(BinaryenExpressionRef expr);
+// Sets the right expression of a SIMD shuffle expression.
+BINARYEN_API void BinaryenSIMDShuffleSetRight(BinaryenExpressionRef expr,
+                                              BinaryenExpressionRef rightExpr);
+// Gets the 128-bit mask of a SIMD shuffle expression.
+BINARYEN_API void BinaryenSIMDShuffleGetMask(BinaryenExpressionRef expr,
+                                             uint8_t* mask);
+// Sets the 128-bit mask of a SIMD shuffle expression.
+BINARYEN_API void BinaryenSIMDShuffleSetMask(BinaryenExpressionRef expr,
+                                             const uint8_t mask[16]);
+
+// SIMDTernary
+
+// Gets the operation being performed by a SIMD ternary expression.
+BINARYEN_API BinaryenOp BinaryenSIMDTernaryGetOp(BinaryenExpressionRef expr);
+// Sets the operation being performed by a SIMD ternary expression.
+BINARYEN_API void BinaryenSIMDTernarySetOp(BinaryenExpressionRef expr,
+                                           BinaryenOp op);
+// Gets the first operand expression of a SIMD ternary expression.
+BINARYEN_API BinaryenExpressionRef
+BinaryenSIMDTernaryGetA(BinaryenExpressionRef expr);
+// Sets the first operand expression of a SIMD ternary expression.
+BINARYEN_API void BinaryenSIMDTernarySetA(BinaryenExpressionRef expr,
+                                          BinaryenExpressionRef aExpr);
+// Gets the second operand expression of a SIMD ternary expression.
+BINARYEN_API BinaryenExpressionRef
+BinaryenSIMDTernaryGetB(BinaryenExpressionRef expr);
+// Sets the second operand expression of a SIMD ternary expression.
+BINARYEN_API void BinaryenSIMDTernarySetB(BinaryenExpressionRef expr,
+                                          BinaryenExpressionRef bExpr);
+// Gets the third operand expression of a SIMD ternary expression.
+BINARYEN_API BinaryenExpressionRef
+BinaryenSIMDTernaryGetC(BinaryenExpressionRef expr);
+// Sets the third operand expression of a SIMD ternary expression.
+BINARYEN_API void BinaryenSIMDTernarySetC(BinaryenExpressionRef expr,
+                                          BinaryenExpressionRef cExpr);
+
+// SIMDShift
+
+// Gets the operation being performed by a SIMD shift expression.
+BINARYEN_API BinaryenOp BinaryenSIMDShiftGetOp(BinaryenExpressionRef expr);
+// Sets the operation being performed by a SIMD shift expression.
+BINARYEN_API void BinaryenSIMDShiftSetOp(BinaryenExpressionRef expr,
+                                         BinaryenOp op);
+// Gets the expression being shifted by a SIMD shift expression.
+BINARYEN_API BinaryenExpressionRef
+BinaryenSIMDShiftGetVec(BinaryenExpressionRef expr);
+// Sets the expression being shifted by a SIMD shift expression.
+BINARYEN
