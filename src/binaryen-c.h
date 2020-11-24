@@ -2667,4 +2667,236 @@ BINARYEN_API void BinaryenStringIterNextSetRef(BinaryenExpressionRef expr,
 
 // StringIterMove
 
-BINARYEN_API BinaryenOp Bi
+BINARYEN_API BinaryenOp BinaryenStringIterMoveGetOp(BinaryenExpressionRef expr);
+BINARYEN_API void BinaryenStringIterMoveSetOp(BinaryenExpressionRef expr,
+                                              BinaryenOp op);
+BINARYEN_API BinaryenExpressionRef
+BinaryenStringIterMoveGetRef(BinaryenExpressionRef expr);
+BINARYEN_API void BinaryenStringIterMoveSetRef(BinaryenExpressionRef expr,
+                                               BinaryenExpressionRef refExpr);
+BINARYEN_API BinaryenExpressionRef
+BinaryenStringIterMoveGetNum(BinaryenExpressionRef expr);
+BINARYEN_API void BinaryenStringIterMoveSetNum(BinaryenExpressionRef expr,
+                                               BinaryenExpressionRef numExpr);
+
+// StringSliceWTF
+
+BINARYEN_API BinaryenOp BinaryenStringSliceWTFGetOp(BinaryenExpressionRef expr);
+BINARYEN_API void BinaryenStringSliceWTFSetOp(BinaryenExpressionRef expr,
+                                              BinaryenOp op);
+BINARYEN_API BinaryenExpressionRef
+BinaryenStringSliceWTFGetRef(BinaryenExpressionRef expr);
+BINARYEN_API void BinaryenStringSliceWTFSetRef(BinaryenExpressionRef expr,
+                                               BinaryenExpressionRef refExpr);
+BINARYEN_API BinaryenExpressionRef
+BinaryenStringSliceWTFGetStart(BinaryenExpressionRef expr);
+BINARYEN_API void
+BinaryenStringSliceWTFSetStart(BinaryenExpressionRef expr,
+                               BinaryenExpressionRef startExpr);
+BINARYEN_API BinaryenExpressionRef
+BinaryenStringSliceWTFGetEnd(BinaryenExpressionRef expr);
+BINARYEN_API void BinaryenStringSliceWTFSetEnd(BinaryenExpressionRef expr,
+                                               BinaryenExpressionRef endExpr);
+
+// StringSliceIter
+
+BINARYEN_API BinaryenExpressionRef
+BinaryenStringSliceIterGetRef(BinaryenExpressionRef expr);
+BINARYEN_API void BinaryenStringSliceIterSetRef(BinaryenExpressionRef expr,
+                                                BinaryenExpressionRef refExpr);
+BINARYEN_API BinaryenExpressionRef
+BinaryenStringSliceIterGetNum(BinaryenExpressionRef expr);
+BINARYEN_API void BinaryenStringSliceIterSetNum(BinaryenExpressionRef expr,
+                                                BinaryenExpressionRef numExpr);
+
+// Functions
+
+BINARYEN_REF(Function);
+
+// Adds a function to the module. This is thread-safe.
+// @varTypes: the types of variables. In WebAssembly, vars share
+//            an index space with params. In other words, params come from
+//            the function type, and vars are provided in this call, and
+//            together they are all the locals. The order is first params
+//            and then vars, so if you have one param it will be at index
+//            0 (and written $0), and if you also have 2 vars they will be
+//            at indexes 1 and 2, etc., that is, they share an index space.
+BINARYEN_API BinaryenFunctionRef
+BinaryenAddFunction(BinaryenModuleRef module,
+                    const char* name,
+                    BinaryenType params,
+                    BinaryenType results,
+                    BinaryenType* varTypes,
+                    BinaryenIndex numVarTypes,
+                    BinaryenExpressionRef body);
+// Gets a function reference by name. Returns NULL if the function does not
+// exist.
+BINARYEN_API BinaryenFunctionRef BinaryenGetFunction(BinaryenModuleRef module,
+                                                     const char* name);
+// Removes a function by name.
+BINARYEN_API void BinaryenRemoveFunction(BinaryenModuleRef module,
+                                         const char* name);
+
+// Gets the number of functions in the module.
+BINARYEN_API BinaryenIndex BinaryenGetNumFunctions(BinaryenModuleRef module);
+// Gets the function at the specified index.
+BINARYEN_API BinaryenFunctionRef
+BinaryenGetFunctionByIndex(BinaryenModuleRef module, BinaryenIndex index);
+
+// Imports
+
+// These either create a new entity (function/table/memory/etc.) and
+// mark it as an import, or, if an entity already exists with internalName then
+// the existing entity is turned into an import.
+
+BINARYEN_API void BinaryenAddFunctionImport(BinaryenModuleRef module,
+                                            const char* internalName,
+                                            const char* externalModuleName,
+                                            const char* externalBaseName,
+                                            BinaryenType params,
+                                            BinaryenType results);
+BINARYEN_API void BinaryenAddTableImport(BinaryenModuleRef module,
+                                         const char* internalName,
+                                         const char* externalModuleName,
+                                         const char* externalBaseName);
+BINARYEN_API void BinaryenAddMemoryImport(BinaryenModuleRef module,
+                                          const char* internalName,
+                                          const char* externalModuleName,
+                                          const char* externalBaseName,
+                                          uint8_t shared);
+BINARYEN_API void BinaryenAddGlobalImport(BinaryenModuleRef module,
+                                          const char* internalName,
+                                          const char* externalModuleName,
+                                          const char* externalBaseName,
+                                          BinaryenType globalType,
+                                          bool mutable_);
+BINARYEN_API void BinaryenAddTagImport(BinaryenModuleRef module,
+                                       const char* internalName,
+                                       const char* externalModuleName,
+                                       const char* externalBaseName,
+                                       BinaryenType params,
+                                       BinaryenType results);
+
+// Memory
+BINARYEN_REF(Memory);
+
+// Exports
+
+BINARYEN_REF(Export);
+
+WASM_DEPRECATED BinaryenExportRef BinaryenAddExport(BinaryenModuleRef module,
+                                                    const char* internalName,
+                                                    const char* externalName);
+// Adds a function export to the module.
+BINARYEN_API BinaryenExportRef BinaryenAddFunctionExport(
+  BinaryenModuleRef module, const char* internalName, const char* externalName);
+// Adds a table export to the module.
+BINARYEN_API BinaryenExportRef BinaryenAddTableExport(BinaryenModuleRef module,
+                                                      const char* internalName,
+                                                      const char* externalName);
+// Adds a memory export to the module.
+BINARYEN_API BinaryenExportRef BinaryenAddMemoryExport(
+  BinaryenModuleRef module, const char* internalName, const char* externalName);
+// Adds a global export to the module.
+BINARYEN_API BinaryenExportRef BinaryenAddGlobalExport(
+  BinaryenModuleRef module, const char* internalName, const char* externalName);
+// Adds a tag export to the module.
+BINARYEN_API BinaryenExportRef BinaryenAddTagExport(BinaryenModuleRef module,
+                                                    const char* internalName,
+                                                    const char* externalName);
+// Gets an export reference by external name. Returns NULL if the export does
+// not exist.
+BINARYEN_API BinaryenExportRef BinaryenGetExport(BinaryenModuleRef module,
+                                                 const char* externalName);
+// Removes an export by external name.
+BINARYEN_API void BinaryenRemoveExport(BinaryenModuleRef module,
+                                       const char* externalName);
+// Gets the number of exports in the module.
+BINARYEN_API BinaryenIndex BinaryenGetNumExports(BinaryenModuleRef module);
+// Gets the export at the specified index.
+BINARYEN_API BinaryenExportRef
+BinaryenGetExportByIndex(BinaryenModuleRef module, BinaryenIndex index);
+
+// Globals
+
+BINARYEN_REF(Global);
+
+// Adds a global to the module.
+BINARYEN_API BinaryenGlobalRef BinaryenAddGlobal(BinaryenModuleRef module,
+                                                 const char* name,
+                                                 BinaryenType type,
+                                                 bool mutable_,
+                                                 BinaryenExpressionRef init);
+// Gets a global reference by name. Returns NULL if the global does not exist.
+BINARYEN_API BinaryenGlobalRef BinaryenGetGlobal(BinaryenModuleRef module,
+                                                 const char* name);
+// Removes a global by name.
+BINARYEN_API void BinaryenRemoveGlobal(BinaryenModuleRef module,
+                                       const char* name);
+// Gets the number of globals in the module.
+BINARYEN_API BinaryenIndex BinaryenGetNumGlobals(BinaryenModuleRef module);
+// Gets the global at the specified index.
+BINARYEN_API BinaryenGlobalRef
+BinaryenGetGlobalByIndex(BinaryenModuleRef module, BinaryenIndex index);
+
+// Tags
+
+BINARYEN_REF(Tag);
+
+// Adds a tag to the module.
+BINARYEN_API BinaryenTagRef BinaryenAddTag(BinaryenModuleRef module,
+                                           const char* name,
+                                           BinaryenType params,
+                                           BinaryenType results);
+// Gets a tag reference by name. Returns NULL if the tag does not exist.
+BINARYEN_API BinaryenTagRef BinaryenGetTag(BinaryenModuleRef module,
+                                           const char* name);
+// Removes a tag by name.
+BINARYEN_API void BinaryenRemoveTag(BinaryenModuleRef module, const char* name);
+
+// Tables
+
+BINARYEN_REF(Table);
+
+BINARYEN_API BinaryenTableRef BinaryenAddTable(BinaryenModuleRef module,
+                                               const char* table,
+                                               BinaryenIndex initial,
+                                               BinaryenIndex maximum,
+                                               BinaryenType tableType);
+BINARYEN_API void BinaryenRemoveTable(BinaryenModuleRef module,
+                                      const char* table);
+BINARYEN_API BinaryenIndex BinaryenGetNumTables(BinaryenModuleRef module);
+BINARYEN_API BinaryenTableRef BinaryenGetTable(BinaryenModuleRef module,
+                                               const char* name);
+BINARYEN_API BinaryenTableRef BinaryenGetTableByIndex(BinaryenModuleRef module,
+                                                      BinaryenIndex index);
+
+// Elem segments
+
+BINARYEN_REF(ElementSegment);
+
+BINARYEN_API BinaryenElementSegmentRef
+BinaryenAddActiveElementSegment(BinaryenModuleRef module,
+                                const char* table,
+                                const char* name,
+                                const char** funcNames,
+                                BinaryenIndex numFuncNames,
+                                BinaryenExpressionRef offset);
+BINARYEN_API BinaryenElementSegmentRef
+BinaryenAddPassiveElementSegment(BinaryenModuleRef module,
+                                 const char* name,
+                                 const char** funcNames,
+                                 BinaryenIndex numFuncNames);
+BINARYEN_API void BinaryenRemoveElementSegment(BinaryenModuleRef module,
+                                               const char* name);
+BINARYEN_API BinaryenIndex
+BinaryenGetNumElementSegments(BinaryenModuleRef module);
+BINARYEN_API BinaryenElementSegmentRef
+BinaryenGetElementSegment(BinaryenModuleRef module, const char* name);
+BINARYEN_API BinaryenElementSegmentRef
+BinaryenGetElementSegmentByIndex(BinaryenModuleRef module, BinaryenIndex index);
+
+// This will create a memory, overwriting any existing memory
+// Each memory has data in segments, a start offset in segmentOffsets, and a
+// size in segmentSizes. exportName can be NULL
+BINARYEN_API void
