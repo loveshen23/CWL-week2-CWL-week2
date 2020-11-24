@@ -2180,4 +2180,235 @@ BINARYEN_API const char* BinaryenTryGetCatchTagAt(BinaryenExpressionRef expr,
 BINARYEN_API void BinaryenTrySetCatchTagAt(BinaryenExpressionRef expr,
                                            BinaryenIndex index,
                                            const char* catchTag);
-// Appends a catch tag to a `try` expres
+// Appends a catch tag to a `try` expression, returning its insertion index.
+BINARYEN_API BinaryenIndex BinaryenTryAppendCatchTag(BinaryenExpressionRef expr,
+                                                     const char* catchTag);
+// Inserts a catch tag at the specified index of a `try` expression, moving
+// existing catch tags including the one previously at that index one index up.
+BINARYEN_API void BinaryenTryInsertCatchTagAt(BinaryenExpressionRef expr,
+                                              BinaryenIndex index,
+                                              const char* catchTag);
+// Removes the catch tag at the specified index of a `try` expression, moving
+// all subsequent catch tags one index down. Returns the tag.
+BINARYEN_API const char* BinaryenTryRemoveCatchTagAt(BinaryenExpressionRef expr,
+                                                     BinaryenIndex index);
+// Gets the catch body expression at the specified index of a `try` expression.
+BINARYEN_API BinaryenExpressionRef
+BinaryenTryGetCatchBodyAt(BinaryenExpressionRef expr, BinaryenIndex index);
+// Sets the catch body expression at the specified index of a `try` expression.
+BINARYEN_API void BinaryenTrySetCatchBodyAt(BinaryenExpressionRef expr,
+                                            BinaryenIndex index,
+                                            BinaryenExpressionRef catchExpr);
+// Appends a catch expression to a `try` expression, returning its insertion
+// index.
+BINARYEN_API BinaryenIndex BinaryenTryAppendCatchBody(
+  BinaryenExpressionRef expr, BinaryenExpressionRef catchExpr);
+// Inserts a catch expression at the specified index of a `try` expression,
+// moving existing catch bodies including the one previously at that index one
+// index up.
+BINARYEN_API void BinaryenTryInsertCatchBodyAt(BinaryenExpressionRef expr,
+                                               BinaryenIndex index,
+                                               BinaryenExpressionRef catchExpr);
+// Removes the catch expression at the specified index of a `try` expression,
+// moving all subsequent catch bodies one index down. Returns the catch
+// expression.
+BINARYEN_API BinaryenExpressionRef
+BinaryenTryRemoveCatchBodyAt(BinaryenExpressionRef expr, BinaryenIndex index);
+// Gets whether a `try` expression has a catch_all clause.
+BINARYEN_API bool BinaryenTryHasCatchAll(BinaryenExpressionRef expr);
+// Gets the target label of a `delegate`.
+BINARYEN_API const char*
+BinaryenTryGetDelegateTarget(BinaryenExpressionRef expr);
+// Sets the target label of a `delegate`.
+BINARYEN_API void BinaryenTrySetDelegateTarget(BinaryenExpressionRef expr,
+                                               const char* delegateTarget);
+// Gets whether a `try` expression is a try-delegate.
+BINARYEN_API bool BinaryenTryIsDelegate(BinaryenExpressionRef expr);
+
+// Throw
+
+// Gets the name of the tag being thrown by a `throw` expression.
+BINARYEN_API const char* BinaryenThrowGetTag(BinaryenExpressionRef expr);
+// Sets the name of the tag being thrown by a `throw` expression.
+BINARYEN_API void BinaryenThrowSetTag(BinaryenExpressionRef expr,
+                                      const char* tagName);
+// Gets the number of operands of a `throw` expression.
+BINARYEN_API BinaryenIndex
+BinaryenThrowGetNumOperands(BinaryenExpressionRef expr);
+// Gets the operand at the specified index of a `throw` expression.
+BINARYEN_API BinaryenExpressionRef
+BinaryenThrowGetOperandAt(BinaryenExpressionRef expr, BinaryenIndex index);
+// Sets the operand at the specified index of a `throw` expression.
+BINARYEN_API void BinaryenThrowSetOperandAt(BinaryenExpressionRef expr,
+                                            BinaryenIndex index,
+                                            BinaryenExpressionRef operandExpr);
+// Appends an operand expression to a `throw` expression, returning its
+// insertion index.
+BINARYEN_API BinaryenIndex BinaryenThrowAppendOperand(
+  BinaryenExpressionRef expr, BinaryenExpressionRef operandExpr);
+// Inserts an operand expression at the specified index of a `throw` expression,
+// moving existing operands including the one previously at that index one index
+// up.
+BINARYEN_API void
+BinaryenThrowInsertOperandAt(BinaryenExpressionRef expr,
+                             BinaryenIndex index,
+                             BinaryenExpressionRef operandExpr);
+// Removes the operand expression at the specified index of a `throw`
+// expression, moving all subsequent operands one index down. Returns the
+// operand expression.
+BINARYEN_API BinaryenExpressionRef
+BinaryenThrowRemoveOperandAt(BinaryenExpressionRef expr, BinaryenIndex index);
+
+// Rethrow
+
+// Gets the target catch's corresponding try label of a `rethrow` expression.
+BINARYEN_API const char* BinaryenRethrowGetTarget(BinaryenExpressionRef expr);
+// Sets the target catch's corresponding try label of a `rethrow` expression.
+BINARYEN_API void BinaryenRethrowSetTarget(BinaryenExpressionRef expr,
+                                           const char* target);
+
+// TupleMake
+
+// Gets the number of operands of a `tuple.make` expression.
+BINARYEN_API BinaryenIndex
+BinaryenTupleMakeGetNumOperands(BinaryenExpressionRef expr);
+// Gets the operand at the specified index of a `tuple.make` expression.
+BINARYEN_API BinaryenExpressionRef
+BinaryenTupleMakeGetOperandAt(BinaryenExpressionRef expr, BinaryenIndex index);
+// Sets the operand at the specified index of a `tuple.make` expression.
+BINARYEN_API void
+BinaryenTupleMakeSetOperandAt(BinaryenExpressionRef expr,
+                              BinaryenIndex index,
+                              BinaryenExpressionRef operandExpr);
+// Appends an operand expression to a `tuple.make` expression, returning its
+// insertion index.
+BINARYEN_API BinaryenIndex BinaryenTupleMakeAppendOperand(
+  BinaryenExpressionRef expr, BinaryenExpressionRef operandExpr);
+// Inserts an operand expression at the specified index of a `tuple.make`
+// expression, moving existing operands including the one previously at that
+// index one index up.
+BINARYEN_API void
+BinaryenTupleMakeInsertOperandAt(BinaryenExpressionRef expr,
+                                 BinaryenIndex index,
+                                 BinaryenExpressionRef operandExpr);
+// Removes the operand expression at the specified index of a `tuple.make`
+// expression, moving all subsequent operands one index down. Returns the
+// operand expression.
+BINARYEN_API BinaryenExpressionRef BinaryenTupleMakeRemoveOperandAt(
+  BinaryenExpressionRef expr, BinaryenIndex index);
+
+// TupleExtract
+
+// Gets the tuple extracted from of a `tuple.extract` expression.
+BINARYEN_API BinaryenExpressionRef
+BinaryenTupleExtractGetTuple(BinaryenExpressionRef expr);
+// Sets the tuple extracted from of a `tuple.extract` expression.
+BINARYEN_API void BinaryenTupleExtractSetTuple(BinaryenExpressionRef expr,
+                                               BinaryenExpressionRef tupleExpr);
+// Gets the index extracted at of a `tuple.extract` expression.
+BINARYEN_API BinaryenIndex
+BinaryenTupleExtractGetIndex(BinaryenExpressionRef expr);
+// Sets the index extracted at of a `tuple.extract` expression.
+BINARYEN_API void BinaryenTupleExtractSetIndex(BinaryenExpressionRef expr,
+                                               BinaryenIndex index);
+
+// I31New
+
+// Gets the value expression of an `i31.new` expression.
+BINARYEN_API BinaryenExpressionRef
+BinaryenI31NewGetValue(BinaryenExpressionRef expr);
+// Sets the value expression of an `i31.new` expression.
+BINARYEN_API void BinaryenI31NewSetValue(BinaryenExpressionRef expr,
+                                         BinaryenExpressionRef valueExpr);
+
+// I31Get
+
+// Gets the i31 expression of an `i31.get` expression.
+BINARYEN_API BinaryenExpressionRef
+BinaryenI31GetGetI31(BinaryenExpressionRef expr);
+// Sets the i31 expression of an `i31.get` expression.
+BINARYEN_API void BinaryenI31GetSetI31(BinaryenExpressionRef expr,
+                                       BinaryenExpressionRef i31Expr);
+// Gets whether an `i31.get` expression returns a signed value (`_s`).
+BINARYEN_API bool BinaryenI31GetIsSigned(BinaryenExpressionRef expr);
+// Sets whether an `i31.get` expression returns a signed value (`_s`).
+BINARYEN_API void BinaryenI31GetSetSigned(BinaryenExpressionRef expr,
+                                          bool signed_);
+
+// CallRef
+
+BINARYEN_API BinaryenIndex
+BinaryenCallRefGetNumOperands(BinaryenExpressionRef expr);
+BINARYEN_API BinaryenExpressionRef
+BinaryenCallRefGetOperandAt(BinaryenExpressionRef expr, BinaryenIndex index);
+BINARYEN_API void
+BinaryenCallRefSetOperandAt(BinaryenExpressionRef expr,
+                            BinaryenIndex index,
+                            BinaryenExpressionRef operandExpr);
+BINARYEN_API BinaryenIndex BinaryenCallRefAppendOperand(
+  BinaryenExpressionRef expr, BinaryenExpressionRef operandExpr);
+BINARYEN_API void
+BinaryenCallRefInsertOperandAt(BinaryenExpressionRef expr,
+                               BinaryenIndex index,
+                               BinaryenExpressionRef operandExpr);
+BINARYEN_API BinaryenExpressionRef
+BinaryenCallRefRemoveOperandAt(BinaryenExpressionRef expr, BinaryenIndex index);
+BINARYEN_API BinaryenExpressionRef
+BinaryenCallRefGetTarget(BinaryenExpressionRef expr);
+BINARYEN_API void BinaryenCallRefSetTarget(BinaryenExpressionRef expr,
+                                           BinaryenExpressionRef targetExpr);
+BINARYEN_API bool BinaryenCallRefIsReturn(BinaryenExpressionRef expr);
+BINARYEN_API void BinaryenCallRefSetReturn(BinaryenExpressionRef expr,
+                                           bool isReturn);
+
+// RefTest
+
+BINARYEN_API BinaryenExpressionRef
+BinaryenRefTestGetRef(BinaryenExpressionRef expr);
+BINARYEN_API void BinaryenRefTestSetRef(BinaryenExpressionRef expr,
+                                        BinaryenExpressionRef refExpr);
+BINARYEN_API BinaryenType
+BinaryenRefTestGetCastType(BinaryenExpressionRef expr);
+BINARYEN_API void BinaryenRefTestSetCastType(BinaryenExpressionRef expr,
+                                             BinaryenType intendedType);
+
+// RefCast
+
+BINARYEN_API BinaryenExpressionRef
+BinaryenRefCastGetRef(BinaryenExpressionRef expr);
+BINARYEN_API void BinaryenRefCastSetRef(BinaryenExpressionRef expr,
+                                        BinaryenExpressionRef refExpr);
+
+// BrOn
+
+BINARYEN_API BinaryenOp BinaryenBrOnGetOp(BinaryenExpressionRef expr);
+BINARYEN_API void BinaryenBrOnSetOp(BinaryenExpressionRef expr, BinaryenOp op);
+BINARYEN_API const char* BinaryenBrOnGetName(BinaryenExpressionRef expr);
+BINARYEN_API void BinaryenBrOnSetName(BinaryenExpressionRef expr,
+                                      const char* nameStr);
+BINARYEN_API BinaryenExpressionRef
+BinaryenBrOnGetRef(BinaryenExpressionRef expr);
+BINARYEN_API void BinaryenBrOnSetRef(BinaryenExpressionRef expr,
+                                     BinaryenExpressionRef refExpr);
+BINARYEN_API BinaryenType BinaryenBrOnGetCastType(BinaryenExpressionRef expr);
+BINARYEN_API void BinaryenBrOnSetCastType(BinaryenExpressionRef expr,
+                                          BinaryenType castType);
+
+// StructNew
+
+BINARYEN_API BinaryenIndex
+BinaryenStructNewGetNumOperands(BinaryenExpressionRef expr);
+BINARYEN_API BinaryenExpressionRef
+BinaryenStructNewGetOperandAt(BinaryenExpressionRef expr, BinaryenIndex index);
+BINARYEN_API void
+BinaryenStructNewSetOperandAt(BinaryenExpressionRef expr,
+                              BinaryenIndex index,
+                              BinaryenExpressionRef operandExpr);
+BINARYEN_API BinaryenIndex BinaryenStructNewAppendOperand(
+  BinaryenExpressionRef expr, BinaryenExpressionRef operandExpr);
+BINARYEN_API void
+BinaryenStructNewInsertOperandAt(BinaryenExpressionRef expr,
+                                 BinaryenIndex index,
+                                 BinaryenExpressionRef operandExpr);
+BINARYEN_API BinaryenExpressionRef BinaryenStructNewRemoveOperandAt(
+  BinaryenExpressionRef expr, Bin
