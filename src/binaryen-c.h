@@ -2899,4 +2899,259 @@ BinaryenGetElementSegmentByIndex(BinaryenModuleRef module, BinaryenIndex index);
 // This will create a memory, overwriting any existing memory
 // Each memory has data in segments, a start offset in segmentOffsets, and a
 // size in segmentSizes. exportName can be NULL
-BINARYEN_API void
+BINARYEN_API void BinaryenSetMemory(BinaryenModuleRef module,
+                                    BinaryenIndex initial,
+                                    BinaryenIndex maximum,
+                                    const char* exportName,
+                                    const char** segments,
+                                    bool* segmentPassive,
+                                    BinaryenExpressionRef* segmentOffsets,
+                                    BinaryenIndex* segmentSizes,
+                                    BinaryenIndex numSegments,
+                                    bool shared,
+                                    bool memory64,
+                                    const char* name);
+
+BINARYEN_API bool BinaryenHasMemory(BinaryenModuleRef module);
+BINARYEN_API BinaryenIndex BinaryenMemoryGetInitial(BinaryenModuleRef module,
+                                                    const char* name);
+BINARYEN_API bool BinaryenMemoryHasMax(BinaryenModuleRef module,
+                                       const char* name);
+BINARYEN_API BinaryenIndex BinaryenMemoryGetMax(BinaryenModuleRef module,
+                                                const char* name);
+BINARYEN_API const char* BinaryenMemoryImportGetModule(BinaryenModuleRef module,
+                                                       const char* name);
+BINARYEN_API const char* BinaryenMemoryImportGetBase(BinaryenModuleRef module,
+                                                     const char* name);
+BINARYEN_API bool BinaryenMemoryIsShared(BinaryenModuleRef module,
+                                         const char* name);
+BINARYEN_API bool BinaryenMemoryIs64(BinaryenModuleRef module,
+                                     const char* name);
+
+// Memory segments. Query utilities.
+
+BINARYEN_API uint32_t BinaryenGetNumMemorySegments(BinaryenModuleRef module);
+BINARYEN_API uint32_t
+BinaryenGetMemorySegmentByteOffset(BinaryenModuleRef module, BinaryenIndex id);
+BINARYEN_API size_t BinaryenGetMemorySegmentByteLength(BinaryenModuleRef module,
+                                                       BinaryenIndex id);
+BINARYEN_API bool BinaryenGetMemorySegmentPassive(BinaryenModuleRef module,
+                                                  BinaryenIndex id);
+BINARYEN_API void BinaryenCopyMemorySegmentData(BinaryenModuleRef module,
+                                                BinaryenIndex id,
+                                                char* buffer);
+
+// Start function. One per module
+
+BINARYEN_API void BinaryenSetStart(BinaryenModuleRef module,
+                                   BinaryenFunctionRef start);
+
+// Features
+
+// These control what features are allowed when validation and in passes.
+BINARYEN_API BinaryenFeatures
+BinaryenModuleGetFeatures(BinaryenModuleRef module);
+BINARYEN_API void BinaryenModuleSetFeatures(BinaryenModuleRef module,
+                                            BinaryenFeatures features);
+
+//
+// ========== Module Operations ==========
+//
+
+// Parse a module in s-expression text format
+BINARYEN_API BinaryenModuleRef BinaryenModuleParse(const char* text);
+
+// Print a module to stdout in s-expression text format. Useful for debugging.
+BINARYEN_API void BinaryenModulePrint(BinaryenModuleRef module);
+
+// Print a module to stdout in stack IR text format. Useful for debugging.
+BINARYEN_API void BinaryenModulePrintStackIR(BinaryenModuleRef module,
+                                             bool optimize);
+
+// Print a module to stdout in asm.js syntax.
+BINARYEN_API void BinaryenModulePrintAsmjs(BinaryenModuleRef module);
+
+// Validate a module, showing errors on problems.
+//  @return 0 if an error occurred, 1 if validated succesfully
+BINARYEN_API bool BinaryenModuleValidate(BinaryenModuleRef module);
+
+// Runs the standard optimization passes on the module. Uses the currently set
+// global optimize and shrink level.
+BINARYEN_API void BinaryenModuleOptimize(BinaryenModuleRef module);
+
+// Updates the internal name mapping logic in a module. This must be called
+// after renaming module elements.
+BINARYEN_API void BinaryenModuleUpdateMaps(BinaryenModuleRef module);
+
+// Gets the currently set optimize level. Applies to all modules, globally.
+// 0, 1, 2 correspond to -O0, -O1, -O2 (default), etc.
+BINARYEN_API int BinaryenGetOptimizeLevel(void);
+
+// Sets the optimization level to use. Applies to all modules, globally.
+// 0, 1, 2 correspond to -O0, -O1, -O2 (default), etc.
+BINARYEN_API void BinaryenSetOptimizeLevel(int level);
+
+// Gets the currently set shrink level. Applies to all modules, globally.
+// 0, 1, 2 correspond to -O0, -Os (default), -Oz.
+BINARYEN_API int BinaryenGetShrinkLevel(void);
+
+// Sets the shrink level to use. Applies to all modules, globally.
+// 0, 1, 2 correspond to -O0, -Os (default), -Oz.
+BINARYEN_API void BinaryenSetShrinkLevel(int level);
+
+// Gets whether generating debug information is currently enabled or not.
+// Applies to all modules, globally.
+BINARYEN_API bool BinaryenGetDebugInfo(void);
+
+// Enables or disables debug information in emitted binaries.
+// Applies to all modules, globally.
+BINARYEN_API void BinaryenSetDebugInfo(bool on);
+
+// Gets whether the low 1K of memory can be considered unused when optimizing.
+// Applies to all modules, globally.
+BINARYEN_API bool BinaryenGetLowMemoryUnused(void);
+
+// Enables or disables whether the low 1K of memory can be considered unused
+// when optimizing. Applies to all modules, globally.
+BINARYEN_API void BinaryenSetLowMemoryUnused(bool on);
+
+// Gets whether to assume that an imported memory is zero-initialized.
+BINARYEN_API bool BinaryenGetZeroFilledMemory(void);
+
+// Enables or disables whether to assume that an imported memory is
+// zero-initialized.
+BINARYEN_API void BinaryenSetZeroFilledMemory(bool on);
+
+// Gets whether fast math optimizations are enabled, ignoring for example
+// corner cases of floating-point math like NaN changes.
+// Applies to all modules, globally.
+BINARYEN_API bool BinaryenGetFastMath(void);
+
+// Enables or disables fast math optimizations, ignoring for example
+// corner cases of floating-point math like NaN changes.
+// Applies to all modules, globally.
+BINARYEN_API void BinaryenSetFastMath(bool value);
+
+// Gets the value of the specified arbitrary pass argument.
+// Applies to all modules, globally.
+BINARYEN_API const char* BinaryenGetPassArgument(const char* name);
+
+// Sets the value of the specified arbitrary pass argument. Removes the
+// respective argument if `value` is NULL. Applies to all modules, globally.
+BINARYEN_API void BinaryenSetPassArgument(const char* name, const char* value);
+
+// Clears all arbitrary pass arguments.
+// Applies to all modules, globally.
+BINARYEN_API void BinaryenClearPassArguments();
+
+// Gets the function size at which we always inline.
+// Applies to all modules, globally.
+BINARYEN_API BinaryenIndex BinaryenGetAlwaysInlineMaxSize(void);
+
+// Sets the function size at which we always inline.
+// Applies to all modules, globally.
+BINARYEN_API void BinaryenSetAlwaysInlineMaxSize(BinaryenIndex size);
+
+// Gets the function size which we inline when functions are lightweight.
+// Applies to all modules, globally.
+BINARYEN_API BinaryenIndex BinaryenGetFlexibleInlineMaxSize(void);
+
+// Sets the function size which we inline when functions are lightweight.
+// Applies to all modules, globally.
+BINARYEN_API void BinaryenSetFlexibleInlineMaxSize(BinaryenIndex size);
+
+// Gets the function size which we inline when there is only one caller.
+// Applies to all modules, globally.
+BINARYEN_API BinaryenIndex BinaryenGetOneCallerInlineMaxSize(void);
+
+// Sets the function size which we inline when there is only one caller.
+// Applies to all modules, globally.
+BINARYEN_API void BinaryenSetOneCallerInlineMaxSize(BinaryenIndex size);
+
+// Gets whether functions with loops are allowed to be inlined.
+// Applies to all modules, globally.
+BINARYEN_API bool BinaryenGetAllowInliningFunctionsWithLoops(void);
+
+// Sets whether functions with loops are allowed to be inlined.
+// Applies to all modules, globally.
+BINARYEN_API void BinaryenSetAllowInliningFunctionsWithLoops(bool enabled);
+
+// Runs the specified passes on the module. Uses the currently set global
+// optimize and shrink level.
+BINARYEN_API void BinaryenModuleRunPasses(BinaryenModuleRef module,
+                                          const char** passes,
+                                          BinaryenIndex numPasses);
+
+// Auto-generate drop() operations where needed. This lets you generate code
+// without worrying about where they are needed. (It is more efficient to do it
+// yourself, but simpler to use autodrop).
+BINARYEN_API void BinaryenModuleAutoDrop(BinaryenModuleRef module);
+
+// Serialize a module into binary form. Uses the currently set global debugInfo
+// option.
+// @return how many bytes were written. This will be less than or equal to
+//         outputSize
+size_t BINARYEN_API BinaryenModuleWrite(BinaryenModuleRef module,
+                                        char* output,
+                                        size_t outputSize);
+
+// Serialize a module in s-expression text format.
+// @return how many bytes were written. This will be less than or equal to
+//         outputSize
+BINARYEN_API size_t BinaryenModuleWriteText(BinaryenModuleRef module,
+                                            char* output,
+                                            size_t outputSize);
+
+// Serialize a module in stack IR text format.
+// @return how many bytes were written. This will be less than or equal to
+//         outputSize
+BINARYEN_API size_t BinaryenModuleWriteStackIR(BinaryenModuleRef module,
+                                               char* output,
+                                               size_t outputSize,
+                                               bool optimize);
+
+typedef struct BinaryenBufferSizes {
+  size_t outputBytes;
+  size_t sourceMapBytes;
+} BinaryenBufferSizes;
+
+// Serialize a module into binary form including its source map. Uses the
+// currently set global debugInfo option.
+// @returns how many bytes were written. This will be less than or equal to
+//          outputSize
+BINARYEN_API BinaryenBufferSizes
+BinaryenModuleWriteWithSourceMap(BinaryenModuleRef module,
+                                 const char* url,
+                                 char* output,
+                                 size_t outputSize,
+                                 char* sourceMap,
+                                 size_t sourceMapSize);
+
+// Result structure of BinaryenModuleAllocateAndWrite. Contained buffers have
+// been allocated using malloc() and the user is expected to free() them
+// manually once not needed anymore.
+typedef struct BinaryenModuleAllocateAndWriteResult {
+  void* binary;
+  size_t binaryBytes;
+  char* sourceMap;
+} BinaryenModuleAllocateAndWriteResult;
+
+// Serializes a module into binary form, optionally including its source map if
+// sourceMapUrl has been specified. Uses the currently set global debugInfo
+// option. Differs from BinaryenModuleWrite in that it implicitly allocates
+// appropriate buffers using malloc(), and expects the user to free() them
+// manually once not needed anymore.
+BINARYEN_API BinaryenModuleAllocateAndWriteResult
+BinaryenModuleAllocateAndWrite(BinaryenModuleRef module,
+                               const char* sourceMapUrl);
+
+// Serialize a module in s-expression form. Implicity allocates the returned
+// char* with malloc(), and expects the user to free() them manually
+// once not needed anymore.
+BINARYEN_API char* BinaryenModuleAllocateAndWriteText(BinaryenModuleRef module);
+
+// Serialize a module in stack IR form. Implicitly allocates the returned
+// char* with malloc(), and expects the user to free() them manually
+// once not needed anymore.
+BINARYEN_API char*
+BinaryenModul
