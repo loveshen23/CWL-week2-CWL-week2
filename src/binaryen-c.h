@@ -3410,4 +3410,212 @@ BINARYEN_API RelooperBlockRef RelooperAddBlock(RelooperRef relooper,
 BINARYEN_API void RelooperAddBranch(RelooperBlockRef from,
                                     RelooperBlockRef to,
                                     BinaryenExpressionRef condition,
-                                    BinaryenExpressionRef code)
+                                    BinaryenExpressionRef code);
+
+// Create a basic block that ends a switch on a condition
+BINARYEN_API RelooperBlockRef
+RelooperAddBlockWithSwitch(RelooperRef relooper,
+                           BinaryenExpressionRef code,
+                           BinaryenExpressionRef condition);
+
+// Create a switch-style branch to another basic block. The block's switch table
+// will have these indexes going to that target
+BINARYEN_API void RelooperAddBranchForSwitch(RelooperBlockRef from,
+                                             RelooperBlockRef to,
+                                             BinaryenIndex* indexes,
+                                             BinaryenIndex numIndexes,
+                                             BinaryenExpressionRef code);
+
+// Generate structed wasm control flow from the CFG of blocks and branches that
+// were created on this relooper instance. This returns the rendered output, and
+// also disposes of the relooper and its blocks and branches, as they are no
+// longer needed.
+// @param labelHelper To render irreducible control flow, we may need a helper
+//        variable to guide us to the right target label. This value should be
+//        an index of an i32 local variable that is free for us to use.
+BINARYEN_API BinaryenExpressionRef RelooperRenderAndDispose(
+  RelooperRef relooper, RelooperBlockRef entry, BinaryenIndex labelHelper);
+
+//
+// ========= ExpressionRunner ==========
+//
+
+#ifdef __cplusplus
+namespace wasm {
+class CExpressionRunner;
+} // namespace wasm
+typedef class wasm::CExpressionRunner* ExpressionRunnerRef;
+#else
+typedef struct CExpressionRunner* ExpressionRunnerRef;
+#endif
+
+typedef uint32_t ExpressionRunnerFlags;
+
+// By default, just evaluate the expression, i.e. all we want to know is whether
+// it computes down to a concrete value, where it is not necessary to preserve
+// side effects like those of a `local.tee`.
+BINARYEN_API ExpressionRunnerFlags ExpressionRunnerFlagsDefault();
+
+// Be very careful to preserve any side effects. For example, if we are
+// intending to replace the expression with a constant afterwards, even if we
+// can technically evaluate down to a constant, we still cannot replace the
+// expression if it also sets a local, which must be preserved in this scenario
+// so subsequent code keeps functioning.
+BINARYEN_API ExpressionRunnerFlags ExpressionRunnerFlagsPreserveSideeffects();
+
+// Traverse through function calls, attempting to compute their concrete value.
+// Must not be used in function-parallel scenarios, where the called function
+// might be concurrently modified, leading to undefined behavior. Traversing
+// another function reuses all of this runner's flags.
+BINARYEN_API ExpressionRunnerFlags ExpressionRunnerFlagsTraverseCalls();
+
+// Creates an ExpressionRunner instance
+BINARYEN_API ExpressionRunnerRef
+ExpressionRunnerCreate(BinaryenModuleRef module,
+                       ExpressionRunnerFlags flags,
+                       BinaryenIndex maxDepth,
+                       BinaryenIndex maxLoopIterations);
+
+// Sets a known local value to use. Order matters if expressions have side
+// effects. For example, if the expression also sets a local, this side effect
+// will also happen (not affected by any flags). Returns `true` if the
+// expression actually evaluates to a constant.
+BINARYEN_API bool ExpressionRunnerSetLocalValue(ExpressionRunnerRef runner,
+                                                BinaryenIndex index,
+                                                BinaryenExpressionRef value);
+
+// Sets a known global value to use. Order matters if expressions have side
+// effects. For example, if the expression also sets a local, this side effect
+// will also happen (not affected by any flags). Returns `true` if the
+// expression actually evaluates to a constant.
+BINARYEN_API bool ExpressionRunnerSetGlobalValue(ExpressionRunnerRef runner,
+                                                 const char* name,
+                                                 BinaryenExpressionRef value);
+
+// Runs the expression and returns the constant value expression it evaluates
+// to, if any. Otherwise returns `NULL`. Also disposes the runner.
+BINARYEN_API BinaryenExpressionRef ExpressionRunnerRunAndDispose(
+  ExpressionRunnerRef runner, BinaryenExpressionRef expr);
+
+//
+// ========= TypeBuilder =========
+//
+
+#ifdef __cplusplus
+namespace wasm {
+struct TypeBuilder;
+} // namespace wasm
+typedef struct wasm::TypeBuilder* TypeBuilderRef;
+#else
+typedef struct TypeBuilder* TypeBuilderRef;
+#endif
+
+typedef uint32_t TypeBuilderErrorReason;
+
+// Indicates a cycle in the supertype relation.
+BINARYEN_API TypeBuilderErrorReason TypeBuilderErrorReasonSelfSupertype(void);
+// Indicates that the declared supertype of a type is invalid.
+BINARYEN_API TypeBuilderErrorReason
+TypeBuilderErrorReasonInvalidSupertype(void);
+// Indicates that the declared supertype is an invalid forward reference.
+BINARYEN_API TypeBuilderErrorReason
+TypeBuilderErrorReasonForwardSupertypeReference(void);
+// Indicates that a child of a type is an invalid forward reference.
+BINARYEN_API TypeBuilderErrorReason
+TypeBuilderErrorReasonForwardChildReference(void);
+
+typedef uint32_t BinaryenBasicHeapType;
+
+// Constructs a new type builder that allows for the construction of recursive
+// types. Contains a table of `size` mutable heap types.
+BINARYEN_API TypeBuilderRef TypeBuilderCreate(BinaryenIndex size);
+// Grows the backing table of the type builder by `count` slots.
+BINARYEN_API void TypeBuilderGrow(TypeBuilderRef builder, BinaryenIndex count);
+// Gets the size of the backing table of the type builder.
+BINARYEN_API BinaryenIndex TypeBuilderGetSize(TypeBuilderRef builder);
+// Sets the heap type at index `index` to a basic heap type. Must not be used in
+// nominal mode.
+BINARYEN_API void
+TypeBuilderSetBasicHeapType(TypeBuilderRef builder,
+                            BinaryenIndex index,
+                            BinaryenBasicHeapType basicHeapType);
+// Sets the heap type at index `index` to a concrete signature type. Expects
+// temporary tuple types if multiple parameter and/or result types include
+// temporary types.
+BINARYEN_API void TypeBuilderSetSignatureType(TypeBuilderRef builder,
+                                              BinaryenIndex index,
+                                              BinaryenType paramTypes,
+                                              BinaryenType resultTypes);
+// Sets the heap type at index `index` to a concrete struct type.
+BINARYEN_API void TypeBuilderSetStructType(TypeBuilderRef builder,
+                                           BinaryenIndex index,
+                                           BinaryenType* fieldTypes,
+                                           BinaryenPackedType* fieldPackedTypes,
+                                           bool* fieldMutables,
+                                           int numFields);
+// Sets the heap type at index `index` to a concrete array type.
+BINARYEN_API void TypeBuilderSetArrayType(TypeBuilderRef builder,
+                                          BinaryenIndex index,
+                                          BinaryenType elementType,
+                                          BinaryenPackedType elementPackedType,
+                                          int elementMutable);
+// Tests if the heap type at index `index` is a basic heap type.
+BINARYEN_API bool TypeBuilderIsBasic(TypeBuilderRef builder,
+                                     BinaryenIndex index);
+// Gets the basic heap type at index `index`.
+BINARYEN_API BinaryenBasicHeapType TypeBuilderGetBasic(TypeBuilderRef builder,
+                                                       BinaryenIndex index);
+// Gets the temporary heap type to use at index `index`. Temporary heap types
+// may only be used to construct temporary types using the type builder.
+BINARYEN_API BinaryenHeapType TypeBuilderGetTempHeapType(TypeBuilderRef builder,
+                                                         BinaryenIndex index);
+// Gets a temporary tuple type for use with and owned by the type builder.
+BINARYEN_API BinaryenType TypeBuilderGetTempTupleType(TypeBuilderRef builder,
+                                                      BinaryenType* types,
+                                                      BinaryenIndex numTypes);
+// Gets a temporary reference type for use with and owned by the type builder.
+BINARYEN_API BinaryenType TypeBuilderGetTempRefType(TypeBuilderRef builder,
+                                                    BinaryenHeapType heapType,
+                                                    int nullable);
+// Sets the type at `index` to be a subtype of the given super type.
+BINARYEN_API void TypeBuilderSetSubType(TypeBuilderRef builder,
+                                        BinaryenIndex index,
+                                        BinaryenHeapType superType);
+// Creates a new recursion group in the range `index` inclusive to `index +
+// length` exclusive. Recursion groups must not overlap.
+BINARYEN_API void TypeBuilderCreateRecGroup(TypeBuilderRef builder,
+                                            BinaryenIndex index,
+                                            BinaryenIndex length);
+// Builds the heap type hierarchy and disposes the builder. Returns `false` and
+// populates `errorIndex` and `errorReason` on failure.
+BINARYEN_API bool
+TypeBuilderBuildAndDispose(TypeBuilderRef builder,
+                           BinaryenHeapType* heapTypes,
+                           BinaryenIndex* errorIndex,
+                           TypeBuilderErrorReason* errorReason);
+
+// Sets the textual name of a compound `heapType`. Has no effect if the type
+// already has a canonical name.
+BINARYEN_API void BinaryenModuleSetTypeName(BinaryenModuleRef module,
+                                            BinaryenHeapType heapType,
+                                            const char* name);
+// Sets the field name of a struct `heapType` at index `index`.
+BINARYEN_API void BinaryenModuleSetFieldName(BinaryenModuleRef module,
+                                             BinaryenHeapType heapType,
+                                             BinaryenIndex index,
+                                             const char* name);
+
+//
+// ========= Utilities =========
+//
+
+// Enable or disable coloring for the Wasm printer
+BINARYEN_API void BinaryenSetColorsEnabled(bool enabled);
+
+// Query whether color is enable for the Wasm printer
+BINARYEN_API bool BinaryenAreColorsEnabled();
+#ifdef __cplusplus
+} // extern "C"
+#endif
+
+#endif // wasm_binaryen_c_h
