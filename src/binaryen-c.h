@@ -3154,4 +3154,260 @@ BINARYEN_API char* BinaryenModuleAllocateAndWriteText(BinaryenModuleRef module);
 // char* with malloc(), and expects the user to free() them manually
 // once not needed anymore.
 BINARYEN_API char*
-BinaryenModul
+BinaryenModuleAllocateAndWriteStackIR(BinaryenModuleRef module, bool optimize);
+
+// Deserialize a module from binary form.
+BINARYEN_API BinaryenModuleRef BinaryenModuleRead(char* input,
+                                                  size_t inputSize);
+
+// Execute a module in the Binaryen interpreter. This will create an instance of
+// the module, run it in the interpreter - which means running the start method
+// - and then destroying the instance.
+BINARYEN_API void BinaryenModuleInterpret(BinaryenModuleRef module);
+
+// Adds a debug info file name to the module and returns its index.
+BINARYEN_API BinaryenIndex BinaryenModuleAddDebugInfoFileName(
+  BinaryenModuleRef module, const char* filename);
+
+// Gets the name of the debug info file at the specified index. Returns `NULL`
+// if it does not exist.
+BINARYEN_API const char*
+BinaryenModuleGetDebugInfoFileName(BinaryenModuleRef module,
+                                   BinaryenIndex index);
+
+//
+// ========== Function Operations ==========
+//
+
+// Gets the name of the specified `Function`.
+BINARYEN_API const char* BinaryenFunctionGetName(BinaryenFunctionRef func);
+// Gets the type of the parameter at the specified index of the specified
+// `Function`.
+BINARYEN_API BinaryenType BinaryenFunctionGetParams(BinaryenFunctionRef func);
+// Gets the result type of the specified `Function`.
+BINARYEN_API BinaryenType BinaryenFunctionGetResults(BinaryenFunctionRef func);
+// Gets the number of additional locals within the specified `Function`.
+BINARYEN_API BinaryenIndex BinaryenFunctionGetNumVars(BinaryenFunctionRef func);
+// Gets the type of the additional local at the specified index within the
+// specified `Function`.
+BINARYEN_API BinaryenType BinaryenFunctionGetVar(BinaryenFunctionRef func,
+                                                 BinaryenIndex index);
+// Gets the number of locals within the specified function. Includes parameters.
+BINARYEN_API BinaryenIndex
+BinaryenFunctionGetNumLocals(BinaryenFunctionRef func);
+// Tests if the local at the specified index has a name.
+BINARYEN_API bool BinaryenFunctionHasLocalName(BinaryenFunctionRef func,
+                                               BinaryenIndex index);
+// Gets the name of the local at the specified index.
+BINARYEN_API const char* BinaryenFunctionGetLocalName(BinaryenFunctionRef func,
+                                                      BinaryenIndex index);
+// Sets the name of the local at the specified index.
+BINARYEN_API void BinaryenFunctionSetLocalName(BinaryenFunctionRef func,
+                                               BinaryenIndex index,
+                                               const char* name);
+// Gets the body of the specified `Function`.
+BINARYEN_API BinaryenExpressionRef
+BinaryenFunctionGetBody(BinaryenFunctionRef func);
+// Sets the body of the specified `Function`.
+BINARYEN_API void BinaryenFunctionSetBody(BinaryenFunctionRef func,
+                                          BinaryenExpressionRef body);
+
+// Runs the standard optimization passes on the function. Uses the currently set
+// global optimize and shrink level.
+BINARYEN_API void BinaryenFunctionOptimize(BinaryenFunctionRef func,
+                                           BinaryenModuleRef module);
+
+// Runs the specified passes on the function. Uses the currently set global
+// optimize and shrink level.
+BINARYEN_API void BinaryenFunctionRunPasses(BinaryenFunctionRef func,
+                                            BinaryenModuleRef module,
+                                            const char** passes,
+                                            BinaryenIndex numPasses);
+
+// Sets the debug location of the specified `Expression` within the specified
+// `Function`.
+BINARYEN_API void BinaryenFunctionSetDebugLocation(BinaryenFunctionRef func,
+                                                   BinaryenExpressionRef expr,
+                                                   BinaryenIndex fileIndex,
+                                                   BinaryenIndex lineNumber,
+                                                   BinaryenIndex columnNumber);
+
+//
+// ========== Table Operations ==========
+//
+
+// Gets the name of the specified `Table`.
+BINARYEN_API const char* BinaryenTableGetName(BinaryenTableRef table);
+// Sets the name of the specified `Table`.
+BINARYEN_API void BinaryenTableSetName(BinaryenTableRef table,
+                                       const char* name);
+// Gets the initial number of pages of the specified `Table`.
+BINARYEN_API BinaryenIndex BinaryenTableGetInitial(BinaryenTableRef table);
+// Sets the initial number of pages of the specified `Table`.
+BINARYEN_API void BinaryenTableSetInitial(BinaryenTableRef table,
+                                          BinaryenIndex initial);
+// Tests whether the specified `Table` has a maximum number of pages.
+BINARYEN_API bool BinaryenTableHasMax(BinaryenTableRef table);
+// Gets the maximum number of pages of the specified `Table`.
+BINARYEN_API BinaryenIndex BinaryenTableGetMax(BinaryenTableRef table);
+// Sets the maximum number of pages of the specified `Table`.
+BINARYEN_API void BinaryenTableSetMax(BinaryenTableRef table,
+                                      BinaryenIndex max);
+
+//
+// ========== Elem Segment Operations ==========
+//
+
+// Gets the name of the specified `ElementSegment`.
+BINARYEN_API const char*
+BinaryenElementSegmentGetName(BinaryenElementSegmentRef elem);
+// Sets the name of the specified `ElementSegment`.
+BINARYEN_API void BinaryenElementSegmentSetName(BinaryenElementSegmentRef elem,
+                                                const char* name);
+// Gets the table name of the specified `ElementSegment`.
+BINARYEN_API const char*
+BinaryenElementSegmentGetTable(BinaryenElementSegmentRef elem);
+// Sets the table name of the specified `ElementSegment`.
+BINARYEN_API void BinaryenElementSegmentSetTable(BinaryenElementSegmentRef elem,
+                                                 const char* table);
+// Gets the segment offset in case of active segments
+BINARYEN_API BinaryenExpressionRef
+BinaryenElementSegmentGetOffset(BinaryenElementSegmentRef elem);
+// Gets the length of items in the segment
+BINARYEN_API BinaryenIndex
+BinaryenElementSegmentGetLength(BinaryenElementSegmentRef elem);
+// Gets the item at the specified index
+BINARYEN_API const char*
+BinaryenElementSegmentGetData(BinaryenElementSegmentRef elem,
+                              BinaryenIndex dataId);
+// Returns true if the specified elem segment is passive
+BINARYEN_API bool
+BinaryenElementSegmentIsPassive(BinaryenElementSegmentRef elem);
+
+//
+// ========== Global Operations ==========
+//
+
+// Gets the name of the specified `Global`.
+BINARYEN_API const char* BinaryenGlobalGetName(BinaryenGlobalRef global);
+// Gets the name of the `GlobalType` associated with the specified `Global`. May
+// be `NULL` if the signature is implicit.
+BINARYEN_API BinaryenType BinaryenGlobalGetType(BinaryenGlobalRef global);
+// Returns true if the specified `Global` is mutable.
+BINARYEN_API bool BinaryenGlobalIsMutable(BinaryenGlobalRef global);
+// Gets the initialization expression of the specified `Global`.
+BINARYEN_API BinaryenExpressionRef
+BinaryenGlobalGetInitExpr(BinaryenGlobalRef global);
+
+//
+// ========== Tag Operations ==========
+//
+
+// Gets the name of the specified `Tag`.
+BINARYEN_API const char* BinaryenTagGetName(BinaryenTagRef tag);
+// Gets the parameters type of the specified `Tag`.
+BINARYEN_API BinaryenType BinaryenTagGetParams(BinaryenTagRef tag);
+// Gets the results type of the specified `Tag`.
+BINARYEN_API BinaryenType BinaryenTagGetResults(BinaryenTagRef tag);
+
+//
+// ========== Import Operations ==========
+//
+
+// Gets the external module name of the specified import.
+BINARYEN_API const char*
+BinaryenFunctionImportGetModule(BinaryenFunctionRef import);
+BINARYEN_API const char* BinaryenTableImportGetModule(BinaryenTableRef import);
+BINARYEN_API const char*
+BinaryenGlobalImportGetModule(BinaryenGlobalRef import);
+BINARYEN_API const char* BinaryenTagImportGetModule(BinaryenTagRef import);
+// Gets the external base name of the specified import.
+BINARYEN_API const char*
+BinaryenFunctionImportGetBase(BinaryenFunctionRef import);
+BINARYEN_API const char* BinaryenTableImportGetBase(BinaryenTableRef import);
+BINARYEN_API const char* BinaryenGlobalImportGetBase(BinaryenGlobalRef import);
+BINARYEN_API const char* BinaryenTagImportGetBase(BinaryenTagRef import);
+
+//
+// ========== Export Operations ==========
+//
+
+// Gets the external kind of the specified export.
+BINARYEN_API BinaryenExternalKind
+BinaryenExportGetKind(BinaryenExportRef export_);
+// Gets the external name of the specified export.
+BINARYEN_API const char* BinaryenExportGetName(BinaryenExportRef export_);
+// Gets the internal name of the specified export.
+BINARYEN_API const char* BinaryenExportGetValue(BinaryenExportRef export_);
+
+//
+// ========= Custom sections =========
+//
+
+BINARYEN_API void BinaryenAddCustomSection(BinaryenModuleRef module,
+                                           const char* name,
+                                           const char* contents,
+                                           BinaryenIndex contentsSize);
+
+//
+// ========= Effect analyzer =========
+//
+
+typedef uint32_t BinaryenSideEffects;
+
+BINARYEN_API BinaryenSideEffects BinaryenSideEffectNone(void);
+BINARYEN_API BinaryenSideEffects BinaryenSideEffectBranches(void);
+BINARYEN_API BinaryenSideEffects BinaryenSideEffectCalls(void);
+BINARYEN_API BinaryenSideEffects BinaryenSideEffectReadsLocal(void);
+BINARYEN_API BinaryenSideEffects BinaryenSideEffectWritesLocal(void);
+BINARYEN_API BinaryenSideEffects BinaryenSideEffectReadsGlobal(void);
+BINARYEN_API BinaryenSideEffects BinaryenSideEffectWritesGlobal(void);
+BINARYEN_API BinaryenSideEffects BinaryenSideEffectReadsMemory(void);
+BINARYEN_API BinaryenSideEffects BinaryenSideEffectWritesMemory(void);
+BINARYEN_API BinaryenSideEffects BinaryenSideEffectReadsTable(void);
+BINARYEN_API BinaryenSideEffects BinaryenSideEffectWritesTable(void);
+BINARYEN_API BinaryenSideEffects BinaryenSideEffectImplicitTrap(void);
+BINARYEN_API BinaryenSideEffects BinaryenSideEffectTrapsNeverHappen(void);
+BINARYEN_API BinaryenSideEffects BinaryenSideEffectIsAtomic(void);
+BINARYEN_API BinaryenSideEffects BinaryenSideEffectThrows(void);
+BINARYEN_API BinaryenSideEffects BinaryenSideEffectDanglingPop(void);
+BINARYEN_API BinaryenSideEffects BinaryenSideEffectAny(void);
+
+BINARYEN_API BinaryenSideEffects BinaryenExpressionGetSideEffects(
+  BinaryenExpressionRef expr, BinaryenModuleRef module);
+
+//
+// ========== CFG / Relooper ==========
+//
+// General usage is (1) create a relooper, (2) create blocks, (3) add
+// branches between them, (4) render the output.
+//
+// For more details, see src/cfg/Relooper.h and
+// https://github.com/WebAssembly/binaryen/wiki/Compiling-to-WebAssembly-with-Binaryen#cfg-api
+
+#ifdef __cplusplus
+namespace CFG {
+struct Relooper;
+struct Block;
+} // namespace CFG
+typedef struct CFG::Relooper* RelooperRef;
+typedef struct CFG::Block* RelooperBlockRef;
+#else
+typedef struct Relooper* RelooperRef;
+typedef struct RelooperBlock* RelooperBlockRef;
+#endif
+
+// Create a relooper instance
+BINARYEN_API RelooperRef RelooperCreate(BinaryenModuleRef module);
+
+// Create a basic block that ends with nothing, or with some simple branching
+BINARYEN_API RelooperBlockRef RelooperAddBlock(RelooperRef relooper,
+                                               BinaryenExpressionRef code);
+
+// Create a branch to another basic block
+// The branch can have code on it, that is executed as the branch happens. this
+// is useful for phis. otherwise, code can be NULL
+BINARYEN_API void RelooperAddBranch(RelooperBlockRef from,
+                                    RelooperBlockRef to,
+                                    BinaryenExpressionRef condition,
+                                    BinaryenExpressionRef code)
