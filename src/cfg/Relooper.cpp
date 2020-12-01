@@ -373,4 +373,374 @@ wasm::Expression* Block::Render(RelooperBuilder& Builder, bool InLoop) {
         if (CurrContent->type != wasm::Type::unreachable) {
           NextOuter->list.push_back(Builder.makeBreak(SwitchLeave));
         }
-     
+        // prepare for more nesting
+        Outer = NextOuter;
+      } else {
+        CurrName = SwitchLeave; // just go out straight from the table
+        if (!Details->SwitchValues) {
+          // this is the default, and it has no content. So make the default be
+          // the leave
+          for (auto& Value : Table) {
+            if (Value == SwitchDefault) {
+              Value = SwitchLeave;
+            }
+          }
+          SwitchDefault = SwitchLeave;
+        }
+      }
+      if (Details->SwitchValues) {
+        for (auto Value : *Details->SwitchValues) {
+          while (Table.size() <= Value) {
+            Table.push_back(SwitchDefault);
+          }
+          Table[Value] = CurrName;
+        }
+      }
+    }
+    // finish up the whole pattern
+    Outer->name = SwitchLeave;
+    Inner->list.push_back(
+      Builder.makeSwitch(Table, SwitchDefault, SwitchCondition));
+    Root = Outer;
+  }
+
+  if (Root) {
+    Ret->list.push_back(Root);
+  }
+  Ret->finalize();
+
+  return Ret;
+}
+
+// SimpleShape
+
+wasm::Expression* SimpleShape::Render(RelooperBuilder& Builder, bool InLoop) {
+  auto* Ret = Inner->Render(Builder, InLoop);
+  Ret = HandleFollowupMultiples(Ret, this, Builder, InLoop);
+  if (Next) {
+    Ret = Builder.makeSequence(Ret, Next->Render(Builder, InLoop));
+  }
+  return Ret;
+}
+
+// MultipleShape
+
+wasm::Expression* MultipleShape::Render(RelooperBuilder& Builder, bool InLoop) {
+  // TODO: consider switch
+  // emit an if-else chain
+  wasm::If* FirstIf = nullptr;
+  wasm::If* CurrIf = nullptr;
+  std::vector<wasm::If*> finalizeStack;
+  for (auto& [Id, Body] : InnerMap) {
+    auto* Now =
+      Builder.makeIf(Builder.makeCheckLabel(Id), Body->Render(Builder, InLoop));
+    finalizeStack.push_back(Now);
+    if (!CurrIf) {
+      FirstIf = CurrIf = Now;
+    } else {
+      CurrIf->ifFalse = Now;
+      CurrIf->finalize();
+      CurrIf = Now;
+    }
+  }
+  while (finalizeStack.size() > 0) {
+    wasm::If* curr = finalizeStack.back();
+    finalizeStack.pop_back();
+    curr->finalize();
+  }
+  wasm::Expression* Ret = Builder.makeBlock(FirstIf);
+  Ret = HandleFollowupMultiples(Ret, this, Builder, InLoop);
+  if (Next) {
+    Ret = Builder.makeSequence(Ret, Next->Render(Builder, InLoop));
+  }
+  return Ret;
+}
+
+// LoopShape
+
+wasm::Expression* LoopShape::Render(RelooperBuilder& Builder, bool InLoop) {
+  wasm::Expression* Ret = Builder.makeLoop(Builder.getShapeContinueName(Id),
+                                           Inner->Render(Builder, true));
+  Ret = HandleFollowupMultiples(Ret, this, Builder, InLoop);
+  if (Next) {
+    Ret = Builder.makeSequence(Ret, Next->Render(Builder, InLoop));
+  }
+  return Ret;
+}
+
+// Relooper
+
+Relooper::Relooper(wasm::Module* ModuleInit)
+  : Module(ModuleInit), Root(nullptr), MinSize(false), BlockIdCounter(1),
+    ShapeIdCounter(0) { // block ID 0 is reserved for clearings
+}
+
+Block* Relooper::AddBlock(wasm::Expression* CodeInit,
+                          wasm::Expression* SwitchConditionInit) {
+
+  auto block = std::make_unique<Block>(this, CodeInit, SwitchConditionInit);
+  block->Id = BlockIdCounter++;
+  auto* blockPtr = block.get();
+  Blocks.push_back(std::move(block));
+  return blockPtr;
+}
+
+Branch* Relooper::AddBranch(wasm::Expression* ConditionInit,
+                            wasm::Expression* CodeInit) {
+  auto branch = std::make_unique<Branch>(ConditionInit, CodeInit);
+  auto* branchPtr = branch.get();
+  Branches.push_back(std::move(branch));
+  return branchPtr;
+}
+Branch* Relooper::AddBranch(std::vector<wasm::Index>&& ValuesInit,
+                            wasm::Expression* CodeInit) {
+  auto branch = std::make_unique<Branch>(std::move(ValuesInit), CodeInit);
+  auto* branchPtr = branch.get();
+  Branches.push_back(std::move(branch));
+  return branchPtr;
+}
+
+SimpleShape* Relooper::AddSimpleShape() {
+  auto shape = std::make_unique<SimpleShape>();
+  shape->Id = ShapeIdCounter++;
+  auto* shapePtr = shape.get();
+  Shapes.push_back(std::move(shape));
+  return shapePtr;
+}
+
+MultipleShape* Relooper::AddMultipleShape() {
+  auto shape = std::make_unique<MultipleShape>();
+  shape->Id = ShapeIdCounter++;
+  auto* shapePtr = shape.get();
+  Shapes.push_back(std::move(shape));
+  return shapePtr;
+}
+
+LoopShape* Relooper::AddLoopShape() {
+  auto shape = std::make_unique<LoopShape>();
+  shape->Id = ShapeIdCounter++;
+  auto* shapePtr = shape.get();
+  Shapes.push_back(std::move(shape));
+  return shapePtr;
+}
+
+namespace {
+
+using BlockList = std::list<Block*>;
+
+struct RelooperRecursor {
+  Relooper* Parent;
+  RelooperRecursor(Relooper* ParentInit) : Parent(ParentInit) {}
+};
+
+struct Liveness : public RelooperRecursor {
+  Liveness(Relooper* Parent) : RelooperRecursor(Parent) {}
+  BlockSet Live;
+
+  void FindLive(Block* Root) {
+    BlockList ToInvestigate;
+    ToInvestigate.push_back(Root);
+    while (ToInvestigate.size() > 0) {
+      Block* Curr = ToInvestigate.front();
+      ToInvestigate.pop_front();
+      if (contains(Live, Curr)) {
+        continue;
+      }
+      Live.insert(Curr);
+      for (auto& iter : Curr->BranchesOut) {
+        ToInvestigate.push_back(iter.first);
+      }
+    }
+  }
+};
+
+using BranchBlock = std::pair<Branch*, Block*>;
+
+struct Optimizer : public RelooperRecursor {
+  Block* Entry;
+
+  Optimizer(Relooper* Parent, Block* EntryInit)
+    : RelooperRecursor(Parent), Entry(EntryInit) {
+    // TODO: there are likely some rare but possible O(N^2) cases with this
+    // looping
+    bool More = true;
+#if RELOOPER_OPTIMIZER_DEBUG
+    std::cout << "pre-optimize\n";
+    for (auto* Block : Parent->Blocks) {
+      DebugDump(Block, "pre-block");
+    }
+#endif
+
+    // First, run one-time preparatory passes.
+    CanonicalizeCode();
+
+    // Loop over passes that allow further reduction.
+    while (More) {
+      More = false;
+      More = SkipEmptyBlocks() || More;
+      More = MergeEquivalentBranches() || More;
+      More = UnSwitch() || More;
+      More = MergeConsecutiveBlocks() || More;
+      // TODO: Merge identical blocks. This would avoid taking into account
+      // their position / how they are reached, which means that the merging may
+      // add overhead, so we do it carefully:
+      //  * Merging a large-enough block is good for size, and we do it
+      //    in we are in MinSize mode, which means we can tolerate slightly
+      //    slower throughput.
+      // TODO: Fuse a non-empty block with a single successor.
+    }
+
+    // Finally, run one-time final passes.
+    // TODO
+
+#if RELOOPER_OPTIMIZER_DEBUG
+    std::cout << "post-optimize\n";
+    for (auto* Block : Parent->Blocks) {
+      DebugDump(Block, "post-block");
+    }
+#endif
+  }
+
+  // We will be performing code comparisons, so do some basic canonicalization
+  // to avoid things being unequal for silly reasons.
+  void CanonicalizeCode() {
+    for (auto& Block : Parent->Blocks) {
+      Block->Code = Canonicalize(Block->Code);
+      for (auto& [_, Branch] : Block->BranchesOut) {
+        if (Branch->Code) {
+          Branch->Code = Canonicalize(Branch->Code);
+        }
+      }
+    }
+  }
+
+  // If a branch goes to an empty block which has one target,
+  // and there is no phi or switch to worry us, just skip through.
+  bool SkipEmptyBlocks() {
+    bool Worked = false;
+    for (auto& CurrBlock : Parent->Blocks) {
+      // Generate a new set of branches out TODO optimize
+      BlockBranchMap NewBranchesOut;
+      for (auto& iter : CurrBlock->BranchesOut) {
+        auto* Next = iter.first;
+        auto* NextBranch = iter.second;
+        auto* First = Next;
+        auto* Replacement = First;
+#if RELOOPER_OPTIMIZER_DEBUG
+        std::cout << " maybeskip from " << Block->Id << " to next=" << Next->Id
+                  << '\n';
+#endif
+        std::unordered_set<decltype(Replacement)> Seen;
+        while (1) {
+          if (IsEmpty(Next) && Next->BranchesOut.size() == 1) {
+            auto iter = Next->BranchesOut.begin();
+            Block* NextNext = iter->first;
+            Branch* NextNextBranch = iter->second;
+            assert(!NextNextBranch->Condition && !NextNextBranch->SwitchValues);
+            if (!NextNextBranch->Code) { // TODO: handle extra code too
+              // We can skip through!
+              Next = Replacement = NextNext;
+              // If we've already seen this, stop - it's an infinite loop of
+              // empty blocks we can skip through.
+              if (!Seen.emplace(Replacement).second) {
+                // Stop here. Note that if we started from X and ended up with X
+                // once more, then Replacement == First and so lower down we
+                // will not report that we did any work, avoiding an infinite
+                // loop due to always thinking there is more work to do.
+                break;
+              } else {
+                // Otherwise, keep going.
+                continue;
+              }
+            }
+          }
+          break;
+        }
+        if (Replacement != First) {
+#if RELOOPER_OPTIMIZER_DEBUG
+          std::cout << "  skip to replacement! " << CurrBlock->Id << " -> "
+                    << First->Id << " -> " << Replacement->Id << '\n';
+#endif
+          Worked = true;
+        }
+        // Add a branch to the target (which may be the unchanged original) in
+        // the set of new branches. If it's a replacement, it may collide, and
+        // we need to merge.
+        if (NewBranchesOut.count(Replacement)) {
+#if RELOOPER_OPTIMIZER_DEBUG
+          std::cout << "  merge\n";
+#endif
+          MergeBranchInto(NextBranch, NewBranchesOut[Replacement]);
+        } else {
+          NewBranchesOut[Replacement] = NextBranch;
+        }
+      }
+      CurrBlock->BranchesOut.swap(NewBranchesOut);
+    }
+    return Worked;
+  }
+
+  // Our IR has one Branch from each block to one of its targets, so there
+  // is nothing to reduce there, but different targets may in fact be
+  // equivalent in their *contents*.
+  bool MergeEquivalentBranches() {
+    bool Worked = false;
+    for (auto& ParentBlock : Parent->Blocks) {
+#if RELOOPER_OPTIMIZER_DEBUG
+      std::cout << "at parent " << ParentBlock->Id << '\n';
+#endif
+      if (ParentBlock->BranchesOut.size() >= 2) {
+        std::unordered_map<size_t, std::vector<BranchBlock>> HashedBranchesOut;
+        std::vector<Block*> BlocksToErase;
+        for (auto& [CurrBlock, CurrBranch] : ParentBlock->BranchesOut) {
+#if RELOOPER_OPTIMIZER_DEBUG
+          std::cout << "  consider child " << CurrBlock->Id << '\n';
+#endif
+          if (CurrBranch->Code) {
+            // We can't merge code; ignore
+            continue;
+          }
+          auto HashValue = Hash(CurrBlock);
+          auto& HashedSiblings = HashedBranchesOut[HashValue];
+          // Check if we are equivalent to any of them - if so, merge us.
+          bool Merged = false;
+          for (auto& [SiblingBranch, SiblingBlock] : HashedSiblings) {
+            if (HaveEquivalentContents(CurrBlock, SiblingBlock)) {
+#if RELOOPER_OPTIMIZER_DEBUG
+              std::cout << "    equiv! to " << SiblingBlock->Id << '\n';
+#endif
+              MergeBranchInto(CurrBranch, SiblingBranch);
+              BlocksToErase.push_back(CurrBlock);
+              Merged = true;
+              Worked = true;
+            }
+#if RELOOPER_OPTIMIZER_DEBUG
+            else {
+              std::cout << "    same hash, but not equiv to "
+                        << SiblingBlock->Id << '\n';
+            }
+#endif
+          }
+          if (!Merged) {
+            HashedSiblings.emplace_back(CurrBranch, CurrBlock);
+          }
+        }
+        for (auto* Curr : BlocksToErase) {
+          ParentBlock->BranchesOut.erase(Curr);
+        }
+      }
+    }
+    return Worked;
+  }
+
+  // Merge consecutive blocks, that is, A -> B where no other branches go to B.
+  // In that case we are guaranteed to not increase code size.
+  bool MergeConsecutiveBlocks() {
+    bool Worked = false;
+    // First, count predecessors.
+    std::map<Block*, size_t> NumPredecessors;
+    for (auto& CurrBlock : Parent->Blocks) {
+      for (auto& iter : CurrBlock->BranchesOut) {
+        auto* NextBlock = iter.first;
+        NumPredecessors[NextBlock]++;
+      }
