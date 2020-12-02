@@ -1106,4 +1106,306 @@ void Relooper::Calculate(Block* Entry) {
         PriorOut->Type = Type;
         iter++; // carefully increment iter before erasing
         Target->BranchesIn.erase(Prior);
-        Target->Processe
+        Target->ProcessedBranchesIn.insert(Prior);
+        Prior->BranchesOut.erase(Target);
+        Prior->ProcessedBranchesOut[Target] = PriorOut;
+        PrintDebug("  eliminated branch from %d\n", Prior->Id);
+      }
+    }
+
+    Shape* MakeSimple(BlockSet& Blocks, Block* Inner, BlockSet& NextEntries) {
+      PrintDebug("creating simple block with block #%d\n", Inner->Id);
+      SimpleShape* Simple = Parent->AddSimpleShape();
+      Simple->Inner = Inner;
+      Inner->Parent = Simple;
+      if (Blocks.size() > 1) {
+        Blocks.erase(Inner);
+        GetBlocksOut(Inner, NextEntries, &Blocks);
+        BlockSet JustInner;
+        JustInner.insert(Inner);
+        for (auto* Next : NextEntries) {
+          Solipsize(Next, Branch::Break, Simple, JustInner);
+        }
+      }
+      return Simple;
+    }
+
+    Shape*
+    MakeLoop(BlockSet& Blocks, BlockSet& Entries, BlockSet& NextEntries) {
+      // Find the inner blocks in this loop. Proceed backwards from the entries
+      // until you reach a seen block, collecting as you go.
+      BlockSet InnerBlocks;
+      BlockSet Queue = Entries;
+      while (Queue.size() > 0) {
+        Block* Curr = *(Queue.begin());
+        Queue.erase(Queue.begin());
+        if (!contains(InnerBlocks, Curr)) {
+          // This element is new, mark it as inner and remove from outer
+          InnerBlocks.insert(Curr);
+          Blocks.erase(Curr);
+          // Add the elements prior to it
+          for (auto* Prev : Curr->BranchesIn) {
+            Queue.insert(Prev);
+          }
+#if 0
+          // Add elements it leads to, if they are dead ends. There is no reason not to hoist dead ends
+          // into loops, as it can avoid multiple entries after the loop
+          for (auto iter = Curr->BranchesOut.begin(); iter != Curr->BranchesOut.end(); iter++) {
+            Block* Target = iter->first;
+            if (Target->BranchesIn.size() <= 1 && Target->BranchesOut.size() == 0) {
+              Queue.insert(Target);
+            }
+          }
+#endif
+        }
+      }
+      assert(InnerBlocks.size() > 0);
+
+      for (auto* Curr : InnerBlocks) {
+        for (auto& [Possible, _] : Curr->BranchesOut) {
+          if (!contains(InnerBlocks, Possible)) {
+            NextEntries.insert(Possible);
+          }
+        }
+      }
+
+#if 0
+      // We can avoid multiple next entries by hoisting them into the loop.
+      if (NextEntries.size() > 1) {
+        BlockBlockSetMap IndependentGroups;
+        FindIndependentGroups(NextEntries, IndependentGroups, &InnerBlocks);
+
+        while (IndependentGroups.size() > 0 && NextEntries.size() > 1) {
+          Block* Min = nullptr;
+          int MinSize = 0;
+          for (auto iter = IndependentGroups.begin(); iter != IndependentGroups.end(); iter++) {
+            Block* Entry = iter->first;
+            BlockSet &Blocks = iter->second;
+            if (!Min || Blocks.size() < MinSize) { // TODO: code size, not # of blocks
+              Min = Entry;
+              MinSize = Blocks.size();
+            }
+          }
+          // check how many new entries this would cause
+          BlockSet &Hoisted = IndependentGroups[Min];
+          bool abort = false;
+          for (auto iter = Hoisted.begin(); iter != Hoisted.end() && !abort; iter++) {
+            Block* Curr = *iter;
+            for (auto iter = Curr->BranchesOut.begin(); iter != Curr->BranchesOut.end(); iter++) {
+              Block* Target = iter->first;
+              if (!contains(Hoisted, Target) && !contains(NextEntries, Target)) {
+                // abort this hoisting
+                abort = true;
+                break;
+              }
+            }
+          }
+          if (abort) {
+            IndependentGroups.erase(Min);
+            continue;
+          }
+          // hoist this entry
+          PrintDebug("hoisting %d into loop\n", Min->Id);
+          NextEntries.erase(Min);
+          for (auto iter = Hoisted.begin(); iter != Hoisted.end(); iter++) {
+            Block* Curr = *iter;
+            InnerBlocks.insert(Curr);
+            Blocks.erase(Curr);
+          }
+          IndependentGroups.erase(Min);
+        }
+      }
+#endif
+
+      PrintDebug("creating loop block:\n", 0);
+      DebugDump(InnerBlocks, "  inner blocks:");
+      DebugDump(Entries, "  inner entries:");
+      DebugDump(Blocks, "  outer blocks:");
+      DebugDump(NextEntries, "  outer entries:");
+
+      LoopShape* Loop = Parent->AddLoopShape();
+
+      // Solipsize the loop, replacing with break/continue and marking branches
+      // as Processed (will not affect later calculations) A. Branches to the
+      // loop entries become a continue to this shape
+      for (auto* Entry : Entries) {
+        Solipsize(Entry, Branch::Continue, Loop, InnerBlocks);
+      }
+      // B. Branches to outside the loop (a next entry) become breaks on this
+      // shape
+      for (auto* Next : NextEntries) {
+        Solipsize(Next, Branch::Break, Loop, InnerBlocks);
+      }
+      // Finish up
+      Shape* Inner = Process(InnerBlocks, Entries);
+      Loop->Inner = Inner;
+      Loop->Entries = Entries;
+      return Loop;
+    }
+
+    // For each entry, find the independent group reachable by it. The
+    // independent group is the entry itself, plus all the blocks it can reach
+    // that cannot be directly reached by another entry. Note that we ignore
+    // directly reaching the entry itself by another entry.
+    //   @param Ignore - previous blocks that are irrelevant
+    void FindIndependentGroups(BlockSet& Entries,
+                               BlockBlockSetMap& IndependentGroups,
+                               BlockSet* Ignore = nullptr) {
+      using BlockBlockMap = std::map<Block*, Block*>;
+
+      struct HelperClass {
+        BlockBlockSetMap& IndependentGroups;
+        // For each block, which entry it belongs to. We have reached it from
+        // there.
+        BlockBlockMap Ownership;
+
+        HelperClass(BlockBlockSetMap& IndependentGroupsInit)
+          : IndependentGroups(IndependentGroupsInit) {}
+        void InvalidateWithChildren(Block* New) { // TODO: rename New
+          // Being in the list means you need to be invalidated
+          BlockList ToInvalidate;
+          ToInvalidate.push_back(New);
+          while (ToInvalidate.size() > 0) {
+            Block* Invalidatee = ToInvalidate.front();
+            ToInvalidate.pop_front();
+            Block* Owner = Ownership[Invalidatee];
+            // Owner may have been invalidated, do not add to IndependentGroups!
+            if (contains(IndependentGroups, Owner)) {
+              IndependentGroups[Owner].erase(Invalidatee);
+            }
+            // may have been seen before and invalidated already
+            if (Ownership[Invalidatee]) {
+              Ownership[Invalidatee] = nullptr;
+              for (auto& [Target, _] : Invalidatee->BranchesOut) {
+                auto Known = Ownership.find(Target);
+                if (Known != Ownership.end()) {
+                  Block* TargetOwner = Known->second;
+                  if (TargetOwner) {
+                    ToInvalidate.push_back(Target);
+                  }
+                }
+              }
+            }
+          }
+        }
+      };
+      HelperClass Helper(IndependentGroups);
+
+      // We flow out from each of the entries, simultaneously.
+      // When we reach a new block, we add it as belonging to the one we got to
+      // it from. If we reach a new block that is already marked as belonging to
+      // someone, it is reachable by two entries and is not valid for any of
+      // them. Remove it and all it can reach that have been visited.
+
+      // Being in the queue means we just added this item, and we need to add
+      // its children
+      BlockList Queue;
+      for (auto* Entry : Entries) {
+        Helper.Ownership[Entry] = Entry;
+        IndependentGroups[Entry].insert(Entry);
+        Queue.push_back(Entry);
+      }
+      while (Queue.size() > 0) {
+        Block* Curr = Queue.front();
+        Queue.pop_front();
+        // Curr must be in the ownership map if we are in the queue
+        Block* Owner = Helper.Ownership[Curr];
+        if (!Owner) {
+          // we have been invalidated meanwhile after being reached from two
+          // entries
+          continue;
+        }
+        // Add all children
+        for (auto& [New, _] : Curr->BranchesOut) {
+          auto Known = Helper.Ownership.find(New);
+          if (Known == Helper.Ownership.end()) {
+            // New node. Add it, and put it in the queue
+            Helper.Ownership[New] = Owner;
+            IndependentGroups[Owner].insert(New);
+            Queue.push_back(New);
+            continue;
+          }
+          Block* NewOwner = Known->second;
+          if (!NewOwner) {
+            continue; // We reached an invalidated node
+          }
+          if (NewOwner != Owner) {
+            // Invalidate this and all reachable that we have seen - we reached
+            // this from two locations
+            Helper.InvalidateWithChildren(New);
+          }
+          // otherwise, we have the same owner, so do nothing
+        }
+      }
+
+      // Having processed all the interesting blocks, we remain with just one
+      // potential issue: If a->b, and a was invalidated, but then b was later
+      // reached by someone else, we must invalidate b. To check for this, we go
+      // over all elements in the independent groups, if an element has a parent
+      // which does *not* have the same owner, we must remove it and all its
+      // children.
+
+      for (auto* Entry : Entries) {
+        BlockSet& CurrGroup = IndependentGroups[Entry];
+        BlockList ToInvalidate;
+        for (auto* Child : CurrGroup) {
+          for (auto* Parent : Child->BranchesIn) {
+            if (Ignore && contains(*Ignore, Parent)) {
+              continue;
+            }
+            if (Helper.Ownership[Parent] != Helper.Ownership[Child]) {
+              ToInvalidate.push_back(Child);
+            }
+          }
+        }
+        while (ToInvalidate.size() > 0) {
+          Block* Invalidatee = ToInvalidate.front();
+          ToInvalidate.pop_front();
+          Helper.InvalidateWithChildren(Invalidatee);
+        }
+      }
+
+      // Remove empty groups
+      for (auto* Entry : Entries) {
+        if (IndependentGroups[Entry].size() == 0) {
+          IndependentGroups.erase(Entry);
+        }
+      }
+
+#ifdef RELOOPER_DEBUG
+      PrintDebug("Investigated independent groups:\n");
+      for (auto& iter : IndependentGroups) {
+        DebugDump(iter.second, " group: ");
+      }
+#endif
+    }
+
+    Shape* MakeMultiple(BlockSet& Blocks,
+                        BlockSet& Entries,
+                        BlockBlockSetMap& IndependentGroups,
+                        BlockSet& NextEntries,
+                        bool IsCheckedMultiple) {
+      PrintDebug("creating multiple block with %d inner groups\n",
+                 IndependentGroups.size());
+      MultipleShape* Multiple = Parent->AddMultipleShape();
+      BlockSet CurrEntries;
+      for (auto& [CurrEntry, CurrBlocks] : IndependentGroups) {
+        PrintDebug("  multiple group with entry %d:\n", CurrEntry->Id);
+        DebugDump(CurrBlocks, "    ");
+        // Create inner block
+        CurrEntries.clear();
+        CurrEntries.insert(CurrEntry);
+        for (auto* CurrInner : CurrBlocks) {
+          // Remove the block from the remaining blocks
+          Blocks.erase(CurrInner);
+          // Find new next entries and fix branches to them
+          for (auto iter = CurrInner->BranchesOut.begin();
+               iter != CurrInner->BranchesOut.end();) {
+            Block* CurrTarget = iter->first;
+            auto Next = iter;
+            Next++;
+            if (!contains(CurrBlocks, CurrTarget)) {
+              NextEntries.insert(CurrTarget);
+              Solipsize(CurrTarget, Branch::Break, Multiple, CurrBlocks);
+            }
+            iter = Next; // i
