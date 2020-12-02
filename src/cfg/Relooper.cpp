@@ -744,3 +744,366 @@ struct Optimizer : public RelooperRecursor {
         auto* NextBlock = iter.first;
         NumPredecessors[NextBlock]++;
       }
+    }
+    NumPredecessors[Entry]++;
+    for (auto& CurrBlock : Parent->Blocks) {
+      if (CurrBlock->BranchesOut.size() == 1) {
+        auto iter = CurrBlock->BranchesOut.begin();
+        auto* NextBlock = iter->first;
+        auto* NextBranch = iter->second;
+        assert(NumPredecessors[NextBlock] > 0);
+        if (NextBlock != CurrBlock.get() && NumPredecessors[NextBlock] == 1) {
+          // Good to merge!
+          wasm::Builder Builder(*Parent->Module);
+          // Merge in code on the branch as well, if any.
+          if (NextBranch->Code) {
+            CurrBlock->Code =
+              Builder.makeSequence(CurrBlock->Code, NextBranch->Code);
+          }
+          CurrBlock->Code =
+            Builder.makeSequence(CurrBlock->Code, NextBlock->Code);
+          // Use the next block's branching behavior
+          CurrBlock->BranchesOut.swap(NextBlock->BranchesOut);
+          NextBlock->BranchesOut.clear();
+          CurrBlock->SwitchCondition = NextBlock->SwitchCondition;
+          // The next block now has no predecessors.
+          NumPredecessors[NextBlock] = 0;
+          Worked = true;
+        }
+      }
+    }
+    return Worked;
+  }
+
+  // Removes unneeded switches - if only one branch is left, the default, then
+  // no switch is needed.
+  bool UnSwitch() {
+    bool Worked = false;
+    for (auto& ParentBlock : Parent->Blocks) {
+#if RELOOPER_OPTIMIZER_DEBUG
+      std::cout << "un-switching at " << ParentBlock->Id << ' '
+                << !!ParentBlock->SwitchCondition << ' '
+                << ParentBlock->BranchesOut.size() << '\n';
+#endif
+      if (ParentBlock->SwitchCondition) {
+        if (ParentBlock->BranchesOut.size() <= 1) {
+#if RELOOPER_OPTIMIZER_DEBUG
+          std::cout << "  un-switching!: " << ParentBlock->Id << '\n';
+#endif
+          ParentBlock->SwitchCondition = nullptr;
+          if (!ParentBlock->BranchesOut.empty()) {
+            assert(!ParentBlock->BranchesOut.begin()->second->SwitchValues);
+          }
+          Worked = true;
+        }
+      } else {
+        // If the block has no switch, the branches must not as well.
+#ifndef NDEBUG
+        for (auto& [_, CurrBranch] : ParentBlock->BranchesOut) {
+          assert(!CurrBranch->SwitchValues);
+        }
+#endif
+      }
+    }
+    return Worked;
+  }
+
+private:
+  wasm::Expression* Canonicalize(wasm::Expression* Curr) {
+    wasm::Builder Builder(*Parent->Module);
+    // Our preferred form is a block with no name and a flat list
+    // with Nops removed, and extra Unreachables removed as well.
+    // If the block would contain one item, return just the item.
+    wasm::Block* Outer = Curr->dynCast<wasm::Block>();
+    if (!Outer) {
+      Outer = Builder.makeBlock(Curr);
+    } else if (Outer->name.is()) {
+      // Perhaps the name can be removed.
+      if (!wasm::BranchUtils::BranchSeeker::has(Outer, Outer->name)) {
+        Outer->name = wasm::Name();
+      } else {
+        Outer = Builder.makeBlock(Curr);
+      }
+    }
+    Flatten(Outer);
+    if (Outer->list.size() == 1) {
+      return Outer->list[0];
+    } else {
+      return Outer;
+    }
+  }
+
+  void Flatten(wasm::Block* Outer) {
+    wasm::ExpressionList NewList(Parent->Module->allocator);
+    bool SeenUnreachableType = false;
+    auto Add = [&](wasm::Expression* Curr) {
+      if (Curr->is<wasm::Nop>()) {
+        // Do nothing with it.
+        return;
+      } else if (Curr->is<wasm::Unreachable>()) {
+        // If we already saw an unreachable-typed item, emit no
+        // Unreachable nodes after it.
+        if (SeenUnreachableType) {
+          return;
+        }
+      }
+      NewList.push_back(Curr);
+      if (Curr->type == wasm::Type::unreachable) {
+        SeenUnreachableType = true;
+      }
+    };
+    std::function<void(wasm::Block*)> FlattenIntoNewList =
+      [&](wasm::Block* Curr) {
+        assert(!Curr->name.is());
+        for (auto* Item : Curr->list) {
+          if (auto* Block = Item->dynCast<wasm::Block>()) {
+            if (Block->name.is()) {
+              // Leave it whole, it's not a trivial block.
+              Add(Block);
+            } else {
+              FlattenIntoNewList(Block);
+            }
+          } else {
+            // A random item.
+            Add(Item);
+          }
+        }
+        // All the items have been moved out.
+        Curr->list.clear();
+      };
+    FlattenIntoNewList(Outer);
+    assert(Outer->list.empty());
+    Outer->list.swap(NewList);
+  }
+
+  bool IsEmpty(Block* Curr) {
+    if (Curr->SwitchCondition) {
+      // This is non-trivial, so treat it as a non-empty block.
+      return false;
+    }
+    return IsEmpty(Curr->Code);
+  }
+
+  bool IsEmpty(wasm::Expression* Code) {
+    if (Code->is<wasm::Nop>()) {
+      return true; // a nop
+    }
+    if (auto* WasmBlock = Code->dynCast<wasm::Block>()) {
+      for (auto* Item : WasmBlock->list) {
+        if (!IsEmpty(Item)) {
+          return false;
+        }
+      }
+      return true; // block with no non-empty contents
+    }
+    return false;
+  }
+
+  // Checks functional equivalence, namely: the Code and SwitchCondition.
+  // We also check the branches out, *non-recursively*: that is, we check
+  // that they are literally identical, not that they can be computed to
+  // be equivalent.
+  bool HaveEquivalentContents(Block* A, Block* B) {
+    if (!IsPossibleCodeEquivalent(A->SwitchCondition, B->SwitchCondition)) {
+      return false;
+    }
+    if (!IsCodeEquivalent(A->Code, B->Code)) {
+      return false;
+    }
+    if (A->BranchesOut.size() != B->BranchesOut.size()) {
+      return false;
+    }
+    for (auto& [ABlock, ABranch] : A->BranchesOut) {
+      if (B->BranchesOut.count(ABlock) == 0) {
+        return false;
+      }
+      auto* BBranch = B->BranchesOut[ABlock];
+      if (!IsPossibleCodeEquivalent(ABranch->Condition, BBranch->Condition)) {
+        return false;
+      }
+      if (!IsPossibleUniquePtrEquivalent(ABranch->SwitchValues,
+                                         BBranch->SwitchValues)) {
+        return false;
+      }
+      if (!IsPossibleCodeEquivalent(ABranch->Code, BBranch->Code)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  // Checks if values referred to by pointers are identical, allowing the code
+  // to also be nullptr
+  template<typename T>
+  static bool IsPossibleUniquePtrEquivalent(std::unique_ptr<T>& A,
+                                            std::unique_ptr<T>& B) {
+    if (A == B) {
+      return true;
+    }
+    if (!A || !B) {
+      return false;
+    }
+    return *A == *B;
+  }
+
+  // Checks if code is equivalent, allowing the code to also be nullptr
+  static bool IsPossibleCodeEquivalent(wasm::Expression* A,
+                                       wasm::Expression* B) {
+    if (A == B) {
+      return true;
+    }
+    if (!A || !B) {
+      return false;
+    }
+    return IsCodeEquivalent(A, B);
+  }
+
+  static bool IsCodeEquivalent(wasm::Expression* A, wasm::Expression* B) {
+    return wasm::ExpressionAnalyzer::equal(A, B);
+  }
+
+  // Merges one branch into another. Valid under the assumption that the
+  // blocks they reach are identical, and so one branch is enough for both
+  // with a unified condition.
+  // Only one is allowed to have code, as the code may have side effects,
+  // and we don't have a way to order or resolve those, unless the code
+  // is equivalent.
+  void MergeBranchInto(Branch* Curr, Branch* Into) {
+    assert(Curr != Into);
+    if (Curr->SwitchValues) {
+      if (!Into->SwitchValues) {
+        assert(!Into->Condition);
+        // Merging into the already-default, nothing to do.
+      } else {
+        Into->SwitchValues->insert(Into->SwitchValues->end(),
+                                   Curr->SwitchValues->begin(),
+                                   Curr->SwitchValues->end());
+      }
+    } else {
+      if (!Curr->Condition) {
+        // This is now the new default. Whether Into has a condition
+        // or switch values, remove them all to make us the default.
+        Into->Condition = nullptr;
+        Into->SwitchValues.reset();
+      } else if (!Into->Condition) {
+        // Nothing to do, already the default.
+      } else {
+        assert(!Into->SwitchValues);
+        // Merge them, checking both.
+        Into->Condition =
+          wasm::Builder(*Parent->Module)
+            .makeBinary(wasm::OrInt32, Into->Condition, Curr->Condition);
+      }
+    }
+    if (!Curr->Code) {
+      // No code to merge in.
+    } else if (!Into->Code) {
+      // Just use the code being merged in.
+      Into->Code = Curr->Code;
+    } else {
+      assert(IsCodeEquivalent(Into->Code, Curr->Code));
+      // Keep the code already there, either is fine.
+    }
+  }
+
+  // Hashes the direct block contents, but not Relooper internals
+  // (like Shapes). Only partially hashes the branches out, no
+  // recursion: hashes the branch infos, looks at raw pointers
+  // for the blocks.
+  size_t Hash(Block* Curr) {
+    auto digest = wasm::ExpressionAnalyzer::hash(Curr->Code);
+    wasm::rehash(digest, uint8_t(1));
+    if (Curr->SwitchCondition) {
+      wasm::hash_combine(digest,
+                         wasm::ExpressionAnalyzer::hash(Curr->SwitchCondition));
+    }
+    wasm::rehash(digest, uint8_t(2));
+    for (auto& [CurrBlock, CurrBranch] : Curr->BranchesOut) {
+      // Hash the Block* as a pointer TODO: full hash?
+      wasm::rehash(digest, reinterpret_cast<size_t>(CurrBlock));
+      // Hash the Branch info properly
+      wasm::hash_combine(digest, Hash(CurrBranch));
+    }
+    return digest;
+  }
+
+  // Hashes the direct block contents, but not Relooper internals
+  // (like Shapes).
+  size_t Hash(Branch* Curr) {
+    auto digest = wasm::hash(0);
+    if (Curr->SwitchValues) {
+      for (auto i : *Curr->SwitchValues) {
+        wasm::rehash(digest, i); // TODO hash i
+      }
+    } else {
+      if (Curr->Condition) {
+        wasm::hash_combine(digest,
+                           wasm::ExpressionAnalyzer::hash(Curr->Condition));
+      }
+    }
+    wasm::rehash(digest, uint8_t(1));
+    if (Curr->Code) {
+      wasm::hash_combine(digest, wasm::ExpressionAnalyzer::hash(Curr->Code));
+    }
+    return digest;
+  }
+};
+
+} // namespace
+
+void Relooper::Calculate(Block* Entry) {
+  // Optimize.
+  Optimizer(this, Entry);
+
+  // Find live blocks.
+  Liveness Live(this);
+  Live.FindLive(Entry);
+
+  // Add incoming branches from live blocks, ignoring dead code
+  for (unsigned i = 0; i < Blocks.size(); i++) {
+    Block* Curr = Blocks[i].get();
+    if (!contains(Live.Live, Curr)) {
+      continue;
+    }
+    for (auto& [CurrBlock, _] : Curr->BranchesOut) {
+      CurrBlock->BranchesIn.insert(Curr);
+    }
+  }
+
+  // Recursively process the graph
+
+  struct Analyzer : public RelooperRecursor {
+    Analyzer(Relooper* Parent) : RelooperRecursor(Parent) {}
+
+    // Create a list of entries from a block. If LimitTo is provided, only
+    // results in that set will appear
+    void GetBlocksOut(Block* Source,
+                      BlockSet& Entries,
+                      BlockSet* LimitTo = nullptr) {
+      for (auto& [CurrBlock, _] : Source->BranchesOut) {
+        if (!LimitTo || contains(*LimitTo, CurrBlock)) {
+          Entries.insert(CurrBlock);
+        }
+      }
+    }
+
+    // Converts/processes all branchings to a specific target
+    void Solipsize(Block* Target,
+                   Branch::FlowType Type,
+                   Shape* Ancestor,
+                   BlockSet& From) {
+      PrintDebug("Solipsizing branches into %d\n", Target->Id);
+      DebugDump(From, "  relevant to solipsize: ");
+      for (auto iter = Target->BranchesIn.begin();
+           iter != Target->BranchesIn.end();) {
+        Block* Prior = *iter;
+        if (!contains(From, Prior)) {
+          iter++;
+          continue;
+        }
+        Branch* PriorOut = Prior->BranchesOut[Target];
+        PriorOut->Ancestor = Ancestor;
+        PriorOut->Type = Type;
+        iter++; // carefully increment iter before erasing
+        Target->BranchesIn.erase(Prior);
+        Target->Processe
