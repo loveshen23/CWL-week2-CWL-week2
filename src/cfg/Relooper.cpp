@@ -1408,4 +1408,282 @@ void Relooper::Calculate(Block* Entry) {
               NextEntries.insert(CurrTarget);
               Solipsize(CurrTarget, Branch::Break, Multiple, CurrBlocks);
             }
-            iter = Next; // i
+            iter = Next; // increment carefully because Solipsize can remove us
+          }
+        }
+        Multiple->InnerMap[CurrEntry->Id] = Process(CurrBlocks, CurrEntries);
+        if (IsCheckedMultiple) {
+          CurrEntry->IsCheckedMultipleEntry = true;
+        }
+      }
+      DebugDump(Blocks, "  remaining blocks after multiple:");
+      // Add entries not handled as next entries, they are deferred
+      for (auto* Entry : Entries) {
+        if (!contains(IndependentGroups, Entry)) {
+          NextEntries.insert(Entry);
+        }
+      }
+      return Multiple;
+    }
+
+    // Main function.
+    // Process a set of blocks with specified entries, returns a shape
+    // The Make* functions receive a NextEntries. If they fill it with data,
+    // those are the entries for the
+    //   ->Next block on them, and the blocks are what remains in Blocks (which
+    //   Make* modify). In this way we avoid recursing on Next (imagine a long
+    //   chain of Simples, if we recursed we could blow the stack).
+    Shape* Process(BlockSet& Blocks, BlockSet& InitialEntries) {
+      PrintDebug("Process() called\n", 0);
+      BlockSet* Entries = &InitialEntries;
+      BlockSet TempEntries[2];
+      int CurrTempIndex = 0;
+      BlockSet* NextEntries;
+      Shape* Ret = nullptr;
+      Shape* Prev = nullptr;
+#define Make(call)                                                             \
+  Shape* Temp = call;                                                          \
+  if (Prev)                                                                    \
+    Prev->Next = Temp;                                                         \
+  if (!Ret)                                                                    \
+    Ret = Temp;                                                                \
+  if (!NextEntries->size()) {                                                  \
+    PrintDebug("Process() returning\n", 0);                                    \
+    return Ret;                                                                \
+  }                                                                            \
+  Prev = Temp;                                                                 \
+  Entries = NextEntries;                                                       \
+  continue;
+      while (1) {
+        PrintDebug("Process() running\n", 0);
+        DebugDump(Blocks, "  blocks : ");
+        DebugDump(*Entries, "  entries: ");
+
+        CurrTempIndex = 1 - CurrTempIndex;
+        NextEntries = &TempEntries[CurrTempIndex];
+        NextEntries->clear();
+
+        if (Entries->size() == 0) {
+          return Ret;
+        }
+        if (Entries->size() == 1) {
+          Block* Curr = *(Entries->begin());
+          if (Curr->BranchesIn.size() == 0) {
+            // One entry, no looping ==> Simple
+            Make(MakeSimple(Blocks, Curr, *NextEntries));
+          }
+          // One entry, looping ==> Loop
+          Make(MakeLoop(Blocks, *Entries, *NextEntries));
+        }
+
+        // More than one entry, try to eliminate through a Multiple groups of
+        // independent blocks from an entry/ies. It is important to remove
+        // through multiples as opposed to looping since the former is more
+        // performant.
+        BlockBlockSetMap IndependentGroups;
+        FindIndependentGroups(*Entries, IndependentGroups);
+
+        PrintDebug("Independent groups: %d\n", IndependentGroups.size());
+
+        if (IndependentGroups.size() > 0) {
+          // We can handle a group in a multiple if its entry cannot be reached
+          // by another group. Note that it might be reachable by itself - a
+          // loop. But that is fine, we will create a loop inside the multiple
+          // block, which is both the performant order to do it, and preserves
+          // the property that a loop will always reach an entry.
+          for (auto iter = IndependentGroups.begin();
+               iter != IndependentGroups.end();) {
+            Block* Entry = iter->first;
+            BlockSet& Group = iter->second;
+            auto curr = iter++; // iterate carefully, we may delete
+            for (auto iterBranch = Entry->BranchesIn.begin();
+                 iterBranch != Entry->BranchesIn.end();
+                 iterBranch++) {
+              Block* Origin = *iterBranch;
+              if (!contains(Group, Origin)) {
+                // Reached from outside the group, so we cannot handle this
+                PrintDebug("Cannot handle group with entry %d because of "
+                           "incoming branch from %d\n",
+                           Entry->Id,
+                           Origin->Id);
+                IndependentGroups.erase(curr);
+                break;
+              }
+            }
+          }
+
+          // As an optimization, if we have 2 independent groups, and one is a
+          // small dead end, we can handle only that dead end. The other then
+          // becomes a Next - without nesting in the code and recursion in the
+          // analysis.
+          // TODO: if the larger is the only dead end, handle that too
+          // TODO: handle >2 groups
+          // TODO: handle not just dead ends, but also that do not branch to the
+          //       NextEntries. However, must be careful
+          //       there since we create a Next, and that Next can prevent
+          //       eliminating a break (since we no longer naturally reach the
+          //       same place), which may necessitate a one-time loop, which
+          //       makes the unnesting pointless.
+          if (IndependentGroups.size() == 2) {
+            // Find the smaller one
+            auto iter = IndependentGroups.begin();
+            Block* SmallEntry = iter->first;
+            int SmallSize = iter->second.size();
+            iter++;
+            Block* LargeEntry = iter->first;
+            int LargeSize = iter->second.size();
+            // ignore the case where they are identical - keep things
+            // symmetrical there
+            if (SmallSize != LargeSize) {
+              if (SmallSize > LargeSize) {
+                Block* Temp = SmallEntry;
+                SmallEntry = LargeEntry;
+                // Note: we did not flip the Sizes too, they are now invalid.
+                // TODO: use the smaller size as a limit?
+                LargeEntry = Temp;
+              }
+              // Check if dead end
+              bool DeadEnd = true;
+              BlockSet& SmallGroup = IndependentGroups[SmallEntry];
+              for (auto* Curr : SmallGroup) {
+                for (auto& [Target, _] : Curr->BranchesOut) {
+                  if (!contains(SmallGroup, Target)) {
+                    DeadEnd = false;
+                    break;
+                  }
+                }
+                if (!DeadEnd) {
+                  break;
+                }
+              }
+              if (DeadEnd) {
+                PrintDebug("Removing nesting by not handling large group "
+                           "because small group is dead end\n",
+                           0);
+                IndependentGroups.erase(LargeEntry);
+              }
+            }
+          }
+
+          PrintDebug("Handleable independent groups: %d\n",
+                     IndependentGroups.size());
+
+          if (IndependentGroups.size() > 0) {
+            // Some groups removable ==> Multiple
+            // This is a checked multiple if it has an entry that is an entry to
+            // this Process call, that is, if we can reach it from outside this
+            // set of blocks, then we must check the label variable to do so.
+            // Otherwise, if it is just internal blocks, those can always be
+            // jumped to forward, without using the label variable
+            bool Checked = false;
+            for (auto* Entry : *Entries) {
+              if (InitialEntries.count(Entry)) {
+                Checked = true;
+                break;
+              }
+            }
+            Make(MakeMultiple(
+              Blocks, *Entries, IndependentGroups, *NextEntries, Checked));
+          }
+        }
+        // No independent groups, must be loopable ==> Loop
+        Make(MakeLoop(Blocks, *Entries, *NextEntries));
+      }
+    }
+  };
+
+  // Main
+
+  BlockSet AllBlocks;
+  for (auto* Curr : Live.Live) {
+    AllBlocks.insert(Curr);
+#ifdef RELOOPER_DEBUG
+    PrintDebug("Adding block %d (%s)\n", Curr->Id, Curr->Code);
+#endif
+  }
+
+  BlockSet Entries;
+  Entries.insert(Entry);
+  Root = Analyzer(this).Process(AllBlocks, Entries);
+  assert(Root);
+}
+
+wasm::Expression* Relooper::Render(RelooperBuilder& Builder) {
+  assert(Root);
+  auto* ret = Root->Render(Builder, false);
+  // we may use the same name for more than one block in HandleFollowupMultiples
+  wasm::UniqueNameMapper::uniquify(ret);
+  return ret;
+}
+
+#ifdef RELOOPER_DEBUG
+// Debugging
+
+void Debugging::Dump(Block* Curr, const char* prefix) {
+  if (prefix)
+    std::cout << prefix << ": ";
+  std::cout << Curr->Id << " [code " << *Curr->Code << "] [switch? "
+            << !!Curr->SwitchCondition << "]\n";
+  for (auto iter2 = Curr->BranchesOut.begin(); iter2 != Curr->BranchesOut.end();
+       iter2++) {
+    Block* Other = iter2->first;
+    Branch* Br = iter2->second;
+    std::cout << "  -> " << Other->Id << ' ';
+    if (Br->Condition) {
+      std::cout << "[if " << *Br->Condition << "] ";
+    } else if (Br->SwitchValues) {
+      std::cout << "[cases ";
+      for (auto x : *Br->SwitchValues) {
+        std::cout << x << ' ';
+      }
+      std::cout << "] ";
+    } else {
+      std::cout << "[default] ";
+    }
+    if (Br->Code)
+      std::cout << "[phi " << *Br->Code << "] ";
+    std::cout << '\n';
+  }
+  std::cout << '\n';
+}
+
+void Debugging::Dump(BlockSet& Blocks, const char* prefix) {
+  if (prefix)
+    std::cout << prefix << ": ";
+  for (auto* Curr : Blocks) {
+    Dump(Curr);
+  }
+}
+
+void Debugging::Dump(Shape* S, const char* prefix) {
+  if (prefix)
+    std::cout << prefix << ": ";
+  if (!S) {
+    printf(" (null)\n");
+    return;
+  }
+  printf(" %d ", S->Id);
+  if (SimpleShape* Simple = Shape::IsSimple(S)) {
+    printf("<< Simple with block %d\n", Simple->Inner->Id);
+  } else if (MultipleShape* Multiple = Shape::IsMultiple(S)) {
+    printf("<< Multiple\n");
+    for (auto& [Entry, _] : Multiple->InnerMap) {
+      printf("     with entry %d\n", Entry);
+    }
+  } else if (Shape::IsLoop(S)) {
+    printf("<< Loop\n");
+  } else {
+    abort();
+  }
+}
+
+static void PrintDebug(const char* Format, ...) {
+  printf("// ");
+  va_list Args;
+  va_start(Args, Format);
+  vprintf(Format, Args);
+  va_end(Args);
+}
+#endif
+
+} // namespace CFG
