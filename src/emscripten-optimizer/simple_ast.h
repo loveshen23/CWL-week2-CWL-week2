@@ -907,4 +907,414 @@ struct JSPrinter {
     printChild(assign->value(), node, 1);
   }
 
-  void printAssignName
+  void printAssignName(Ref node) {
+    auto* assign = node->asAssignName();
+    emit(assign->target().str.data());
+    space();
+    emit('=');
+    space();
+    printChild(assign->value(), node, 1);
+  }
+
+  void printName(Ref node) { emit(node->getCString()); }
+
+  static char* numToString(double d, bool finalize = true) {
+    if (std::isnan(d)) {
+      if (std::signbit(d)) {
+        return (char*)"-NaN";
+      } else {
+        return (char*)"NaN";
+      }
+    } else if (!std::isfinite(d)) {
+      if (std::signbit(d)) {
+        return (char*)"-Infinity";
+      } else {
+        return (char*)"Infinity";
+      }
+    }
+    bool neg = d < 0;
+    if (neg) {
+      d = -d;
+    }
+    // try to emit the fewest necessary characters
+    bool integer = wasm::isInteger(d);
+#define BUFFERSIZE 1000
+    // f is normal, e is scientific for float, x for integer
+    // These need to be thread-local because they are returned.
+    thread_local char full_storage_f[BUFFERSIZE];
+    thread_local char full_storage_e[BUFFERSIZE];
+    // full has one more char, for a possible '-'
+    char* storage_f = full_storage_f + 1;
+    char* storage_e = full_storage_e + 1;
+    auto err_f = std::numeric_limits<double>::quiet_NaN();
+    auto err_e = std::numeric_limits<double>::quiet_NaN();
+    for (int e = 0; e <= 1; e++) {
+      char* buffer = e ? storage_e : storage_f;
+      double temp;
+      if (!integer) {
+        char format[6];
+        for (int i = 0; i <= 18; i++) {
+          format[0] = '%';
+          format[1] = '.';
+          if (i < 10) {
+            format[2] = '0' + i;
+            format[3] = e ? 'e' : 'f';
+            format[4] = 0;
+          } else {
+            format[2] = '1';
+            format[3] = '0' + (i - 10);
+            format[4] = e ? 'e' : 'f';
+            format[5] = 0;
+          }
+          snprintf(buffer, BUFFERSIZE - 1, format, d);
+          sscanf(buffer, "%lf", &temp);
+          // errv("%.18f, %.18e   =>   %s   =>   %.18f, %.18e   (%d), ", d, d,
+          // buffer, temp, temp, temp == d);
+          if (temp == d) {
+            break;
+          }
+        }
+      } else {
+        // integer
+        assert(d >= 0);
+        if (wasm::isUInteger64(d)) {
+          unsigned long long uu = wasm::toUInteger64(d);
+          bool asHex = e && !finalize;
+          snprintf(buffer, BUFFERSIZE - 1, asHex ? "0x%llx" : "%llu", uu);
+          if (asHex) {
+            unsigned long long tempULL;
+            sscanf(buffer, "%llx", &tempULL);
+            temp = (double)tempULL;
+          } else {
+            sscanf(buffer, "%lf", &temp);
+          }
+        } else {
+          // too large for a machine integer, just use floats
+          // even on integers, e with a dot is useful, e.g. 1.2e+200
+          snprintf(buffer, BUFFERSIZE - 1, e ? "%e" : "%.0f", d);
+          sscanf(buffer, "%lf", &temp);
+        }
+        // errv("%.18f, %.18e   =>   %s   =>   %.18f, %.18e, %llu   (%d)\n", d,
+        //      d, buffer, temp, temp, uu, temp == d);
+      }
+      (e ? err_e : err_f) = fabs(temp - d);
+      // errv("current attempt: %.18f  =>  %s", d, buffer);
+      // assert(temp == d);
+      char* dot = strchr(buffer, '.');
+      if (dot) {
+        // remove trailing zeros
+        char* end = dot + 1;
+        while (*end >= '0' && *end <= '9') {
+          end++;
+        }
+        end--;
+        while (*end == '0') {
+          char* copy = end;
+          do {
+            copy[0] = copy[1];
+          } while (*copy++ != 0);
+          end--;
+        }
+        // errv("%.18f  =>   %s", d, buffer);
+        // remove preceding zeros
+        while (*buffer == '0') {
+          char* copy = buffer;
+          do {
+            copy[0] = copy[1];
+          } while (*copy++ != 0);
+        }
+        // errv("%.18f ===>  %s", d, buffer);
+      } else if (!integer || !e) {
+        // no dot. try to change 12345000 => 12345e3
+        char* end = strchr(buffer, 0);
+        end--;
+        char* test = end;
+        // remove zeros, and also doubles can use at most 24 digits, we can
+        // truncate any extras even if not zero
+        while ((*test == '0' || test - buffer > 24) && test > buffer) {
+          test--;
+        }
+        int num = end - test;
+        if (num >= 3) {
+          test++;
+          test[0] = 'e';
+          if (num < 10) {
+            test[1] = '0' + num;
+            test[2] = 0;
+          } else if (num < 100) {
+            test[1] = '0' + (num / 10);
+            test[2] = '0' + (num % 10);
+            test[3] = 0;
+          } else {
+            assert(num < 1000);
+            test[1] = '0' + (num / 100);
+            test[2] = '0' + (num % 100) / 10;
+            test[3] = '0' + (num % 10);
+            test[4] = 0;
+          }
+        }
+      }
+      // errv("..current attempt: %.18f  =>  %s", d, buffer);
+    }
+    // fprintf(stderr, "options:\n%s\n%s\n (first? %d)\n", storage_e, storage_f,
+    //         strlen(storage_e) < strlen(storage_f));
+    char* ret;
+    if (err_e == err_f) {
+      ret = strlen(storage_e) < strlen(storage_f) ? storage_e : storage_f;
+    } else {
+      ret = err_e < err_f ? storage_e : storage_f;
+    }
+    if (neg) {
+      ret--; // safe to go back one, there is one more char in full_*
+      *ret = '-';
+    }
+    return ret;
+  }
+
+  void printNum(Ref node) {
+    if (node->getNumber() < 0 && buffer[used - 1] == '-') {
+      emit(' '); // cannot join - and - to --, looks like the -- operator
+    }
+    emit(numToString(node->getNumber(), finalize));
+  }
+
+  void printString(Ref node) {
+    emit('"');
+    emit(node[1]->getCString());
+    emit('"');
+  }
+
+  // Parens optimizing
+
+  bool capturesOperators(Ref node) {
+    Ref type = node[0];
+    return type == CALL || type == ARRAY || type == OBJECT || type == SEQ;
+  }
+
+  int getPrecedence(Ref node, bool parent) {
+    if (node->isAssign() || node->isAssignName()) {
+      return OperatorClass::getPrecedence(OperatorClass::Binary, SET);
+    }
+    if (!node->isArray()) {
+      // node is a value
+      return -1;
+    }
+    Ref type = node[0];
+    if (type == BINARY || type == UNARY_PREFIX) {
+      return OperatorClass::getPrecedence(
+        type == BINARY ? OperatorClass::Binary : OperatorClass::Prefix,
+        node[1]->getIString());
+    } else if (type == SEQ) {
+      return OperatorClass::getPrecedence(OperatorClass::Binary, COMMA);
+    } else if (type == CALL) {
+      // call arguments are split by commas, but call itself is safe
+      return parent ? OperatorClass::getPrecedence(OperatorClass::Binary, COMMA)
+                    : -1;
+    } else if (type == CONDITIONAL) {
+      return OperatorClass::getPrecedence(OperatorClass::Tertiary, QUESTION);
+    }
+    // otherwise, this is something that fixes precedence explicitly, and we can
+    // ignore
+    return -1; // XXX
+  }
+
+  // check whether we need parens for the child, when rendered in the parent
+  // @param childPosition -1 means it is printed to the left of parent, 0 means
+  //        "anywhere", 1 means right
+  bool needParens(Ref parent, Ref child, int childPosition) {
+    int parentPrecedence = getPrecedence(parent, true);
+    int childPrecedence = getPrecedence(child, false);
+
+    if (childPrecedence > parentPrecedence) {
+      return true; // child is definitely a danger
+    }
+    if (childPrecedence < parentPrecedence) {
+      return false; //          definitely cool
+    }
+    // equal precedence, so associativity (rtl/ltr) is what matters
+    // (except for some exceptions, where multiple operators can combine into
+    // confusion)
+    if (parent->isArray() && parent[0] == UNARY_PREFIX) {
+      assert(child[0] == UNARY_PREFIX);
+      if ((parent[1] == PLUS || parent[1] == MINUS) && child[1] == parent[1]) {
+        // cannot emit ++x when we mean +(+x)
+        return true;
+      }
+    }
+    if (childPosition == 0) {
+      return true; // child could be anywhere, so always paren
+    }
+    if (childPrecedence < 0) {
+      return false; // both precedences are safe
+    }
+    // check if child is on the dangerous side
+    if (OperatorClass::getRtl(parentPrecedence)) {
+      return childPosition < 0;
+    } else {
+      return childPosition > 0;
+    }
+  }
+
+  void printChild(Ref child, Ref parent, int childPosition = 0) {
+    bool parens = needParens(parent, child, childPosition);
+    if (parens) {
+      emit('(');
+    }
+    print(child);
+    if (parens) {
+      emit(')');
+    }
+  }
+
+  void printBinary(Ref node) {
+    printChild(node[2], node, -1);
+    space();
+    emit(node[1]->getCString());
+    space();
+    printChild(node[3], node, 1);
+  }
+
+  void printUnaryPrefix(Ref node) {
+    if (finalize && node[1] == PLUS &&
+        (node[2]->isNumber() ||
+         (node[2]->isArray() && node[2][0] == UNARY_PREFIX &&
+          node[2][1] == MINUS && node[2][2]->isNumber()))) {
+      // emit a finalized number
+      int last = used;
+      print(node[2]);
+      ensure(1);                  // we temporarily append a 0
+      char* curr = buffer + last; // ensure might invalidate
+      buffer[used] = 0;
+      if (strstr(curr, "Infinity")) {
+        return;
+      }
+      if (strstr(curr, "NaN")) {
+        return;
+      }
+      if (strchr(curr, '.')) {
+        return; // already a decimal point, all good
+      }
+      char* e = strchr(curr, 'e');
+      if (!e) {
+        emit(".0");
+        return;
+      }
+      ensure(3);
+      curr = buffer + last; // ensure might invalidate
+      char* end = strchr(curr, 0);
+      while (end >= e) {
+        end[2] = end[0];
+        end--;
+      }
+      e[0] = '.';
+      e[1] = '0';
+      used += 2;
+      return;
+    }
+    if ((buffer[used - 1] == '-' && node[1] == MINUS) ||
+        (buffer[used - 1] == '+' && node[1] == PLUS)) {
+      emit(' '); // cannot join - and - to --, looks like the -- operator
+    }
+    emit(node[1]->getCString());
+    printChild(node[2], node, 1);
+  }
+
+  void printConditional(Ref node) {
+    printChild(node[1], node, -1);
+    space();
+    emit('?');
+    space();
+    printChild(node[2], node, 0);
+    space();
+    emit(':');
+    space();
+    printChild(node[3], node, 1);
+  }
+
+  void printCall(Ref node) {
+    printChild(node[1], node, 0);
+    emit('(');
+    Ref args = node[2];
+    for (size_t i = 0; i < args->size(); i++) {
+      if (i > 0) {
+        (pretty ? emit(", ") : emit(','));
+      }
+      printChild(args[i], node, 0);
+    }
+    emit(')');
+  }
+
+  void printSeq(Ref node) {
+    printChild(node[1], node, -1);
+    emit(',');
+    space();
+    printChild(node[2], node, 1);
+  }
+
+  void printDot(Ref node) {
+    print(node[1]);
+    emit('.');
+    emit(node[2]->getCString());
+  }
+
+  void printSwitch(Ref node) {
+    emit("switch");
+    space();
+    emit('(');
+    print(node[1]);
+    emit(')');
+    space();
+    emit('{');
+    newline();
+    Ref cases = node[2];
+    for (size_t i = 0; i < cases->size(); i++) {
+      Ref c = cases[i];
+      if (!c[0]) {
+        emit("default:");
+      } else {
+        emit("case ");
+        print(c[0]);
+        emit(':');
+      }
+      if (c[1]->size() > 0) {
+        indent++;
+        newline();
+        auto curr = used;
+        printStats(c[1]);
+        indent--;
+        if (curr != used) {
+          newline();
+        } else {
+          used--; // avoid the extra indentation we added tentatively
+        }
+      } else {
+        newline();
+      }
+    }
+    emit('}');
+  }
+
+  void printTry(Ref node) {
+    emit("try ");
+    printBlock(node[1]);
+    emit(" catch (");
+    printName(node[2]);
+    emit(") ");
+    printBlock(node[3]);
+  }
+
+  void printSub(Ref node) {
+    printChild(node[1], node, -1);
+    emit('[');
+    print(node[2]);
+    emit(']');
+  }
+
+  void printVar(Ref node) {
+    emit("var ");
+    Ref args = node[1];
+    for (size_t i = 0; i < args->size(); i++) {
+      if (i > 0) {
+        (pretty ? emit(", ") : emit(','));
+      }
+      emit(args[i][0]->getC
