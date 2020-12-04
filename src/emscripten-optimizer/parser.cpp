@@ -80,4 +80,90 @@ IString LSHIFT("<<");
 IString TRSHIFT(">>>");
 IString HEAP8("HEAP8");
 IString HEAP16("HEAP16");
-IString HEAP32("HE
+IString HEAP32("HEAP32");
+IString HEAPF32("HEAPF32");
+IString HEAPU8("HEAPU8");
+IString HEAPU16("HEAPU16");
+IString HEAPU32("HEAPU32");
+IString HEAPF64("HEAPF64");
+IString F0("f0");
+IString EMPTY("");
+IString FUNCTION("function");
+IString OPEN_PAREN("(");
+IString OPEN_BRACE("[");
+IString OPEN_CURLY("{");
+IString CLOSE_CURLY("}");
+IString COMMA(",");
+IString QUESTION("?");
+IString COLON(":");
+IString CASE("case");
+IString DEFAULT("default");
+IString DOT("dot");
+IString PERIOD(".");
+IString NEW("new");
+IString ARRAY("array");
+IString OBJECT("object");
+IString THROW("throw");
+IString SET("=");
+IString ATOMICS("Atomics");
+IString COMPARE_EXCHANGE("compareExchange");
+IString LOAD("load");
+IString STORE("store");
+IString GETTER("get");
+IString SETTER("set");
+
+IStringSet
+  keywords("var const function if else do while for break continue return "
+           "switch case default throw try catch finally true false null new");
+
+const char *OPERATOR_INITS = "+-*/%<>&^|~=!,?:.", *SEPARATORS = "([;{}";
+
+int MAX_OPERATOR_SIZE = 3;
+
+std::vector<OperatorClass> operatorClasses;
+
+static std::vector<std::unordered_map<IString, int>>
+  precedences; // op, type => prec
+
+struct Init {
+  Init() {
+    // operators, rtl, type
+    operatorClasses.emplace_back(".", false, OperatorClass::Binary);
+    operatorClasses.emplace_back("! ~ + -", true, OperatorClass::Prefix);
+    operatorClasses.emplace_back("* / %", false, OperatorClass::Binary);
+    operatorClasses.emplace_back("+ -", false, OperatorClass::Binary);
+    operatorClasses.emplace_back("<< >> >>>", false, OperatorClass::Binary);
+    operatorClasses.emplace_back("< <= > >=", false, OperatorClass::Binary);
+    operatorClasses.emplace_back("== !=", false, OperatorClass::Binary);
+    operatorClasses.emplace_back("&", false, OperatorClass::Binary);
+    operatorClasses.emplace_back("^", false, OperatorClass::Binary);
+    operatorClasses.emplace_back("|", false, OperatorClass::Binary);
+    operatorClasses.emplace_back("? :", true, OperatorClass::Tertiary);
+    operatorClasses.emplace_back("=", true, OperatorClass::Binary);
+    operatorClasses.emplace_back(",", true, OperatorClass::Binary);
+
+    precedences.resize(OperatorClass::Tertiary + 1);
+
+    for (size_t prec = 0; prec < operatorClasses.size(); prec++) {
+      for (auto curr : operatorClasses[prec].ops) {
+        precedences[operatorClasses[prec].type][curr] = prec;
+      }
+    }
+  }
+};
+
+Init init;
+
+int OperatorClass::getPrecedence(Type type, IString op) {
+  return precedences[type][op];
+}
+
+bool OperatorClass::getRtl(int prec) { return operatorClasses[prec].rtl; }
+
+bool isIdentInit(char x) {
+  return (x >= 'a' && x <= 'z') || (x >= 'A' && x <= 'Z') || x == '_' ||
+         x == '$';
+}
+bool isIdentPart(char x) { return isIdentInit(x) || (x >= '0' && x <= '9'); }
+
+} // namespace cashew
