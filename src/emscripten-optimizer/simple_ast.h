@@ -1317,4 +1317,469 @@ struct JSPrinter {
       if (i > 0) {
         (pretty ? emit(", ") : emit(','));
       }
-      emit(args[i][0]->getC
+      emit(args[i][0]->getCString());
+      if (args[i]->size() > 1) {
+        space();
+        emit('=');
+        space();
+        print(args[i][1]);
+      }
+    }
+  }
+
+  static bool isBlock(Ref node) {
+    return node->isArray() && !node->empty() && node[0] == BLOCK;
+  }
+
+  static bool ifHasElse(Ref node) {
+    assert(node->isArray() && node[0] == IF);
+    return node->size() >= 4 && !!node[3];
+  }
+
+  void printIf(Ref node) {
+    emit("if");
+    safeSpace();
+    emit('(');
+    print(node[1]);
+    emit(')');
+    space();
+    bool emitsBracesAnyhow = isBlock(node[2]);
+    if (!emitsBracesAnyhow) {
+      emit('{');
+      indent++;
+      newline();
+    }
+    print(node[2]);
+    if (!emitsBracesAnyhow) {
+      indent--;
+      newline();
+      emit('}');
+    }
+    if (ifHasElse(node)) {
+      space();
+      emit("else");
+      safeSpace();
+      bool emitsBracesAnyhow = isBlock(node[3]);
+      if (!emitsBracesAnyhow) {
+        emit('{');
+        indent++;
+        newline();
+      }
+      print(node[3]);
+      if (!emitsBracesAnyhow) {
+        indent--;
+        newline();
+        emit('}');
+      }
+    }
+  }
+
+  void printDo(Ref node) {
+    emit("do");
+    safeSpace();
+    print(node[2], "{}");
+    space();
+    emit("while");
+    space();
+    emit('(');
+    print(node[1]);
+    emit(')');
+  }
+
+  void printWhile(Ref node) {
+    emit("while");
+    space();
+    emit('(');
+    print(node[1]);
+    emit(')');
+    space();
+    print(node[2], "{}");
+  }
+
+  void printLabel(Ref node) {
+    emit(node[1]->getCString());
+    space();
+    emit(':');
+    space();
+    print(node[2]);
+  }
+
+  void printReturn(Ref node) {
+    emit("return");
+    if (!!node[1]) {
+      emit(' ');
+      print(node[1]);
+    }
+  }
+
+  void printBreak(Ref node) {
+    emit("break");
+    if (!!node[1]) {
+      emit(' ');
+      emit(node[1]->getCString());
+    }
+  }
+
+  void printContinue(Ref node) {
+    emit("continue");
+    if (!!node[1]) {
+      emit(' ');
+      emit(node[1]->getCString());
+    }
+  }
+
+  void printNew(Ref node) {
+    emit("new ");
+    print(node[1]);
+  }
+
+  void printArray(Ref node) {
+    emit('[');
+    Ref args = node[1];
+    for (size_t i = 0; i < args->size(); i++) {
+      if (i > 0) {
+        (pretty ? emit(", ") : emit(','));
+      }
+      print(args[i]);
+    }
+    emit(']');
+  }
+
+  void printObject(Ref node) {
+    emit('{');
+    indent++;
+    newline();
+    Ref args = node[1];
+    for (size_t i = 0; i < args->size(); i++) {
+      if (i > 0) {
+        pretty ? emit(", ") : emit(',');
+        newline();
+      }
+      bool needQuote = false;
+      const char* getterSetter = nullptr;
+      const char* setterParam = nullptr;
+      const char* str;
+      if (args[i][0]->isArray()) {
+        if (args[i][0][0] == STRING) {
+          // A quoted string.
+          needQuote = true;
+          str = args[i][0][1]->getCString();
+        } else if (args[i][0][0] == GETTER) {
+          getterSetter = GETTER.str.data();
+          str = args[i][0][1]->getCString();
+        } else if (args[i][0][0] == SETTER) {
+          getterSetter = SETTER.str.data();
+          str = args[i][0][1]->getCString();
+          setterParam = args[i][0][2]->getCString();
+        } else {
+          abort();
+        }
+      } else {
+        // Just a raw string, no quotes.
+        str = args[i][0]->getCString();
+      }
+      const char* check = str;
+      while (*check) {
+        if (!isalnum(*check) && *check != '_' && *check != '$') {
+          needQuote = true;
+          break;
+        }
+        check++;
+      }
+      if (getterSetter != nullptr) {
+        emit(getterSetter);
+        space();
+      }
+      if (needQuote) {
+        emit('"');
+      }
+      emit(str);
+      if (needQuote) {
+        emit('"');
+      }
+      if (getterSetter != nullptr) {
+        emit('(');
+        if (setterParam != nullptr) {
+          emit(setterParam);
+        }
+        emit(')');
+      } else {
+        emit(":");
+      }
+      space();
+      print(args[i][1]);
+    }
+    indent--;
+    newline();
+    emit('}');
+  }
+};
+
+// cashew builder
+
+class ValueBuilder {
+  static Ref makeRawString(const IString& s) {
+    return &arena.alloc<Value>()->setString(s);
+  }
+
+  static Ref makeNull() { return &arena.alloc<Value>()->setNull(); }
+
+public:
+  static Ref makeRawArray(int size_hint = 0) {
+    return &arena.alloc<Value>()->setArray(size_hint);
+  }
+
+  static Ref makeToplevel() {
+    return &makeRawArray(2)
+              ->push_back(makeRawString(TOPLEVEL))
+              .push_back(makeRawArray());
+  }
+
+  static Ref makeString(IString str) {
+    return &makeRawArray(2)
+              ->push_back(makeRawString(STRING))
+              .push_back(makeRawString(str));
+  }
+
+  static Ref makeBlock() {
+    return &makeRawArray(2)
+              ->push_back(makeRawString(BLOCK))
+              .push_back(makeRawArray());
+  }
+
+  static Ref makeName(IString name) { return makeRawString(name); }
+
+  static void setBlockContent(Ref target, Ref block) {
+    if (target[0] == TOPLEVEL) {
+      target[1]->setArray(block[1]->getArray());
+    } else if (target[0] == DEFUN) {
+      target[3]->setArray(block[1]->getArray());
+    } else {
+      abort();
+    }
+  }
+
+  static void appendToBlock(Ref block, Ref element) {
+    assert(block[0] == BLOCK);
+    block[1]->push_back(element);
+  }
+
+  static Ref makeCall(Ref target) {
+    return &makeRawArray(3)
+              ->push_back(makeRawString(CALL))
+              .push_back(target)
+              .push_back(makeRawArray());
+  }
+  static Ref makeCall(Ref target, Ref arg) {
+    Ref ret = &makeRawArray(3)
+                 ->push_back(makeRawString(CALL))
+                 .push_back(target)
+                 .push_back(makeRawArray());
+    ret[2]->push_back(arg);
+    return ret;
+  }
+  static Ref makeCall(IString target) {
+    Ref ret = &makeRawArray(3)
+                 ->push_back(makeRawString(CALL))
+                 .push_back(makeName(target))
+                 .push_back(makeRawArray());
+    return ret;
+  }
+
+  template<typename... Ts> static Ref makeCall(IString target, Ts... args) {
+    size_t nArgs = sizeof...(Ts);
+    Ref callArgs = makeRawArray(nArgs);
+    Ref argArray[] = {args...};
+    for (size_t i = 0; i < nArgs; ++i) {
+      callArgs->push_back(argArray[i]);
+    }
+    return &makeRawArray(3)
+              ->push_back(makeRawString(CALL))
+              .push_back(makeName(target))
+              .push_back(callArgs);
+  }
+
+  static void appendToCall(Ref call, Ref element) {
+    assert(call[0] == CALL);
+    call[2]->push_back(element);
+  }
+
+  static Ref makeStatement(Ref contents) { return contents; }
+
+  static Ref makeDouble(double num) {
+    return &arena.alloc<Value>()->setNumber(num);
+  }
+  static Ref makeInt(uint32_t num) { return makeDouble(double(num)); }
+  static Ref makeInt(int32_t num) { return makeDouble(double(num)); }
+  static Ref makeNum(double num) { return makeDouble(num); }
+
+  static Ref makeUnary(IString op, Ref value) {
+    return &makeRawArray(3)
+              ->push_back(makeRawString(UNARY_PREFIX))
+              .push_back(makeRawString(op))
+              .push_back(value);
+  }
+
+  static Ref makeBinary(Ref left, IString op, Ref right) {
+    if (op == SET) {
+      if (left->isString()) {
+        return &arena.alloc<AssignName>()->setAssignName(left->getIString(),
+                                                         right);
+      } else {
+        return &arena.alloc<Assign>()->setAssign(left, right);
+      }
+    } else if (op == COMMA) {
+      return &makeRawArray(3)
+                ->push_back(makeRawString(SEQ))
+                .push_back(left)
+                .push_back(right);
+    } else {
+      return &makeRawArray(4)
+                ->push_back(makeRawString(BINARY))
+                .push_back(makeRawString(op))
+                .push_back(left)
+                .push_back(right);
+    }
+  }
+
+  static Ref makePrefix(IString op, Ref right) {
+    return &makeRawArray(3)
+              ->push_back(makeRawString(UNARY_PREFIX))
+              .push_back(makeRawString(op))
+              .push_back(right);
+  }
+
+  static Ref makeFunction(IString name) {
+    return &makeRawArray(4)
+              ->push_back(makeRawString(DEFUN))
+              .push_back(makeRawString(name))
+              .push_back(makeRawArray())
+              .push_back(makeRawArray());
+  }
+
+  static void appendArgumentToFunction(Ref func, IString arg) {
+    assert(func[0] == DEFUN);
+    func[2]->push_back(makeRawString(arg));
+  }
+
+  static Ref makeVar(bool is_const = false) {
+    return &makeRawArray(2)
+              ->push_back(makeRawString(VAR))
+              .push_back(makeRawArray());
+  }
+
+  static void appendToVar(Ref var, IString name, Ref value) {
+    assert(var[0] == VAR);
+    Ref array = &makeRawArray(1)->push_back(makeRawString(name));
+    if (!!value) {
+      array->push_back(value);
+    }
+    var[1]->push_back(array);
+  }
+
+  static Ref makeReturn(Ref value) {
+    return &makeRawArray(2)
+              ->push_back(makeRawString(RETURN))
+              .push_back(!!value ? value : makeNull());
+  }
+
+  static Ref makeIndexing(Ref target, Ref index) {
+    return &makeRawArray(3)
+              ->push_back(makeRawString(SUB))
+              .push_back(target)
+              .push_back(index);
+  }
+
+  static Ref makeIf(Ref condition, Ref ifTrue, Ref ifFalse) {
+    return &makeRawArray(4)
+              ->push_back(makeRawString(IF))
+              .push_back(condition)
+              .push_back(ifTrue)
+              .push_back(!!ifFalse ? ifFalse : makeNull());
+  }
+
+  static Ref makeConditional(Ref condition, Ref ifTrue, Ref ifFalse) {
+    return &makeRawArray(4)
+              ->push_back(makeRawString(CONDITIONAL))
+              .push_back(condition)
+              .push_back(ifTrue)
+              .push_back(ifFalse);
+  }
+
+  static Ref makeSeq(Ref left, Ref right) {
+    return &makeRawArray(3)
+              ->push_back(makeRawString(SEQ))
+              .push_back(left)
+              .push_back(right);
+  }
+
+  static Ref makeDo(Ref body, Ref condition) {
+    return &makeRawArray(3)
+              ->push_back(makeRawString(DO))
+              .push_back(condition)
+              .push_back(body);
+  }
+
+  static Ref makeWhile(Ref condition, Ref body) {
+    return &makeRawArray(3)
+              ->push_back(makeRawString(WHILE))
+              .push_back(condition)
+              .push_back(body);
+  }
+
+  static Ref makeFor(Ref init, Ref condition, Ref inc, Ref body) {
+    return &makeRawArray(5)
+              ->push_back(makeRawString(FOR))
+              .push_back(init)
+              .push_back(condition)
+              .push_back(inc)
+              .push_back(body);
+  }
+
+  static Ref makeBreak(IString label) {
+    return &makeRawArray(2)
+              ->push_back(makeRawString(BREAK))
+              .push_back(!!label ? makeRawString(label) : makeNull());
+  }
+
+  static Ref makeContinue(IString label) {
+    return &makeRawArray(2)
+              ->push_back(makeRawString(CONTINUE))
+              .push_back(!!label ? makeRawString(label) : makeNull());
+  }
+
+  static Ref makeLabel(IString name, Ref body) {
+    return &makeRawArray(3)
+              ->push_back(makeRawString(LABEL))
+              .push_back(makeRawString(name))
+              .push_back(body);
+  }
+
+  static Ref makeSwitch(Ref input) {
+    return &makeRawArray(3)
+              ->push_back(makeRawString(SWITCH))
+              .push_back(input)
+              .push_back(makeRawArray());
+  }
+
+  static void appendCaseToSwitch(Ref switch_, Ref arg) {
+    assert(switch_[0] == SWITCH);
+    switch_[2]->push_back(
+      &makeRawArray(2)->push_back(arg).push_back(makeRawArray()));
+  }
+
+  static void appendDefaultToSwitch(Ref switch_) {
+    assert(switch_[0] == SWITCH);
+    switch_[2]->push_back(
+      &makeRawArray(2)->push_back(makeNull()).push_back(makeRawArray()));
+  }
+
+  static void appendCodeToSwitch(Ref switch_, Ref code, bool explicitBlock) {
+    assert(switch_[0] == SWITCH);
+    assert(code[0] == BLOCK);
+    if (!explicitBlock) {
+      for (size_t i = 0; i < code[1]->size(); i++) {
+        switch_[2]->back()->back()->push_back(code[1][i]);
+      }
+    } else {
+      switch_[2]->ba
