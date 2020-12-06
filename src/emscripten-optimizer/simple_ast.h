@@ -1782,4 +1782,109 @@ public:
         switch_[2]->back()->back()->push_back(code[1][i]);
       }
     } else {
-      switch_[2]->ba
+      switch_[2]->back()->back()->push_back(code);
+    }
+  }
+
+  static Ref makeTry(Ref try_, Ref arg, Ref catch_) {
+    assert(try_[0] == BLOCK);
+    assert(catch_[0] == BLOCK);
+    return &makeRawArray(3)
+              ->push_back(makeRawString(TRY))
+              .push_back(try_)
+              .push_back(arg)
+              .push_back(catch_);
+  }
+
+  static Ref makeDot(Ref obj, IString key) {
+    return &makeRawArray(3)
+              ->push_back(makeRawString(DOT))
+              .push_back(obj)
+              .push_back(makeRawString(key));
+  }
+
+  template<typename... Ts> static Ref makeDot(Ref obj, Ref key, Ts... args) {
+    return makeDot(makeDot(obj, key), args...);
+  }
+
+  static Ref makeDot(Ref obj, Ref key) {
+    assert(key->isString());
+    return makeDot(obj, key->getIString());
+  }
+
+  static Ref makeNew(Ref call) {
+    return &makeRawArray(2)->push_back(makeRawString(NEW)).push_back(call);
+  }
+
+  static Ref makeArray() {
+    return &makeRawArray(2)
+              ->push_back(makeRawString(ARRAY))
+              .push_back(makeRawArray());
+  }
+
+  static void appendToArray(Ref array, Ref element) {
+    assert(array[0] == ARRAY);
+    array[1]->push_back(element);
+  }
+
+  static Ref makeObject() {
+    return &makeRawArray(2)
+              ->push_back(makeRawString(OBJECT))
+              .push_back(makeRawArray());
+  }
+
+  static void appendToObject(Ref array, IString key, Ref value) {
+    assert(array[0] == OBJECT);
+    array[1]->push_back(
+      &makeRawArray(2)->push_back(makeRawString(key)).push_back(value));
+  }
+
+  static void appendToObjectWithQuotes(Ref array, IString key, Ref value) {
+    assert(array[0] == OBJECT);
+    array[1]->push_back(
+      &makeRawArray(2)->push_back(makeString(key)).push_back(value));
+  }
+
+  static void appendToObjectAsGetter(Ref array, IString key, Ref value) {
+    assert(array[0] == OBJECT);
+    array[1]->push_back(&makeRawArray(2)
+                           ->push_back(&makeRawArray(2)
+                                          ->push_back(makeRawString(GETTER))
+                                          .push_back(makeRawString(key)))
+                           .push_back(value));
+  }
+
+  static void
+  appendToObjectAsSetter(Ref array, IString key, IString param, Ref value) {
+    assert(array[0] == OBJECT);
+    array[1]->push_back(&makeRawArray(2)
+                           ->push_back(&makeRawArray(3)
+                                          ->push_back(makeRawString(SETTER))
+                                          .push_back(makeRawString(key))
+                                          .push_back(makeRawString(param)))
+                           .push_back(value));
+  }
+
+  static Ref makeSub(Ref obj, Ref index) {
+    return &makeRawArray(2)
+              ->push_back(makeRawString(SUB))
+              .push_back(obj)
+              .push_back(index);
+  }
+
+  static Ref makePtrShift(Ref ptr, int shifts) {
+    return makeBinary(ptr, RSHIFT, makeInt(shifts));
+  }
+};
+
+// Tolerates 0.0 in the input; does not trust a +() to be there.
+class DotZeroValueBuilder : public ValueBuilder {
+public:
+  static Ref makeDouble(double num) {
+    return makePrefix(PLUS, ValueBuilder::makeDouble(num));
+  }
+};
+
+} // namespace cashew
+
+#endif // wasm_simple_ast_h
