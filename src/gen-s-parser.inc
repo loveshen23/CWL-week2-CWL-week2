@@ -478,4 +478,270 @@ switch (buf[0]) {
                   case '\0':
                     if (op == "f32x4.ne"sv) { return makeBinary(s, BinaryOp::NeVecF32x4); }
                     goto parse_error;
-         
+                  case 'a':
+                    if (op == "f32x4.nearest"sv) { return makeUnary(s, UnaryOp::NearestVecF32x4); }
+                    goto parse_error;
+                  case 'g':
+                    if (op == "f32x4.neg"sv) { return makeUnary(s, UnaryOp::NegVecF32x4); }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 'p': {
+                switch (buf[8]) {
+                  case 'a':
+                    if (op == "f32x4.pmax"sv) { return makeBinary(s, BinaryOp::PMaxVecF32x4); }
+                    goto parse_error;
+                  case 'i':
+                    if (op == "f32x4.pmin"sv) { return makeBinary(s, BinaryOp::PMinVecF32x4); }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 'r': {
+                switch (buf[8]) {
+                  case 'l': {
+                    switch (buf[14]) {
+                      case 'f': {
+                        switch (buf[16]) {
+                          case 'a':
+                            if (op == "f32x4.relaxed_fma"sv) { return makeSIMDTernary(s, SIMDTernaryOp::RelaxedFmaVecF32x4); }
+                            goto parse_error;
+                          case 's':
+                            if (op == "f32x4.relaxed_fms"sv) { return makeSIMDTernary(s, SIMDTernaryOp::RelaxedFmsVecF32x4); }
+                            goto parse_error;
+                          default: goto parse_error;
+                        }
+                      }
+                      case 'm': {
+                        switch (buf[15]) {
+                          case 'a':
+                            if (op == "f32x4.relaxed_max"sv) { return makeBinary(s, BinaryOp::RelaxedMaxVecF32x4); }
+                            goto parse_error;
+                          case 'i':
+                            if (op == "f32x4.relaxed_min"sv) { return makeBinary(s, BinaryOp::RelaxedMinVecF32x4); }
+                            goto parse_error;
+                          default: goto parse_error;
+                        }
+                      }
+                      default: goto parse_error;
+                    }
+                  }
+                  case 'p':
+                    if (op == "f32x4.replace_lane"sv) { return makeSIMDReplace(s, SIMDReplaceOp::ReplaceLaneVecF32x4, 4); }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 's': {
+                switch (buf[7]) {
+                  case 'p':
+                    if (op == "f32x4.splat"sv) { return makeUnary(s, UnaryOp::SplatVecF32x4); }
+                    goto parse_error;
+                  case 'q':
+                    if (op == "f32x4.sqrt"sv) { return makeUnary(s, UnaryOp::SqrtVecF32x4); }
+                    goto parse_error;
+                  case 'u':
+                    if (op == "f32x4.sub"sv) { return makeBinary(s, BinaryOp::SubVecF32x4); }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 't':
+                if (op == "f32x4.trunc"sv) { return makeUnary(s, UnaryOp::TruncVecF32x4); }
+                goto parse_error;
+              default: goto parse_error;
+            }
+          }
+          default: goto parse_error;
+        }
+      }
+      case '6': {
+        switch (buf[3]) {
+          case '.': {
+            switch (buf[4]) {
+              case 'a': {
+                switch (buf[5]) {
+                  case 'b':
+                    if (op == "f64.abs"sv) { return makeUnary(s, UnaryOp::AbsFloat64); }
+                    goto parse_error;
+                  case 'd':
+                    if (op == "f64.add"sv) { return makeBinary(s, BinaryOp::AddFloat64); }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 'c': {
+                switch (buf[5]) {
+                  case 'e':
+                    if (op == "f64.ceil"sv) { return makeUnary(s, UnaryOp::CeilFloat64); }
+                    goto parse_error;
+                  case 'o': {
+                    switch (buf[6]) {
+                      case 'n': {
+                        switch (buf[7]) {
+                          case 's':
+                            if (op == "f64.const"sv) { return makeConst(s, Type::f64); }
+                            goto parse_error;
+                          case 'v': {
+                            switch (buf[13]) {
+                              case '3': {
+                                switch (buf[16]) {
+                                  case 's':
+                                    if (op == "f64.convert_i32_s"sv) { return makeUnary(s, UnaryOp::ConvertSInt32ToFloat64); }
+                                    goto parse_error;
+                                  case 'u':
+                                    if (op == "f64.convert_i32_u"sv) { return makeUnary(s, UnaryOp::ConvertUInt32ToFloat64); }
+                                    goto parse_error;
+                                  default: goto parse_error;
+                                }
+                              }
+                              case '6': {
+                                switch (buf[16]) {
+                                  case 's':
+                                    if (op == "f64.convert_i64_s"sv) { return makeUnary(s, UnaryOp::ConvertSInt64ToFloat64); }
+                                    goto parse_error;
+                                  case 'u':
+                                    if (op == "f64.convert_i64_u"sv) { return makeUnary(s, UnaryOp::ConvertUInt64ToFloat64); }
+                                    goto parse_error;
+                                  default: goto parse_error;
+                                }
+                              }
+                              default: goto parse_error;
+                            }
+                          }
+                          default: goto parse_error;
+                        }
+                      }
+                      case 'p':
+                        if (op == "f64.copysign"sv) { return makeBinary(s, BinaryOp::CopySignFloat64); }
+                        goto parse_error;
+                      default: goto parse_error;
+                    }
+                  }
+                  default: goto parse_error;
+                }
+              }
+              case 'd':
+                if (op == "f64.div"sv) { return makeBinary(s, BinaryOp::DivFloat64); }
+                goto parse_error;
+              case 'e':
+                if (op == "f64.eq"sv) { return makeBinary(s, BinaryOp::EqFloat64); }
+                goto parse_error;
+              case 'f':
+                if (op == "f64.floor"sv) { return makeUnary(s, UnaryOp::FloorFloat64); }
+                goto parse_error;
+              case 'g': {
+                switch (buf[5]) {
+                  case 'e':
+                    if (op == "f64.ge"sv) { return makeBinary(s, BinaryOp::GeFloat64); }
+                    goto parse_error;
+                  case 't':
+                    if (op == "f64.gt"sv) { return makeBinary(s, BinaryOp::GtFloat64); }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 'l': {
+                switch (buf[5]) {
+                  case 'e':
+                    if (op == "f64.le"sv) { return makeBinary(s, BinaryOp::LeFloat64); }
+                    goto parse_error;
+                  case 'o':
+                    if (op == "f64.load"sv) { return makeLoad(s, Type::f64, /*signed=*/false, 8, /*isAtomic=*/false); }
+                    goto parse_error;
+                  case 't':
+                    if (op == "f64.lt"sv) { return makeBinary(s, BinaryOp::LtFloat64); }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 'm': {
+                switch (buf[5]) {
+                  case 'a':
+                    if (op == "f64.max"sv) { return makeBinary(s, BinaryOp::MaxFloat64); }
+                    goto parse_error;
+                  case 'i':
+                    if (op == "f64.min"sv) { return makeBinary(s, BinaryOp::MinFloat64); }
+                    goto parse_error;
+                  case 'u':
+                    if (op == "f64.mul"sv) { return makeBinary(s, BinaryOp::MulFloat64); }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 'n': {
+                switch (buf[6]) {
+                  case '\0':
+                    if (op == "f64.ne"sv) { return makeBinary(s, BinaryOp::NeFloat64); }
+                    goto parse_error;
+                  case 'a':
+                    if (op == "f64.nearest"sv) { return makeUnary(s, UnaryOp::NearestFloat64); }
+                    goto parse_error;
+                  case 'g':
+                    if (op == "f64.neg"sv) { return makeUnary(s, UnaryOp::NegFloat64); }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 'p':
+                if (op == "f64.promote_f32"sv) { return makeUnary(s, UnaryOp::PromoteFloat32); }
+                goto parse_error;
+              case 'r':
+                if (op == "f64.reinterpret_i64"sv) { return makeUnary(s, UnaryOp::ReinterpretInt64); }
+                goto parse_error;
+              case 's': {
+                switch (buf[5]) {
+                  case 'q':
+                    if (op == "f64.sqrt"sv) { return makeUnary(s, UnaryOp::SqrtFloat64); }
+                    goto parse_error;
+                  case 't':
+                    if (op == "f64.store"sv) { return makeStore(s, Type::f64, 8, /*isAtomic=*/false); }
+                    goto parse_error;
+                  case 'u':
+                    if (op == "f64.sub"sv) { return makeBinary(s, BinaryOp::SubFloat64); }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 't':
+                if (op == "f64.trunc"sv) { return makeUnary(s, UnaryOp::TruncFloat64); }
+                goto parse_error;
+              default: goto parse_error;
+            }
+          }
+          case 'x': {
+            switch (buf[6]) {
+              case 'a': {
+                switch (buf[7]) {
+                  case 'b':
+                    if (op == "f64x2.abs"sv) { return makeUnary(s, UnaryOp::AbsVecF64x2); }
+                    goto parse_error;
+                  case 'd':
+                    if (op == "f64x2.add"sv) { return makeBinary(s, BinaryOp::AddVecF64x2); }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 'c': {
+                switch (buf[7]) {
+                  case 'e':
+                    if (op == "f64x2.ceil"sv) { return makeUnary(s, UnaryOp::CeilVecF64x2); }
+                    goto parse_error;
+                  case 'o': {
+                    switch (buf[24]) {
+                      case 's':
+                        if (op == "f64x2.convert_low_i32x4_s"sv) { return makeUnary(s, UnaryOp::ConvertLowSVecI32x4ToVecF64x2); }
+                        goto parse_error;
+                      case 'u':
+                        if (op == "f64x2.convert_low_i32x4_u"sv) { return makeUnary(s, UnaryOp::ConvertLowUVecI32x4ToVecF64x2); }
+                        goto parse_error;
+                      default: goto parse_error;
+                    }
+                  }
+                  default: goto parse_error;
+                }
+              }
+              case 'd':
+                if (op == "f64x2.div"sv) { return makeBinary(s, BinaryOp::DivVecF64x2); }
+        
