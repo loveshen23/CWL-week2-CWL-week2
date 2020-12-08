@@ -1018,4 +1018,275 @@ switch (buf[0]) {
                   case 'r': {
                     switch (buf[19]) {
                       case 's':
-                        if (op == "i16x8.extract_lane_s"sv) { return makeSIMDExtract(s, SIMDExtractOp::ExtractLaneSVecI16
+                        if (op == "i16x8.extract_lane_s"sv) { return makeSIMDExtract(s, SIMDExtractOp::ExtractLaneSVecI16x8, 8); }
+                        goto parse_error;
+                      case 'u':
+                        if (op == "i16x8.extract_lane_u"sv) { return makeSIMDExtract(s, SIMDExtractOp::ExtractLaneUVecI16x8, 8); }
+                        goto parse_error;
+                      default: goto parse_error;
+                    }
+                  }
+                  default: goto parse_error;
+                }
+              }
+              default: goto parse_error;
+            }
+          }
+          case 'g': {
+            switch (buf[7]) {
+              case 'e': {
+                switch (buf[9]) {
+                  case 's':
+                    if (op == "i16x8.ge_s"sv) { return makeBinary(s, BinaryOp::GeSVecI16x8); }
+                    goto parse_error;
+                  case 'u':
+                    if (op == "i16x8.ge_u"sv) { return makeBinary(s, BinaryOp::GeUVecI16x8); }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 't': {
+                switch (buf[9]) {
+                  case 's':
+                    if (op == "i16x8.gt_s"sv) { return makeBinary(s, BinaryOp::GtSVecI16x8); }
+                    goto parse_error;
+                  case 'u':
+                    if (op == "i16x8.gt_u"sv) { return makeBinary(s, BinaryOp::GtUVecI16x8); }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              default: goto parse_error;
+            }
+          }
+          case 'l': {
+            switch (buf[7]) {
+              case 'a':
+                if (op == "i16x8.laneselect"sv) { return makeSIMDTernary(s, SIMDTernaryOp::LaneselectI16x8); }
+                goto parse_error;
+              case 'e': {
+                switch (buf[9]) {
+                  case 's':
+                    if (op == "i16x8.le_s"sv) { return makeBinary(s, BinaryOp::LeSVecI16x8); }
+                    goto parse_error;
+                  case 'u':
+                    if (op == "i16x8.le_u"sv) { return makeBinary(s, BinaryOp::LeUVecI16x8); }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 't': {
+                switch (buf[9]) {
+                  case 's':
+                    if (op == "i16x8.lt_s"sv) { return makeBinary(s, BinaryOp::LtSVecI16x8); }
+                    goto parse_error;
+                  case 'u':
+                    if (op == "i16x8.lt_u"sv) { return makeBinary(s, BinaryOp::LtUVecI16x8); }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              default: goto parse_error;
+            }
+          }
+          case 'm': {
+            switch (buf[7]) {
+              case 'a': {
+                switch (buf[10]) {
+                  case 's':
+                    if (op == "i16x8.max_s"sv) { return makeBinary(s, BinaryOp::MaxSVecI16x8); }
+                    goto parse_error;
+                  case 'u':
+                    if (op == "i16x8.max_u"sv) { return makeBinary(s, BinaryOp::MaxUVecI16x8); }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 'i': {
+                switch (buf[10]) {
+                  case 's':
+                    if (op == "i16x8.min_s"sv) { return makeBinary(s, BinaryOp::MinSVecI16x8); }
+                    goto parse_error;
+                  case 'u':
+                    if (op == "i16x8.min_u"sv) { return makeBinary(s, BinaryOp::MinUVecI16x8); }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 'u':
+                if (op == "i16x8.mul"sv) { return makeBinary(s, BinaryOp::MulVecI16x8); }
+                goto parse_error;
+              default: goto parse_error;
+            }
+          }
+          case 'n': {
+            switch (buf[7]) {
+              case 'a': {
+                switch (buf[19]) {
+                  case 's':
+                    if (op == "i16x8.narrow_i32x4_s"sv) { return makeBinary(s, BinaryOp::NarrowSVecI32x4ToVecI16x8); }
+                    goto parse_error;
+                  case 'u':
+                    if (op == "i16x8.narrow_i32x4_u"sv) { return makeBinary(s, BinaryOp::NarrowUVecI32x4ToVecI16x8); }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 'e': {
+                switch (buf[8]) {
+                  case '\0':
+                    if (op == "i16x8.ne"sv) { return makeBinary(s, BinaryOp::NeVecI16x8); }
+                    goto parse_error;
+                  case 'g':
+                    if (op == "i16x8.neg"sv) { return makeUnary(s, UnaryOp::NegVecI16x8); }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              default: goto parse_error;
+            }
+          }
+          case 'q':
+            if (op == "i16x8.q15mulr_sat_s"sv) { return makeBinary(s, BinaryOp::Q15MulrSatSVecI16x8); }
+            goto parse_error;
+          case 'r': {
+            switch (buf[8]) {
+              case 'l':
+                if (op == "i16x8.relaxed_q15mulr_s"sv) { return makeBinary(s, BinaryOp::RelaxedQ15MulrSVecI16x8); }
+                goto parse_error;
+              case 'p':
+                if (op == "i16x8.replace_lane"sv) { return makeSIMDReplace(s, SIMDReplaceOp::ReplaceLaneVecI16x8, 8); }
+                goto parse_error;
+              default: goto parse_error;
+            }
+          }
+          case 's': {
+            switch (buf[7]) {
+              case 'h': {
+                switch (buf[8]) {
+                  case 'l':
+                    if (op == "i16x8.shl"sv) { return makeSIMDShift(s, SIMDShiftOp::ShlVecI16x8); }
+                    goto parse_error;
+                  case 'r': {
+                    switch (buf[10]) {
+                      case 's':
+                        if (op == "i16x8.shr_s"sv) { return makeSIMDShift(s, SIMDShiftOp::ShrSVecI16x8); }
+                        goto parse_error;
+                      case 'u':
+                        if (op == "i16x8.shr_u"sv) { return makeSIMDShift(s, SIMDShiftOp::ShrUVecI16x8); }
+                        goto parse_error;
+                      default: goto parse_error;
+                    }
+                  }
+                  default: goto parse_error;
+                }
+              }
+              case 'p':
+                if (op == "i16x8.splat"sv) { return makeUnary(s, UnaryOp::SplatVecI16x8); }
+                goto parse_error;
+              case 'u': {
+                switch (buf[9]) {
+                  case '\0':
+                    if (op == "i16x8.sub"sv) { return makeBinary(s, BinaryOp::SubVecI16x8); }
+                    goto parse_error;
+                  case '_': {
+                    switch (buf[14]) {
+                      case 's':
+                        if (op == "i16x8.sub_sat_s"sv) { return makeBinary(s, BinaryOp::SubSatSVecI16x8); }
+                        goto parse_error;
+                      case 'u':
+                        if (op == "i16x8.sub_sat_u"sv) { return makeBinary(s, BinaryOp::SubSatUVecI16x8); }
+                        goto parse_error;
+                      default: goto parse_error;
+                    }
+                  }
+                  default: goto parse_error;
+                }
+              }
+              default: goto parse_error;
+            }
+          }
+          default: goto parse_error;
+        }
+      }
+      case '3': {
+        switch (buf[2]) {
+          case '1': {
+            switch (buf[4]) {
+              case 'g': {
+                switch (buf[8]) {
+                  case 's':
+                    if (op == "i31.get_s"sv) { return makeI31Get(s, true); }
+                    goto parse_error;
+                  case 'u':
+                    if (op == "i31.get_u"sv) { return makeI31Get(s, false); }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 'n':
+                if (op == "i31.new"sv) { return makeI31New(s); }
+                goto parse_error;
+              default: goto parse_error;
+            }
+          }
+          case '2': {
+            switch (buf[3]) {
+              case '.': {
+                switch (buf[4]) {
+                  case 'a': {
+                    switch (buf[5]) {
+                      case 'd':
+                        if (op == "i32.add"sv) { return makeBinary(s, BinaryOp::AddInt32); }
+                        goto parse_error;
+                      case 'n':
+                        if (op == "i32.and"sv) { return makeBinary(s, BinaryOp::AndInt32); }
+                        goto parse_error;
+                      case 't': {
+                        switch (buf[11]) {
+                          case 'l': {
+                            switch (buf[15]) {
+                              case '\0':
+                                if (op == "i32.atomic.load"sv) { return makeLoad(s, Type::i32, /*signed=*/false, 4, /*isAtomic=*/true); }
+                                goto parse_error;
+                              case '1':
+                                if (op == "i32.atomic.load16_u"sv) { return makeLoad(s, Type::i32, /*signed=*/false, 2, /*isAtomic=*/true); }
+                                goto parse_error;
+                              case '8':
+                                if (op == "i32.atomic.load8_u"sv) { return makeLoad(s, Type::i32, /*signed=*/false, 1, /*isAtomic=*/true); }
+                                goto parse_error;
+                              default: goto parse_error;
+                            }
+                          }
+                          case 'r': {
+                            switch (buf[14]) {
+                              case '.': {
+                                switch (buf[15]) {
+                                  case 'a': {
+                                    switch (buf[16]) {
+                                      case 'd':
+                                        if (op == "i32.atomic.rmw.add"sv) { return makeAtomicRMW(s, AtomicRMWOp::RMWAdd, Type::i32, 4); }
+                                        goto parse_error;
+                                      case 'n':
+                                        if (op == "i32.atomic.rmw.and"sv) { return makeAtomicRMW(s, AtomicRMWOp::RMWAnd, Type::i32, 4); }
+                                        goto parse_error;
+                                      default: goto parse_error;
+                                    }
+                                  }
+                                  case 'c':
+                                    if (op == "i32.atomic.rmw.cmpxchg"sv) { return makeAtomicCmpxchg(s, Type::i32, 4); }
+                                    goto parse_error;
+                                  case 'o':
+                                    if (op == "i32.atomic.rmw.or"sv) { return makeAtomicRMW(s, AtomicRMWOp::RMWOr, Type::i32, 4); }
+                                    goto parse_error;
+                                  case 's':
+                                    if (op == "i32.atomic.rmw.sub"sv) { return makeAtomicRMW(s, AtomicRMWOp::RMWSub, Type::i32, 4); }
+                                    goto parse_error;
+                                  case 'x': {
+                                    switch (buf[16]) {
+                                      case 'c':
+                                        if (op == "i32.atomic.rmw.xchg"sv) { return makeAtomicRMW(s, AtomicRMWOp::RMWXchg, Type::i32, 4); }
+                                        goto parse_error;
+                                      case 'o':
+                                        if (op == "i32.atomic.rmw.xor"sv) { return makeAtomicRMW(s, AtomicRMWOp::RMWXor, Type::i32, 4); }
+                  
