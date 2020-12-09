@@ -1508,4 +1508,243 @@ switch (buf[0]) {
                                 if (op == "i32.load8_u"sv) { return makeLoad(s, Type::i32, /*signed=*/false, 1, /*isAtomic=*/false); }
                                 goto parse_error;
                               default: goto parse_error;
- 
+                            }
+                          }
+                          default: goto parse_error;
+                        }
+                      }
+                      case 't': {
+                        switch (buf[7]) {
+                          case 's':
+                            if (op == "i32.lt_s"sv) { return makeBinary(s, BinaryOp::LtSInt32); }
+                            goto parse_error;
+                          case 'u':
+                            if (op == "i32.lt_u"sv) { return makeBinary(s, BinaryOp::LtUInt32); }
+                            goto parse_error;
+                          default: goto parse_error;
+                        }
+                      }
+                      default: goto parse_error;
+                    }
+                  }
+                  case 'm':
+                    if (op == "i32.mul"sv) { return makeBinary(s, BinaryOp::MulInt32); }
+                    goto parse_error;
+                  case 'n':
+                    if (op == "i32.ne"sv) { return makeBinary(s, BinaryOp::NeInt32); }
+                    goto parse_error;
+                  case 'o':
+                    if (op == "i32.or"sv) { return makeBinary(s, BinaryOp::OrInt32); }
+                    goto parse_error;
+                  case 'p':
+                    if (op == "i32.popcnt"sv) { return makeUnary(s, UnaryOp::PopcntInt32); }
+                    goto parse_error;
+                  case 'r': {
+                    switch (buf[5]) {
+                      case 'e': {
+                        switch (buf[6]) {
+                          case 'i':
+                            if (op == "i32.reinterpret_f32"sv) { return makeUnary(s, UnaryOp::ReinterpretFloat32); }
+                            goto parse_error;
+                          case 'm': {
+                            switch (buf[8]) {
+                              case 's':
+                                if (op == "i32.rem_s"sv) { return makeBinary(s, BinaryOp::RemSInt32); }
+                                goto parse_error;
+                              case 'u':
+                                if (op == "i32.rem_u"sv) { return makeBinary(s, BinaryOp::RemUInt32); }
+                                goto parse_error;
+                              default: goto parse_error;
+                            }
+                          }
+                          default: goto parse_error;
+                        }
+                      }
+                      case 'o': {
+                        switch (buf[7]) {
+                          case 'l':
+                            if (op == "i32.rotl"sv) { return makeBinary(s, BinaryOp::RotLInt32); }
+                            goto parse_error;
+                          case 'r':
+                            if (op == "i32.rotr"sv) { return makeBinary(s, BinaryOp::RotRInt32); }
+                            goto parse_error;
+                          default: goto parse_error;
+                        }
+                      }
+                      default: goto parse_error;
+                    }
+                  }
+                  case 's': {
+                    switch (buf[5]) {
+                      case 'h': {
+                        switch (buf[6]) {
+                          case 'l':
+                            if (op == "i32.shl"sv) { return makeBinary(s, BinaryOp::ShlInt32); }
+                            goto parse_error;
+                          case 'r': {
+                            switch (buf[8]) {
+                              case 's':
+                                if (op == "i32.shr_s"sv) { return makeBinary(s, BinaryOp::ShrSInt32); }
+                                goto parse_error;
+                              case 'u':
+                                if (op == "i32.shr_u"sv) { return makeBinary(s, BinaryOp::ShrUInt32); }
+                                goto parse_error;
+                              default: goto parse_error;
+                            }
+                          }
+                          default: goto parse_error;
+                        }
+                      }
+                      case 't': {
+                        switch (buf[9]) {
+                          case '\0':
+                            if (op == "i32.store"sv) { return makeStore(s, Type::i32, 4, /*isAtomic=*/false); }
+                            goto parse_error;
+                          case '1':
+                            if (op == "i32.store16"sv) { return makeStore(s, Type::i32, 2, /*isAtomic=*/false); }
+                            goto parse_error;
+                          case '8':
+                            if (op == "i32.store8"sv) { return makeStore(s, Type::i32, 1, /*isAtomic=*/false); }
+                            goto parse_error;
+                          default: goto parse_error;
+                        }
+                      }
+                      case 'u':
+                        if (op == "i32.sub"sv) { return makeBinary(s, BinaryOp::SubInt32); }
+                        goto parse_error;
+                      default: goto parse_error;
+                    }
+                  }
+                  case 't': {
+                    switch (buf[10]) {
+                      case 'f': {
+                        switch (buf[11]) {
+                          case '3': {
+                            switch (buf[14]) {
+                              case 's':
+                                if (op == "i32.trunc_f32_s"sv) { return makeUnary(s, UnaryOp::TruncSFloat32ToInt32); }
+                                goto parse_error;
+                              case 'u':
+                                if (op == "i32.trunc_f32_u"sv) { return makeUnary(s, UnaryOp::TruncUFloat32ToInt32); }
+                                goto parse_error;
+                              default: goto parse_error;
+                            }
+                          }
+                          case '6': {
+                            switch (buf[14]) {
+                              case 's':
+                                if (op == "i32.trunc_f64_s"sv) { return makeUnary(s, UnaryOp::TruncSFloat64ToInt32); }
+                                goto parse_error;
+                              case 'u':
+                                if (op == "i32.trunc_f64_u"sv) { return makeUnary(s, UnaryOp::TruncUFloat64ToInt32); }
+                                goto parse_error;
+                              default: goto parse_error;
+                            }
+                          }
+                          default: goto parse_error;
+                        }
+                      }
+                      case 's': {
+                        switch (buf[15]) {
+                          case '3': {
+                            switch (buf[18]) {
+                              case 's':
+                                if (op == "i32.trunc_sat_f32_s"sv) { return makeUnary(s, UnaryOp::TruncSatSFloat32ToInt32); }
+                                goto parse_error;
+                              case 'u':
+                                if (op == "i32.trunc_sat_f32_u"sv) { return makeUnary(s, UnaryOp::TruncSatUFloat32ToInt32); }
+                                goto parse_error;
+                              default: goto parse_error;
+                            }
+                          }
+                          case '6': {
+                            switch (buf[18]) {
+                              case 's':
+                                if (op == "i32.trunc_sat_f64_s"sv) { return makeUnary(s, UnaryOp::TruncSatSFloat64ToInt32); }
+                                goto parse_error;
+                              case 'u':
+                                if (op == "i32.trunc_sat_f64_u"sv) { return makeUnary(s, UnaryOp::TruncSatUFloat64ToInt32); }
+                                goto parse_error;
+                              default: goto parse_error;
+                            }
+                          }
+                          default: goto parse_error;
+                        }
+                      }
+                      default: goto parse_error;
+                    }
+                  }
+                  case 'w':
+                    if (op == "i32.wrap_i64"sv) { return makeUnary(s, UnaryOp::WrapInt64); }
+                    goto parse_error;
+                  case 'x':
+                    if (op == "i32.xor"sv) { return makeBinary(s, BinaryOp::XorInt32); }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 'x': {
+                switch (buf[6]) {
+                  case 'a': {
+                    switch (buf[7]) {
+                      case 'b':
+                        if (op == "i32x4.abs"sv) { return makeUnary(s, UnaryOp::AbsVecI32x4); }
+                        goto parse_error;
+                      case 'd':
+                        if (op == "i32x4.add"sv) { return makeBinary(s, BinaryOp::AddVecI32x4); }
+                        goto parse_error;
+                      case 'l':
+                        if (op == "i32x4.all_true"sv) { return makeUnary(s, UnaryOp::AllTrueVecI32x4); }
+                        goto parse_error;
+                      default: goto parse_error;
+                    }
+                  }
+                  case 'b':
+                    if (op == "i32x4.bitmask"sv) { return makeUnary(s, UnaryOp::BitmaskVecI32x4); }
+                    goto parse_error;
+                  case 'd': {
+                    switch (buf[11]) {
+                      case '1':
+                        if (op == "i32x4.dot_i16x8_s"sv) { return makeBinary(s, BinaryOp::DotSVecI16x8ToVecI32x4); }
+                        goto parse_error;
+                      case '8':
+                        if (op == "i32x4.dot_i8x16_i7x16_add_s"sv) { return makeSIMDTernary(s, SIMDTernaryOp::DotI8x16I7x16AddSToVecI32x4); }
+                        goto parse_error;
+                      default: goto parse_error;
+                    }
+                  }
+                  case 'e': {
+                    switch (buf[7]) {
+                      case 'q':
+                        if (op == "i32x4.eq"sv) { return makeBinary(s, BinaryOp::EqVecI32x4); }
+                        goto parse_error;
+                      case 'x': {
+                        switch (buf[9]) {
+                          case 'a': {
+                            switch (buf[28]) {
+                              case 's':
+                                if (op == "i32x4.extadd_pairwise_i16x8_s"sv) { return makeUnary(s, UnaryOp::ExtAddPairwiseSVecI16x8ToI32x4); }
+                                goto parse_error;
+                              case 'u':
+                                if (op == "i32x4.extadd_pairwise_i16x8_u"sv) { return makeUnary(s, UnaryOp::ExtAddPairwiseUVecI16x8ToI32x4); }
+                                goto parse_error;
+                              default: goto parse_error;
+                            }
+                          }
+                          case 'e': {
+                            switch (buf[13]) {
+                              case 'h': {
+                                switch (buf[24]) {
+                                  case 's':
+                                    if (op == "i32x4.extend_high_i16x8_s"sv) { return makeUnary(s, UnaryOp::ExtendHighSVecI16x8ToVecI32x4); }
+                                    goto parse_error;
+                                  case 'u':
+                                    if (op == "i32x4.extend_high_i16x8_u"sv) { return makeUnary(s, UnaryOp::ExtendHighUVecI16x8ToVecI32x4); }
+                                    goto parse_error;
+                                  default: goto parse_error;
+                                }
+                              }
+                              case 'l': {
+                                switch (buf[23]) {
+                                  case 's':
+                         
