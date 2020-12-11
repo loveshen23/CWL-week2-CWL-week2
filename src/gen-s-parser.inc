@@ -1976,4 +1976,207 @@ switch (buf[0]) {
                             if (op == "i32x4.trunc_sat_f64x2_s_zero"sv) { return makeUnary(s, UnaryOp::TruncSatZeroSVecF64x2ToVecI32x4); }
                             goto parse_error;
                           case 'u':
-                            if (op == "i32x4.trunc_sat_f64x2_u_z
+                            if (op == "i32x4.trunc_sat_f64x2_u_zero"sv) { return makeUnary(s, UnaryOp::TruncSatZeroUVecF64x2ToVecI32x4); }
+                            goto parse_error;
+                          default: goto parse_error;
+                        }
+                      }
+                      default: goto parse_error;
+                    }
+                  }
+                  default: goto parse_error;
+                }
+              }
+              default: goto parse_error;
+            }
+          }
+          default: goto parse_error;
+        }
+      }
+      case '6': {
+        switch (buf[3]) {
+          case '.': {
+            switch (buf[4]) {
+              case 'a': {
+                switch (buf[5]) {
+                  case 'd':
+                    if (op == "i64.add"sv) { return makeBinary(s, BinaryOp::AddInt64); }
+                    goto parse_error;
+                  case 'n':
+                    if (op == "i64.and"sv) { return makeBinary(s, BinaryOp::AndInt64); }
+                    goto parse_error;
+                  case 't': {
+                    switch (buf[11]) {
+                      case 'l': {
+                        switch (buf[15]) {
+                          case '\0':
+                            if (op == "i64.atomic.load"sv) { return makeLoad(s, Type::i64, /*signed=*/false, 8, /*isAtomic=*/true); }
+                            goto parse_error;
+                          case '1':
+                            if (op == "i64.atomic.load16_u"sv) { return makeLoad(s, Type::i64, /*signed=*/false, 2, /*isAtomic=*/true); }
+                            goto parse_error;
+                          case '3':
+                            if (op == "i64.atomic.load32_u"sv) { return makeLoad(s, Type::i64, /*signed=*/false, 4, /*isAtomic=*/true); }
+                            goto parse_error;
+                          case '8':
+                            if (op == "i64.atomic.load8_u"sv) { return makeLoad(s, Type::i64, /*signed=*/false, 1, /*isAtomic=*/true); }
+                            goto parse_error;
+                          default: goto parse_error;
+                        }
+                      }
+                      case 'r': {
+                        switch (buf[14]) {
+                          case '.': {
+                            switch (buf[15]) {
+                              case 'a': {
+                                switch (buf[16]) {
+                                  case 'd':
+                                    if (op == "i64.atomic.rmw.add"sv) { return makeAtomicRMW(s, AtomicRMWOp::RMWAdd, Type::i64, 8); }
+                                    goto parse_error;
+                                  case 'n':
+                                    if (op == "i64.atomic.rmw.and"sv) { return makeAtomicRMW(s, AtomicRMWOp::RMWAnd, Type::i64, 8); }
+                                    goto parse_error;
+                                  default: goto parse_error;
+                                }
+                              }
+                              case 'c':
+                                if (op == "i64.atomic.rmw.cmpxchg"sv) { return makeAtomicCmpxchg(s, Type::i64, 8); }
+                                goto parse_error;
+                              case 'o':
+                                if (op == "i64.atomic.rmw.or"sv) { return makeAtomicRMW(s, AtomicRMWOp::RMWOr, Type::i64, 8); }
+                                goto parse_error;
+                              case 's':
+                                if (op == "i64.atomic.rmw.sub"sv) { return makeAtomicRMW(s, AtomicRMWOp::RMWSub, Type::i64, 8); }
+                                goto parse_error;
+                              case 'x': {
+                                switch (buf[16]) {
+                                  case 'c':
+                                    if (op == "i64.atomic.rmw.xchg"sv) { return makeAtomicRMW(s, AtomicRMWOp::RMWXchg, Type::i64, 8); }
+                                    goto parse_error;
+                                  case 'o':
+                                    if (op == "i64.atomic.rmw.xor"sv) { return makeAtomicRMW(s, AtomicRMWOp::RMWXor, Type::i64, 8); }
+                                    goto parse_error;
+                                  default: goto parse_error;
+                                }
+                              }
+                              default: goto parse_error;
+                            }
+                          }
+                          case '1': {
+                            switch (buf[17]) {
+                              case 'a': {
+                                switch (buf[18]) {
+                                  case 'd':
+                                    if (op == "i64.atomic.rmw16.add_u"sv) { return makeAtomicRMW(s, AtomicRMWOp::RMWAdd, Type::i64, 2); }
+                                    goto parse_error;
+                                  case 'n':
+                                    if (op == "i64.atomic.rmw16.and_u"sv) { return makeAtomicRMW(s, AtomicRMWOp::RMWAnd, Type::i64, 2); }
+                                    goto parse_error;
+                                  default: goto parse_error;
+                                }
+                              }
+                              case 'c':
+                                if (op == "i64.atomic.rmw16.cmpxchg_u"sv) { return makeAtomicCmpxchg(s, Type::i64, 2); }
+                                goto parse_error;
+                              case 'o':
+                                if (op == "i64.atomic.rmw16.or_u"sv) { return makeAtomicRMW(s, AtomicRMWOp::RMWOr, Type::i64, 2); }
+                                goto parse_error;
+                              case 's':
+                                if (op == "i64.atomic.rmw16.sub_u"sv) { return makeAtomicRMW(s, AtomicRMWOp::RMWSub, Type::i64, 2); }
+                                goto parse_error;
+                              case 'x': {
+                                switch (buf[18]) {
+                                  case 'c':
+                                    if (op == "i64.atomic.rmw16.xchg_u"sv) { return makeAtomicRMW(s, AtomicRMWOp::RMWXchg, Type::i64, 2); }
+                                    goto parse_error;
+                                  case 'o':
+                                    if (op == "i64.atomic.rmw16.xor_u"sv) { return makeAtomicRMW(s, AtomicRMWOp::RMWXor, Type::i64, 2); }
+                                    goto parse_error;
+                                  default: goto parse_error;
+                                }
+                              }
+                              default: goto parse_error;
+                            }
+                          }
+                          case '3': {
+                            switch (buf[17]) {
+                              case 'a': {
+                                switch (buf[18]) {
+                                  case 'd':
+                                    if (op == "i64.atomic.rmw32.add_u"sv) { return makeAtomicRMW(s, AtomicRMWOp::RMWAdd, Type::i64, 4); }
+                                    goto parse_error;
+                                  case 'n':
+                                    if (op == "i64.atomic.rmw32.and_u"sv) { return makeAtomicRMW(s, AtomicRMWOp::RMWAnd, Type::i64, 4); }
+                                    goto parse_error;
+                                  default: goto parse_error;
+                                }
+                              }
+                              case 'c':
+                                if (op == "i64.atomic.rmw32.cmpxchg_u"sv) { return makeAtomicCmpxchg(s, Type::i64, 4); }
+                                goto parse_error;
+                              case 'o':
+                                if (op == "i64.atomic.rmw32.or_u"sv) { return makeAtomicRMW(s, AtomicRMWOp::RMWOr, Type::i64, 4); }
+                                goto parse_error;
+                              case 's':
+                                if (op == "i64.atomic.rmw32.sub_u"sv) { return makeAtomicRMW(s, AtomicRMWOp::RMWSub, Type::i64, 4); }
+                                goto parse_error;
+                              case 'x': {
+                                switch (buf[18]) {
+                                  case 'c':
+                                    if (op == "i64.atomic.rmw32.xchg_u"sv) { return makeAtomicRMW(s, AtomicRMWOp::RMWXchg, Type::i64, 4); }
+                                    goto parse_error;
+                                  case 'o':
+                                    if (op == "i64.atomic.rmw32.xor_u"sv) { return makeAtomicRMW(s, AtomicRMWOp::RMWXor, Type::i64, 4); }
+                                    goto parse_error;
+                                  default: goto parse_error;
+                                }
+                              }
+                              default: goto parse_error;
+                            }
+                          }
+                          case '8': {
+                            switch (buf[16]) {
+                              case 'a': {
+                                switch (buf[17]) {
+                                  case 'd':
+                                    if (op == "i64.atomic.rmw8.add_u"sv) { return makeAtomicRMW(s, AtomicRMWOp::RMWAdd, Type::i64, 1); }
+                                    goto parse_error;
+                                  case 'n':
+                                    if (op == "i64.atomic.rmw8.and_u"sv) { return makeAtomicRMW(s, AtomicRMWOp::RMWAnd, Type::i64, 1); }
+                                    goto parse_error;
+                                  default: goto parse_error;
+                                }
+                              }
+                              case 'c':
+                                if (op == "i64.atomic.rmw8.cmpxchg_u"sv) { return makeAtomicCmpxchg(s, Type::i64, 1); }
+                                goto parse_error;
+                              case 'o':
+                                if (op == "i64.atomic.rmw8.or_u"sv) { return makeAtomicRMW(s, AtomicRMWOp::RMWOr, Type::i64, 1); }
+                                goto parse_error;
+                              case 's':
+                                if (op == "i64.atomic.rmw8.sub_u"sv) { return makeAtomicRMW(s, AtomicRMWOp::RMWSub, Type::i64, 1); }
+                                goto parse_error;
+                              case 'x': {
+                                switch (buf[17]) {
+                                  case 'c':
+                                    if (op == "i64.atomic.rmw8.xchg_u"sv) { return makeAtomicRMW(s, AtomicRMWOp::RMWXchg, Type::i64, 1); }
+                                    goto parse_error;
+                                  case 'o':
+                                    if (op == "i64.atomic.rmw8.xor_u"sv) { return makeAtomicRMW(s, AtomicRMWOp::RMWXor, Type::i64, 1); }
+                                    goto parse_error;
+                                  default: goto parse_error;
+                                }
+                              }
+                              default: goto parse_error;
+                            }
+                          }
+                          default: goto parse_error;
+                        }
+                      }
+                      case 's': {
+                        switch (buf[16]) {
+                          case '\0':
+                            if (op == "i64.atomic.store"sv) { return makeStore(s, Type::i64, 8, /*isAtomic=*/true); }
+                            goto parse_error;
+                          case '1':
+                            if (op == "i64.atomic.store16"sv) { return 
