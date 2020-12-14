@@ -2436,4 +2436,266 @@ switch (buf[0]) {
                       case '3':
                         if (op == "i64.store32"sv) { return makeStore(s, Type::i64, 4, /*isAtomic=*/false); }
                         goto parse_error;
-                      c
+                      case '8':
+                        if (op == "i64.store8"sv) { return makeStore(s, Type::i64, 1, /*isAtomic=*/false); }
+                        goto parse_error;
+                      default: goto parse_error;
+                    }
+                  }
+                  case 'u':
+                    if (op == "i64.sub"sv) { return makeBinary(s, BinaryOp::SubInt64); }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 't': {
+                switch (buf[10]) {
+                  case 'f': {
+                    switch (buf[11]) {
+                      case '3': {
+                        switch (buf[14]) {
+                          case 's':
+                            if (op == "i64.trunc_f32_s"sv) { return makeUnary(s, UnaryOp::TruncSFloat32ToInt64); }
+                            goto parse_error;
+                          case 'u':
+                            if (op == "i64.trunc_f32_u"sv) { return makeUnary(s, UnaryOp::TruncUFloat32ToInt64); }
+                            goto parse_error;
+                          default: goto parse_error;
+                        }
+                      }
+                      case '6': {
+                        switch (buf[14]) {
+                          case 's':
+                            if (op == "i64.trunc_f64_s"sv) { return makeUnary(s, UnaryOp::TruncSFloat64ToInt64); }
+                            goto parse_error;
+                          case 'u':
+                            if (op == "i64.trunc_f64_u"sv) { return makeUnary(s, UnaryOp::TruncUFloat64ToInt64); }
+                            goto parse_error;
+                          default: goto parse_error;
+                        }
+                      }
+                      default: goto parse_error;
+                    }
+                  }
+                  case 's': {
+                    switch (buf[15]) {
+                      case '3': {
+                        switch (buf[18]) {
+                          case 's':
+                            if (op == "i64.trunc_sat_f32_s"sv) { return makeUnary(s, UnaryOp::TruncSatSFloat32ToInt64); }
+                            goto parse_error;
+                          case 'u':
+                            if (op == "i64.trunc_sat_f32_u"sv) { return makeUnary(s, UnaryOp::TruncSatUFloat32ToInt64); }
+                            goto parse_error;
+                          default: goto parse_error;
+                        }
+                      }
+                      case '6': {
+                        switch (buf[18]) {
+                          case 's':
+                            if (op == "i64.trunc_sat_f64_s"sv) { return makeUnary(s, UnaryOp::TruncSatSFloat64ToInt64); }
+                            goto parse_error;
+                          case 'u':
+                            if (op == "i64.trunc_sat_f64_u"sv) { return makeUnary(s, UnaryOp::TruncSatUFloat64ToInt64); }
+                            goto parse_error;
+                          default: goto parse_error;
+                        }
+                      }
+                      default: goto parse_error;
+                    }
+                  }
+                  default: goto parse_error;
+                }
+              }
+              case 'x':
+                if (op == "i64.xor"sv) { return makeBinary(s, BinaryOp::XorInt64); }
+                goto parse_error;
+              default: goto parse_error;
+            }
+          }
+          case 'x': {
+            switch (buf[6]) {
+              case 'a': {
+                switch (buf[7]) {
+                  case 'b':
+                    if (op == "i64x2.abs"sv) { return makeUnary(s, UnaryOp::AbsVecI64x2); }
+                    goto parse_error;
+                  case 'd':
+                    if (op == "i64x2.add"sv) { return makeBinary(s, BinaryOp::AddVecI64x2); }
+                    goto parse_error;
+                  case 'l':
+                    if (op == "i64x2.all_true"sv) { return makeUnary(s, UnaryOp::AllTrueVecI64x2); }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 'b':
+                if (op == "i64x2.bitmask"sv) { return makeUnary(s, UnaryOp::BitmaskVecI64x2); }
+                goto parse_error;
+              case 'e': {
+                switch (buf[7]) {
+                  case 'q':
+                    if (op == "i64x2.eq"sv) { return makeBinary(s, BinaryOp::EqVecI64x2); }
+                    goto parse_error;
+                  case 'x': {
+                    switch (buf[9]) {
+                      case 'e': {
+                        switch (buf[13]) {
+                          case 'h': {
+                            switch (buf[24]) {
+                              case 's':
+                                if (op == "i64x2.extend_high_i32x4_s"sv) { return makeUnary(s, UnaryOp::ExtendHighSVecI32x4ToVecI64x2); }
+                                goto parse_error;
+                              case 'u':
+                                if (op == "i64x2.extend_high_i32x4_u"sv) { return makeUnary(s, UnaryOp::ExtendHighUVecI32x4ToVecI64x2); }
+                                goto parse_error;
+                              default: goto parse_error;
+                            }
+                          }
+                          case 'l': {
+                            switch (buf[23]) {
+                              case 's':
+                                if (op == "i64x2.extend_low_i32x4_s"sv) { return makeUnary(s, UnaryOp::ExtendLowSVecI32x4ToVecI64x2); }
+                                goto parse_error;
+                              case 'u':
+                                if (op == "i64x2.extend_low_i32x4_u"sv) { return makeUnary(s, UnaryOp::ExtendLowUVecI32x4ToVecI64x2); }
+                                goto parse_error;
+                              default: goto parse_error;
+                            }
+                          }
+                          default: goto parse_error;
+                        }
+                      }
+                      case 'm': {
+                        switch (buf[13]) {
+                          case 'h': {
+                            switch (buf[24]) {
+                              case 's':
+                                if (op == "i64x2.extmul_high_i32x4_s"sv) { return makeBinary(s, BinaryOp::ExtMulHighSVecI64x2); }
+                                goto parse_error;
+                              case 'u':
+                                if (op == "i64x2.extmul_high_i32x4_u"sv) { return makeBinary(s, BinaryOp::ExtMulHighUVecI64x2); }
+                                goto parse_error;
+                              default: goto parse_error;
+                            }
+                          }
+                          case 'l': {
+                            switch (buf[23]) {
+                              case 's':
+                                if (op == "i64x2.extmul_low_i32x4_s"sv) { return makeBinary(s, BinaryOp::ExtMulLowSVecI64x2); }
+                                goto parse_error;
+                              case 'u':
+                                if (op == "i64x2.extmul_low_i32x4_u"sv) { return makeBinary(s, BinaryOp::ExtMulLowUVecI64x2); }
+                                goto parse_error;
+                              default: goto parse_error;
+                            }
+                          }
+                          default: goto parse_error;
+                        }
+                      }
+                      case 'r':
+                        if (op == "i64x2.extract_lane"sv) { return makeSIMDExtract(s, SIMDExtractOp::ExtractLaneVecI64x2, 2); }
+                        goto parse_error;
+                      default: goto parse_error;
+                    }
+                  }
+                  default: goto parse_error;
+                }
+              }
+              case 'g': {
+                switch (buf[7]) {
+                  case 'e':
+                    if (op == "i64x2.ge_s"sv) { return makeBinary(s, BinaryOp::GeSVecI64x2); }
+                    goto parse_error;
+                  case 't':
+                    if (op == "i64x2.gt_s"sv) { return makeBinary(s, BinaryOp::GtSVecI64x2); }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 'l': {
+                switch (buf[7]) {
+                  case 'a':
+                    if (op == "i64x2.laneselect"sv) { return makeSIMDTernary(s, SIMDTernaryOp::LaneselectI64x2); }
+                    goto parse_error;
+                  case 'e':
+                    if (op == "i64x2.le_s"sv) { return makeBinary(s, BinaryOp::LeSVecI64x2); }
+                    goto parse_error;
+                  case 't':
+                    if (op == "i64x2.lt_s"sv) { return makeBinary(s, BinaryOp::LtSVecI64x2); }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 'm':
+                if (op == "i64x2.mul"sv) { return makeBinary(s, BinaryOp::MulVecI64x2); }
+                goto parse_error;
+              case 'n': {
+                switch (buf[8]) {
+                  case '\0':
+                    if (op == "i64x2.ne"sv) { return makeBinary(s, BinaryOp::NeVecI64x2); }
+                    goto parse_error;
+                  case 'g':
+                    if (op == "i64x2.neg"sv) { return makeUnary(s, UnaryOp::NegVecI64x2); }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 'r':
+                if (op == "i64x2.replace_lane"sv) { return makeSIMDReplace(s, SIMDReplaceOp::ReplaceLaneVecI64x2, 2); }
+                goto parse_error;
+              case 's': {
+                switch (buf[7]) {
+                  case 'h': {
+                    switch (buf[8]) {
+                      case 'l':
+                        if (op == "i64x2.shl"sv) { return makeSIMDShift(s, SIMDShiftOp::ShlVecI64x2); }
+                        goto parse_error;
+                      case 'r': {
+                        switch (buf[10]) {
+                          case 's':
+                            if (op == "i64x2.shr_s"sv) { return makeSIMDShift(s, SIMDShiftOp::ShrSVecI64x2); }
+                            goto parse_error;
+                          case 'u':
+                            if (op == "i64x2.shr_u"sv) { return makeSIMDShift(s, SIMDShiftOp::ShrUVecI64x2); }
+                            goto parse_error;
+                          default: goto parse_error;
+                        }
+                      }
+                      default: goto parse_error;
+                    }
+                  }
+                  case 'p':
+                    if (op == "i64x2.splat"sv) { return makeUnary(s, UnaryOp::SplatVecI64x2); }
+                    goto parse_error;
+                  case 'u':
+                    if (op == "i64x2.sub"sv) { return makeBinary(s, BinaryOp::SubVecI64x2); }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              default: goto parse_error;
+            }
+          }
+          default: goto parse_error;
+        }
+      }
+      case '8': {
+        switch (buf[6]) {
+          case 'a': {
+            switch (buf[7]) {
+              case 'b':
+                if (op == "i8x16.abs"sv) { return makeUnary(s, UnaryOp::AbsVecI8x16); }
+                goto parse_error;
+              case 'd': {
+                switch (buf[9]) {
+                  case '\0':
+                    if (op == "i8x16.add"sv) { return makeBinary(s, BinaryOp::AddVecI8x16); }
+                    goto parse_error;
+                  case '_': {
+                    switch (buf[14]) {
+                      case 's':
+                        if (op == "i8x16.add_sat_s"sv) { return makeBinary(s, BinaryOp::AddSatSVecI8x16); }
+                        goto parse_error;
+                      case 'u':
+              
