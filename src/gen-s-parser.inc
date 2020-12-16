@@ -3961,4 +3961,301 @@ switch (buf[0]) {
                       return *ret;
                     }
                     goto parse_error;
-                  
+                  case 'd':
+                    if (op == "f32.add"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::AddFloat32);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 'c': {
+                switch (buf[5]) {
+                  case 'e':
+                    if (op == "f32.ceil"sv) {
+                      auto ret = makeUnary(ctx, pos, UnaryOp::CeilFloat32);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 'o': {
+                    switch (buf[6]) {
+                      case 'n': {
+                        switch (buf[7]) {
+                          case 's':
+                            if (op == "f32.const"sv) {
+                              auto ret = makeConst(ctx, pos, Type::f32);
+                              CHECK_ERR(ret);
+                              return *ret;
+                            }
+                            goto parse_error;
+                          case 'v': {
+                            switch (buf[13]) {
+                              case '3': {
+                                switch (buf[16]) {
+                                  case 's':
+                                    if (op == "f32.convert_i32_s"sv) {
+                                      auto ret = makeUnary(ctx, pos, UnaryOp::ConvertSInt32ToFloat32);
+                                      CHECK_ERR(ret);
+                                      return *ret;
+                                    }
+                                    goto parse_error;
+                                  case 'u':
+                                    if (op == "f32.convert_i32_u"sv) {
+                                      auto ret = makeUnary(ctx, pos, UnaryOp::ConvertUInt32ToFloat32);
+                                      CHECK_ERR(ret);
+                                      return *ret;
+                                    }
+                                    goto parse_error;
+                                  default: goto parse_error;
+                                }
+                              }
+                              case '6': {
+                                switch (buf[16]) {
+                                  case 's':
+                                    if (op == "f32.convert_i64_s"sv) {
+                                      auto ret = makeUnary(ctx, pos, UnaryOp::ConvertSInt64ToFloat32);
+                                      CHECK_ERR(ret);
+                                      return *ret;
+                                    }
+                                    goto parse_error;
+                                  case 'u':
+                                    if (op == "f32.convert_i64_u"sv) {
+                                      auto ret = makeUnary(ctx, pos, UnaryOp::ConvertUInt64ToFloat32);
+                                      CHECK_ERR(ret);
+                                      return *ret;
+                                    }
+                                    goto parse_error;
+                                  default: goto parse_error;
+                                }
+                              }
+                              default: goto parse_error;
+                            }
+                          }
+                          default: goto parse_error;
+                        }
+                      }
+                      case 'p':
+                        if (op == "f32.copysign"sv) {
+                          auto ret = makeBinary(ctx, pos, BinaryOp::CopySignFloat32);
+                          CHECK_ERR(ret);
+                          return *ret;
+                        }
+                        goto parse_error;
+                      default: goto parse_error;
+                    }
+                  }
+                  default: goto parse_error;
+                }
+              }
+              case 'd': {
+                switch (buf[5]) {
+                  case 'e':
+                    if (op == "f32.demote_f64"sv) {
+                      auto ret = makeUnary(ctx, pos, UnaryOp::DemoteFloat64);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 'i':
+                    if (op == "f32.div"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::DivFloat32);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 'e':
+                if (op == "f32.eq"sv) {
+                  auto ret = makeBinary(ctx, pos, BinaryOp::EqFloat32);
+                  CHECK_ERR(ret);
+                  return *ret;
+                }
+                goto parse_error;
+              case 'f':
+                if (op == "f32.floor"sv) {
+                  auto ret = makeUnary(ctx, pos, UnaryOp::FloorFloat32);
+                  CHECK_ERR(ret);
+                  return *ret;
+                }
+                goto parse_error;
+              case 'g': {
+                switch (buf[5]) {
+                  case 'e':
+                    if (op == "f32.ge"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::GeFloat32);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 't':
+                    if (op == "f32.gt"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::GtFloat32);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 'l': {
+                switch (buf[5]) {
+                  case 'e':
+                    if (op == "f32.le"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::LeFloat32);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 'o':
+                    if (op == "f32.load"sv) {
+                      auto ret = makeLoad(ctx, pos, Type::f32, /*signed=*/false, 4, /*isAtomic=*/false);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 't':
+                    if (op == "f32.lt"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::LtFloat32);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 'm': {
+                switch (buf[5]) {
+                  case 'a':
+                    if (op == "f32.max"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::MaxFloat32);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 'i':
+                    if (op == "f32.min"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::MinFloat32);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 'u':
+                    if (op == "f32.mul"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::MulFloat32);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 'n': {
+                switch (buf[6]) {
+                  case '\0':
+                    if (op == "f32.ne"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::NeFloat32);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 'a':
+                    if (op == "f32.nearest"sv) {
+                      auto ret = makeUnary(ctx, pos, UnaryOp::NearestFloat32);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 'g':
+                    if (op == "f32.neg"sv) {
+                      auto ret = makeUnary(ctx, pos, UnaryOp::NegFloat32);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 'r':
+                if (op == "f32.reinterpret_i32"sv) {
+                  auto ret = makeUnary(ctx, pos, UnaryOp::ReinterpretInt32);
+                  CHECK_ERR(ret);
+                  return *ret;
+                }
+                goto parse_error;
+              case 's': {
+                switch (buf[5]) {
+                  case 'q':
+                    if (op == "f32.sqrt"sv) {
+                      auto ret = makeUnary(ctx, pos, UnaryOp::SqrtFloat32);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 't':
+                    if (op == "f32.store"sv) {
+                      auto ret = makeStore(ctx, pos, Type::f32, 4, /*isAtomic=*/false);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 'u':
+                    if (op == "f32.sub"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::SubFloat32);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 't':
+                if (op == "f32.trunc"sv) {
+                  auto ret = makeUnary(ctx, pos, UnaryOp::TruncFloat32);
+                  CHECK_ERR(ret);
+                  return *ret;
+                }
+                goto parse_error;
+              default: goto parse_error;
+            }
+          }
+          case 'x': {
+            switch (buf[6]) {
+              case 'a': {
+                switch (buf[7]) {
+                  case 'b':
+                    if (op == "f32x4.abs"sv) {
+                      auto ret = makeUnary(ctx, pos, UnaryOp::AbsVecF32x4);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 'd':
+                    if (op == "f32x4.add"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::AddVecF32x4);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 'c': {
+                switch (buf[7]) {
+                  case 'e':
+                    if (op == "f32x4.ceil"sv) {
+                      auto ret = makeUnary(ctx, pos, UnaryOp::CeilVecF32x4);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 'o': {
+                    switch (buf[20]) {
+                      case 's':
+                        if (op == "f32x4.convert_i32x4_s"sv) {
+                          auto ret = makeUnary(ctx, pos, UnaryOp::ConvertSVecI32x4ToVecF32x4);
+                          CHECK_E
