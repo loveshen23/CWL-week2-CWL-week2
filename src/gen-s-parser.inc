@@ -3287,4 +3287,322 @@ switch (buf[0]) {
                             if (op == "stringview_wtf16.get_codeunit"sv) { return makeStringWTF16Get(s); }
                             goto parse_error;
                           case 'l':
-                            if (op == "stringview_wtf16.length"sv) { return
+                            if (op == "stringview_wtf16.length"sv) { return makeStringMeasure(s, StringMeasureWTF16View); }
+                            goto parse_error;
+                          case 's':
+                            if (op == "stringview_wtf16.slice"sv) { return makeStringSliceWTF(s, StringSliceWTF16); }
+                            goto parse_error;
+                          default: goto parse_error;
+                        }
+                      }
+                      case '8': {
+                        switch (buf[16]) {
+                          case 'a':
+                            if (op == "stringview_wtf8.advance"sv) { return makeStringWTF8Advance(s); }
+                            goto parse_error;
+                          case 's':
+                            if (op == "stringview_wtf8.slice"sv) { return makeStringSliceWTF(s, StringSliceWTF8); }
+                            goto parse_error;
+                          default: goto parse_error;
+                        }
+                      }
+                      default: goto parse_error;
+                    }
+                  }
+                  default: goto parse_error;
+                }
+              }
+              default: goto parse_error;
+            }
+          }
+          case 'u': {
+            switch (buf[7]) {
+              case 'g': {
+                switch (buf[10]) {
+                  case '\0':
+                    if (op == "struct.get"sv) { return makeStructGet(s); }
+                    goto parse_error;
+                  case '_': {
+                    switch (buf[11]) {
+                      case 's':
+                        if (op == "struct.get_s"sv) { return makeStructGet(s, true); }
+                        goto parse_error;
+                      case 'u':
+                        if (op == "struct.get_u"sv) { return makeStructGet(s, false); }
+                        goto parse_error;
+                      default: goto parse_error;
+                    }
+                  }
+                  default: goto parse_error;
+                }
+              }
+              case 'n': {
+                switch (buf[10]) {
+                  case '\0':
+                    if (op == "struct.new"sv) { return makeStructNew(s, false); }
+                    goto parse_error;
+                  case '_':
+                    if (op == "struct.new_default"sv) { return makeStructNew(s, true); }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 's':
+                if (op == "struct.set"sv) { return makeStructSet(s); }
+                goto parse_error;
+              default: goto parse_error;
+            }
+          }
+          default: goto parse_error;
+        }
+      }
+      default: goto parse_error;
+    }
+  }
+  case 't': {
+    switch (buf[1]) {
+      case 'a': {
+        switch (buf[6]) {
+          case 'g': {
+            switch (buf[7]) {
+              case 'e':
+                if (op == "table.get"sv) { return makeTableGet(s); }
+                goto parse_error;
+              case 'r':
+                if (op == "table.grow"sv) { return makeTableGrow(s); }
+                goto parse_error;
+              default: goto parse_error;
+            }
+          }
+          case 's': {
+            switch (buf[7]) {
+              case 'e':
+                if (op == "table.set"sv) { return makeTableSet(s); }
+                goto parse_error;
+              case 'i':
+                if (op == "table.size"sv) { return makeTableSize(s); }
+                goto parse_error;
+              default: goto parse_error;
+            }
+          }
+          default: goto parse_error;
+        }
+      }
+      case 'h': {
+        switch (buf[2]) {
+          case 'e':
+            if (op == "then"sv) { return makeThenOrElse(s); }
+            goto parse_error;
+          case 'r':
+            if (op == "throw"sv) { return makeThrow(s); }
+            goto parse_error;
+          default: goto parse_error;
+        }
+      }
+      case 'r':
+        if (op == "try"sv) { return makeTry(s); }
+        goto parse_error;
+      case 'u': {
+        switch (buf[6]) {
+          case 'e':
+            if (op == "tuple.extract"sv) { return makeTupleExtract(s); }
+            goto parse_error;
+          case 'm':
+            if (op == "tuple.make"sv) { return makeTupleMake(s); }
+            goto parse_error;
+          default: goto parse_error;
+        }
+      }
+      default: goto parse_error;
+    }
+  }
+  case 'u':
+    if (op == "unreachable"sv) { return makeUnreachable(); }
+    goto parse_error;
+  case 'v': {
+    switch (buf[5]) {
+      case 'a': {
+        switch (buf[7]) {
+          case 'd': {
+            switch (buf[8]) {
+              case '\0':
+                if (op == "v128.and"sv) { return makeBinary(s, BinaryOp::AndVec128); }
+                goto parse_error;
+              case 'n':
+                if (op == "v128.andnot"sv) { return makeBinary(s, BinaryOp::AndNotVec128); }
+                goto parse_error;
+              default: goto parse_error;
+            }
+          }
+          case 'y':
+            if (op == "v128.any_true"sv) { return makeUnary(s, UnaryOp::AnyTrueVec128); }
+            goto parse_error;
+          default: goto parse_error;
+        }
+      }
+      case 'b':
+        if (op == "v128.bitselect"sv) { return makeSIMDTernary(s, SIMDTernaryOp::Bitselect); }
+        goto parse_error;
+      case 'c':
+        if (op == "v128.const"sv) { return makeConst(s, Type::v128); }
+        goto parse_error;
+      case 'l': {
+        switch (buf[9]) {
+          case '\0':
+            if (op == "v128.load"sv) { return makeLoad(s, Type::v128, /*signed=*/false, 16, /*isAtomic=*/false); }
+            goto parse_error;
+          case '1': {
+            switch (buf[11]) {
+              case '_': {
+                switch (buf[12]) {
+                  case 'l':
+                    if (op == "v128.load16_lane"sv) { return makeSIMDLoadStoreLane(s, SIMDLoadStoreLaneOp::Load16LaneVec128, 2); }
+                    goto parse_error;
+                  case 's':
+                    if (op == "v128.load16_splat"sv) { return makeSIMDLoad(s, SIMDLoadOp::Load16SplatVec128, 2); }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 'x': {
+                switch (buf[14]) {
+                  case 's':
+                    if (op == "v128.load16x4_s"sv) { return makeSIMDLoad(s, SIMDLoadOp::Load16x4SVec128, 8); }
+                    goto parse_error;
+                  case 'u':
+                    if (op == "v128.load16x4_u"sv) { return makeSIMDLoad(s, SIMDLoadOp::Load16x4UVec128, 8); }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              default: goto parse_error;
+            }
+          }
+          case '3': {
+            switch (buf[11]) {
+              case '_': {
+                switch (buf[12]) {
+                  case 'l':
+                    if (op == "v128.load32_lane"sv) { return makeSIMDLoadStoreLane(s, SIMDLoadStoreLaneOp::Load32LaneVec128, 4); }
+                    goto parse_error;
+                  case 's':
+                    if (op == "v128.load32_splat"sv) { return makeSIMDLoad(s, SIMDLoadOp::Load32SplatVec128, 4); }
+                    goto parse_error;
+                  case 'z':
+                    if (op == "v128.load32_zero"sv) { return makeSIMDLoad(s, SIMDLoadOp::Load32ZeroVec128, 4); }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 'x': {
+                switch (buf[14]) {
+                  case 's':
+                    if (op == "v128.load32x2_s"sv) { return makeSIMDLoad(s, SIMDLoadOp::Load32x2SVec128, 8); }
+                    goto parse_error;
+                  case 'u':
+                    if (op == "v128.load32x2_u"sv) { return makeSIMDLoad(s, SIMDLoadOp::Load32x2UVec128, 8); }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              default: goto parse_error;
+            }
+          }
+          case '6': {
+            switch (buf[12]) {
+              case 'l':
+                if (op == "v128.load64_lane"sv) { return makeSIMDLoadStoreLane(s, SIMDLoadStoreLaneOp::Load64LaneVec128, 8); }
+                goto parse_error;
+              case 's':
+                if (op == "v128.load64_splat"sv) { return makeSIMDLoad(s, SIMDLoadOp::Load64SplatVec128, 8); }
+                goto parse_error;
+              case 'z':
+                if (op == "v128.load64_zero"sv) { return makeSIMDLoad(s, SIMDLoadOp::Load64ZeroVec128, 8); }
+                goto parse_error;
+              default: goto parse_error;
+            }
+          }
+          case '8': {
+            switch (buf[10]) {
+              case '_': {
+                switch (buf[11]) {
+                  case 'l':
+                    if (op == "v128.load8_lane"sv) { return makeSIMDLoadStoreLane(s, SIMDLoadStoreLaneOp::Load8LaneVec128, 1); }
+                    goto parse_error;
+                  case 's':
+                    if (op == "v128.load8_splat"sv) { return makeSIMDLoad(s, SIMDLoadOp::Load8SplatVec128, 1); }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 'x': {
+                switch (buf[13]) {
+                  case 's':
+                    if (op == "v128.load8x8_s"sv) { return makeSIMDLoad(s, SIMDLoadOp::Load8x8SVec128, 8); }
+                    goto parse_error;
+                  case 'u':
+                    if (op == "v128.load8x8_u"sv) { return makeSIMDLoad(s, SIMDLoadOp::Load8x8UVec128, 8); }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              default: goto parse_error;
+            }
+          }
+          default: goto parse_error;
+        }
+      }
+      case 'n':
+        if (op == "v128.not"sv) { return makeUnary(s, UnaryOp::NotVec128); }
+        goto parse_error;
+      case 'o':
+        if (op == "v128.or"sv) { return makeBinary(s, BinaryOp::OrVec128); }
+        goto parse_error;
+      case 's': {
+        switch (buf[10]) {
+          case '\0':
+            if (op == "v128.store"sv) { return makeStore(s, Type::v128, 16, /*isAtomic=*/false); }
+            goto parse_error;
+          case '1':
+            if (op == "v128.store16_lane"sv) { return makeSIMDLoadStoreLane(s, SIMDLoadStoreLaneOp::Store16LaneVec128, 2); }
+            goto parse_error;
+          case '3':
+            if (op == "v128.store32_lane"sv) { return makeSIMDLoadStoreLane(s, SIMDLoadStoreLaneOp::Store32LaneVec128, 4); }
+            goto parse_error;
+          case '6':
+            if (op == "v128.store64_lane"sv) { return makeSIMDLoadStoreLane(s, SIMDLoadStoreLaneOp::Store64LaneVec128, 8); }
+            goto parse_error;
+          case '8':
+            if (op == "v128.store8_lane"sv) { return makeSIMDLoadStoreLane(s, SIMDLoadStoreLaneOp::Store8LaneVec128, 1); }
+            goto parse_error;
+          default: goto parse_error;
+        }
+      }
+      case 'x':
+        if (op == "v128.xor"sv) { return makeBinary(s, BinaryOp::XorVec128); }
+        goto parse_error;
+      default: goto parse_error;
+    }
+  }
+  default: goto parse_error;
+}
+parse_error:
+  throw ParseException(std::string(op), s.line, s.col);
+#endif // INSTRUCTION_PARSER
+
+#ifdef NEW_INSTRUCTION_PARSER
+#undef NEW_INSTRUCTION_PARSER
+auto op = *keyword;
+char buf[33] = {};
+memcpy(buf, op.data(), op.size());
+switch (buf[0]) {
+  case 'a': {
+    switch (buf[1]) {
+      case 'r': {
+        switch (buf[6]) {
+          case 'c':
+            if (op == "array.copy"sv) {
+              auto ret = makeArrayCopy(ctx, pos);
+              CHECK_ERR(ret);
+              return *ret;
+       
