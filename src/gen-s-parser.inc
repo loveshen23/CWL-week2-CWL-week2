@@ -3605,4 +3605,360 @@ switch (buf[0]) {
               auto ret = makeArrayCopy(ctx, pos);
               CHECK_ERR(ret);
               return *ret;
-       
+            }
+            goto parse_error;
+          case 'g': {
+            switch (buf[9]) {
+              case '\0':
+                if (op == "array.get"sv) {
+                  auto ret = makeArrayGet(ctx, pos);
+                  CHECK_ERR(ret);
+                  return *ret;
+                }
+                goto parse_error;
+              case '_': {
+                switch (buf[10]) {
+                  case 's':
+                    if (op == "array.get_s"sv) {
+                      auto ret = makeArrayGet(ctx, pos, true);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 'u':
+                    if (op == "array.get_u"sv) {
+                      auto ret = makeArrayGet(ctx, pos, false);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              default: goto parse_error;
+            }
+          }
+          case 'i':
+            if (op == "array.init_static"sv) {
+              auto ret = makeArrayNewFixed(ctx, pos);
+              CHECK_ERR(ret);
+              return *ret;
+            }
+            goto parse_error;
+          case 'l':
+            if (op == "array.len"sv) {
+              auto ret = makeArrayLen(ctx, pos);
+              CHECK_ERR(ret);
+              return *ret;
+            }
+            goto parse_error;
+          case 'n': {
+            switch (buf[9]) {
+              case '\0':
+                if (op == "array.new"sv) {
+                  auto ret = makeArrayNew(ctx, pos, false);
+                  CHECK_ERR(ret);
+                  return *ret;
+                }
+                goto parse_error;
+              case '_': {
+                switch (buf[10]) {
+                  case 'd': {
+                    switch (buf[11]) {
+                      case 'a':
+                        if (op == "array.new_data"sv) {
+                          auto ret = makeArrayNewSeg(ctx, pos, NewData);
+                          CHECK_ERR(ret);
+                          return *ret;
+                        }
+                        goto parse_error;
+                      case 'e':
+                        if (op == "array.new_default"sv) {
+                          auto ret = makeArrayNew(ctx, pos, true);
+                          CHECK_ERR(ret);
+                          return *ret;
+                        }
+                        goto parse_error;
+                      default: goto parse_error;
+                    }
+                  }
+                  case 'e':
+                    if (op == "array.new_elem"sv) {
+                      auto ret = makeArrayNewSeg(ctx, pos, NewElem);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 'f':
+                    if (op == "array.new_fixed"sv) {
+                      auto ret = makeArrayNewFixed(ctx, pos);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              default: goto parse_error;
+            }
+          }
+          case 's':
+            if (op == "array.set"sv) {
+              auto ret = makeArraySet(ctx, pos);
+              CHECK_ERR(ret);
+              return *ret;
+            }
+            goto parse_error;
+          default: goto parse_error;
+        }
+      }
+      case 't':
+        if (op == "atomic.fence"sv) {
+          auto ret = makeAtomicFence(ctx, pos);
+          CHECK_ERR(ret);
+          return *ret;
+        }
+        goto parse_error;
+      default: goto parse_error;
+    }
+  }
+  case 'b': {
+    switch (buf[1]) {
+      case 'l':
+        if (op == "block"sv) {
+          auto ret = makeBlock(ctx, pos);
+          CHECK_ERR(ret);
+          return *ret;
+        }
+        goto parse_error;
+      case 'r': {
+        switch (buf[2]) {
+          case '\0':
+            if (op == "br"sv) {
+              auto ret = makeBreak(ctx, pos);
+              CHECK_ERR(ret);
+              return *ret;
+            }
+            goto parse_error;
+          case '_': {
+            switch (buf[3]) {
+              case 'i':
+                if (op == "br_if"sv) {
+                  auto ret = makeBreak(ctx, pos);
+                  CHECK_ERR(ret);
+                  return *ret;
+                }
+                goto parse_error;
+              case 'o': {
+                switch (buf[6]) {
+                  case 'c': {
+                    switch (buf[10]) {
+                      case '\0':
+                        if (op == "br_on_cast"sv) {
+                          auto ret = makeBrOnCast(ctx, pos, std::nullopt);
+                          CHECK_ERR(ret);
+                          return *ret;
+                        }
+                        goto parse_error;
+                      case '_': {
+                        switch (buf[11]) {
+                          case 'f':
+                            if (op == "br_on_cast_fail"sv) {
+                              auto ret = makeBrOnCast(ctx, pos, std::nullopt, true);
+                              CHECK_ERR(ret);
+                              return *ret;
+                            }
+                            goto parse_error;
+                          case 's': {
+                            switch (buf[17]) {
+                              case '\0':
+                                if (op == "br_on_cast_static"sv) {
+                                  auto ret = makeBrOnCast(ctx, pos, std::nullopt);
+                                  CHECK_ERR(ret);
+                                  return *ret;
+                                }
+                                goto parse_error;
+                              case '_':
+                                if (op == "br_on_cast_static_fail"sv) {
+                                  auto ret = makeBrOnCast(ctx, pos, std::nullopt, true);
+                                  CHECK_ERR(ret);
+                                  return *ret;
+                                }
+                                goto parse_error;
+                              default: goto parse_error;
+                            }
+                          }
+                          default: goto parse_error;
+                        }
+                      }
+                      default: goto parse_error;
+                    }
+                  }
+                  case 'f':
+                    if (op == "br_on_func"sv) {
+                      auto ret = makeBrOnCast(ctx, pos, Type(HeapType::func, NonNullable));
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 'i':
+                    if (op == "br_on_i31"sv) {
+                      auto ret = makeBrOnCast(ctx, pos, Type(HeapType::i31, NonNullable));
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 'n': {
+                    switch (buf[7]) {
+                      case 'o': {
+                        switch (buf[10]) {
+                          case 'f':
+                            if (op == "br_on_non_func"sv) {
+                              auto ret = makeBrOnCast(ctx, pos, Type(HeapType::func, NonNullable), true);
+                              CHECK_ERR(ret);
+                              return *ret;
+                            }
+                            goto parse_error;
+                          case 'i':
+                            if (op == "br_on_non_i31"sv) {
+                              auto ret = makeBrOnCast(ctx, pos, Type(HeapType::i31, NonNullable), true);
+                              CHECK_ERR(ret);
+                              return *ret;
+                            }
+                            goto parse_error;
+                          case 'n':
+                            if (op == "br_on_non_null"sv) {
+                              auto ret = makeBrOnNull(ctx, pos, true);
+                              CHECK_ERR(ret);
+                              return *ret;
+                            }
+                            goto parse_error;
+                          default: goto parse_error;
+                        }
+                      }
+                      case 'u':
+                        if (op == "br_on_null"sv) {
+                          auto ret = makeBrOnNull(ctx, pos);
+                          CHECK_ERR(ret);
+                          return *ret;
+                        }
+                        goto parse_error;
+                      default: goto parse_error;
+                    }
+                  }
+                  default: goto parse_error;
+                }
+              }
+              case 't':
+                if (op == "br_table"sv) {
+                  auto ret = makeBreakTable(ctx, pos);
+                  CHECK_ERR(ret);
+                  return *ret;
+                }
+                goto parse_error;
+              default: goto parse_error;
+            }
+          }
+          default: goto parse_error;
+        }
+      }
+      default: goto parse_error;
+    }
+  }
+  case 'c': {
+    switch (buf[4]) {
+      case '\0':
+        if (op == "call"sv) {
+          auto ret = makeCall(ctx, pos, /*isReturn=*/false);
+          CHECK_ERR(ret);
+          return *ret;
+        }
+        goto parse_error;
+      case '_': {
+        switch (buf[5]) {
+          case 'i':
+            if (op == "call_indirect"sv) {
+              auto ret = makeCallIndirect(ctx, pos, /*isReturn=*/false);
+              CHECK_ERR(ret);
+              return *ret;
+            }
+            goto parse_error;
+          case 'r':
+            if (op == "call_ref"sv) {
+              auto ret = makeCallRef(ctx, pos, /*isReturn=*/false);
+              CHECK_ERR(ret);
+              return *ret;
+            }
+            goto parse_error;
+          default: goto parse_error;
+        }
+      }
+      default: goto parse_error;
+    }
+  }
+  case 'd': {
+    switch (buf[1]) {
+      case 'a':
+        if (op == "data.drop"sv) {
+          auto ret = makeDataDrop(ctx, pos);
+          CHECK_ERR(ret);
+          return *ret;
+        }
+        goto parse_error;
+      case 'r':
+        if (op == "drop"sv) {
+          auto ret = makeDrop(ctx, pos);
+          CHECK_ERR(ret);
+          return *ret;
+        }
+        goto parse_error;
+      default: goto parse_error;
+    }
+  }
+  case 'e': {
+    switch (buf[1]) {
+      case 'l':
+        if (op == "else"sv) {
+          auto ret = makeThenOrElse(ctx, pos);
+          CHECK_ERR(ret);
+          return *ret;
+        }
+        goto parse_error;
+      case 'x': {
+        switch (buf[7]) {
+          case 'e':
+            if (op == "extern.externalize"sv) {
+              auto ret = makeRefAs(ctx, pos, ExternExternalize);
+              CHECK_ERR(ret);
+              return *ret;
+            }
+            goto parse_error;
+          case 'i':
+            if (op == "extern.internalize"sv) {
+              auto ret = makeRefAs(ctx, pos, ExternInternalize);
+              CHECK_ERR(ret);
+              return *ret;
+            }
+            goto parse_error;
+          default: goto parse_error;
+        }
+      }
+      default: goto parse_error;
+    }
+  }
+  case 'f': {
+    switch (buf[1]) {
+      case '3': {
+        switch (buf[3]) {
+          case '.': {
+            switch (buf[4]) {
+              case 'a': {
+                switch (buf[5]) {
+                  case 'b':
+                    if (op == "f32.abs"sv) {
+                      auto ret = makeUnary(ctx, pos, UnaryOp::AbsFloat32);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  
