@@ -4258,4 +4258,313 @@ switch (buf[0]) {
                       case 's':
                         if (op == "f32x4.convert_i32x4_s"sv) {
                           auto ret = makeUnary(ctx, pos, UnaryOp::ConvertSVecI32x4ToVecF32x4);
-                          CHECK_E
+                          CHECK_ERR(ret);
+                          return *ret;
+                        }
+                        goto parse_error;
+                      case 'u':
+                        if (op == "f32x4.convert_i32x4_u"sv) {
+                          auto ret = makeUnary(ctx, pos, UnaryOp::ConvertUVecI32x4ToVecF32x4);
+                          CHECK_ERR(ret);
+                          return *ret;
+                        }
+                        goto parse_error;
+                      default: goto parse_error;
+                    }
+                  }
+                  default: goto parse_error;
+                }
+              }
+              case 'd': {
+                switch (buf[7]) {
+                  case 'e':
+                    if (op == "f32x4.demote_f64x2_zero"sv) {
+                      auto ret = makeUnary(ctx, pos, UnaryOp::DemoteZeroVecF64x2ToVecF32x4);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 'i':
+                    if (op == "f32x4.div"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::DivVecF32x4);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 'e': {
+                switch (buf[7]) {
+                  case 'q':
+                    if (op == "f32x4.eq"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::EqVecF32x4);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 'x':
+                    if (op == "f32x4.extract_lane"sv) {
+                      auto ret = makeSIMDExtract(ctx, pos, SIMDExtractOp::ExtractLaneVecF32x4, 4);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 'f':
+                if (op == "f32x4.floor"sv) {
+                  auto ret = makeUnary(ctx, pos, UnaryOp::FloorVecF32x4);
+                  CHECK_ERR(ret);
+                  return *ret;
+                }
+                goto parse_error;
+              case 'g': {
+                switch (buf[7]) {
+                  case 'e':
+                    if (op == "f32x4.ge"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::GeVecF32x4);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 't':
+                    if (op == "f32x4.gt"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::GtVecF32x4);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 'l': {
+                switch (buf[7]) {
+                  case 'e':
+                    if (op == "f32x4.le"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::LeVecF32x4);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 't':
+                    if (op == "f32x4.lt"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::LtVecF32x4);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 'm': {
+                switch (buf[7]) {
+                  case 'a':
+                    if (op == "f32x4.max"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::MaxVecF32x4);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 'i':
+                    if (op == "f32x4.min"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::MinVecF32x4);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 'u':
+                    if (op == "f32x4.mul"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::MulVecF32x4);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 'n': {
+                switch (buf[8]) {
+                  case '\0':
+                    if (op == "f32x4.ne"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::NeVecF32x4);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 'a':
+                    if (op == "f32x4.nearest"sv) {
+                      auto ret = makeUnary(ctx, pos, UnaryOp::NearestVecF32x4);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 'g':
+                    if (op == "f32x4.neg"sv) {
+                      auto ret = makeUnary(ctx, pos, UnaryOp::NegVecF32x4);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 'p': {
+                switch (buf[8]) {
+                  case 'a':
+                    if (op == "f32x4.pmax"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::PMaxVecF32x4);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 'i':
+                    if (op == "f32x4.pmin"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::PMinVecF32x4);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 'r': {
+                switch (buf[8]) {
+                  case 'l': {
+                    switch (buf[14]) {
+                      case 'f': {
+                        switch (buf[16]) {
+                          case 'a':
+                            if (op == "f32x4.relaxed_fma"sv) {
+                              auto ret = makeSIMDTernary(ctx, pos, SIMDTernaryOp::RelaxedFmaVecF32x4);
+                              CHECK_ERR(ret);
+                              return *ret;
+                            }
+                            goto parse_error;
+                          case 's':
+                            if (op == "f32x4.relaxed_fms"sv) {
+                              auto ret = makeSIMDTernary(ctx, pos, SIMDTernaryOp::RelaxedFmsVecF32x4);
+                              CHECK_ERR(ret);
+                              return *ret;
+                            }
+                            goto parse_error;
+                          default: goto parse_error;
+                        }
+                      }
+                      case 'm': {
+                        switch (buf[15]) {
+                          case 'a':
+                            if (op == "f32x4.relaxed_max"sv) {
+                              auto ret = makeBinary(ctx, pos, BinaryOp::RelaxedMaxVecF32x4);
+                              CHECK_ERR(ret);
+                              return *ret;
+                            }
+                            goto parse_error;
+                          case 'i':
+                            if (op == "f32x4.relaxed_min"sv) {
+                              auto ret = makeBinary(ctx, pos, BinaryOp::RelaxedMinVecF32x4);
+                              CHECK_ERR(ret);
+                              return *ret;
+                            }
+                            goto parse_error;
+                          default: goto parse_error;
+                        }
+                      }
+                      default: goto parse_error;
+                    }
+                  }
+                  case 'p':
+                    if (op == "f32x4.replace_lane"sv) {
+                      auto ret = makeSIMDReplace(ctx, pos, SIMDReplaceOp::ReplaceLaneVecF32x4, 4);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 's': {
+                switch (buf[7]) {
+                  case 'p':
+                    if (op == "f32x4.splat"sv) {
+                      auto ret = makeUnary(ctx, pos, UnaryOp::SplatVecF32x4);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 'q':
+                    if (op == "f32x4.sqrt"sv) {
+                      auto ret = makeUnary(ctx, pos, UnaryOp::SqrtVecF32x4);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 'u':
+                    if (op == "f32x4.sub"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::SubVecF32x4);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 't':
+                if (op == "f32x4.trunc"sv) {
+                  auto ret = makeUnary(ctx, pos, UnaryOp::TruncVecF32x4);
+                  CHECK_ERR(ret);
+                  return *ret;
+                }
+                goto parse_error;
+              default: goto parse_error;
+            }
+          }
+          default: goto parse_error;
+        }
+      }
+      case '6': {
+        switch (buf[3]) {
+          case '.': {
+            switch (buf[4]) {
+              case 'a': {
+                switch (buf[5]) {
+                  case 'b':
+                    if (op == "f64.abs"sv) {
+                      auto ret = makeUnary(ctx, pos, UnaryOp::AbsFloat64);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 'd':
+                    if (op == "f64.add"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::AddFloat64);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 'c': {
+                switch (buf[5]) {
+                  case 'e':
+                    if (op == "f64.ceil"sv) {
+                      auto ret = makeUnary(ctx, pos, UnaryOp::CeilFloat64);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 'o': {
+                    switch (buf[6]) {
+                      case 'n': {
+                        switch (buf[7]) {
+                          case 's':
+                            if (op == "f64.const"sv) {
+                              auto ret = makeConst(ctx, pos, Type::f64);
+                              CHECK_ERR(ret);
+                              return *ret;
+                            }
+                            goto parse_error;
+                          case 'v': {
+           
