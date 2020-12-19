@@ -5756,4 +5756,225 @@ switch (buf[0]) {
                                         goto parse_error;
                                       case 'o':
                                         if (op == "i32.atomic.rmw.xor"sv) {
-                                          auto ret = makeAtom
+                                          auto ret = makeAtomicRMW(ctx, pos, AtomicRMWOp::RMWXor, Type::i32, 4);
+                                          CHECK_ERR(ret);
+                                          return *ret;
+                                        }
+                                        goto parse_error;
+                                      default: goto parse_error;
+                                    }
+                                  }
+                                  default: goto parse_error;
+                                }
+                              }
+                              case '1': {
+                                switch (buf[17]) {
+                                  case 'a': {
+                                    switch (buf[18]) {
+                                      case 'd':
+                                        if (op == "i32.atomic.rmw16.add_u"sv) {
+                                          auto ret = makeAtomicRMW(ctx, pos, AtomicRMWOp::RMWAdd, Type::i32, 2);
+                                          CHECK_ERR(ret);
+                                          return *ret;
+                                        }
+                                        goto parse_error;
+                                      case 'n':
+                                        if (op == "i32.atomic.rmw16.and_u"sv) {
+                                          auto ret = makeAtomicRMW(ctx, pos, AtomicRMWOp::RMWAnd, Type::i32, 2);
+                                          CHECK_ERR(ret);
+                                          return *ret;
+                                        }
+                                        goto parse_error;
+                                      default: goto parse_error;
+                                    }
+                                  }
+                                  case 'c':
+                                    if (op == "i32.atomic.rmw16.cmpxchg_u"sv) {
+                                      auto ret = makeAtomicCmpxchg(ctx, pos, Type::i32, 2);
+                                      CHECK_ERR(ret);
+                                      return *ret;
+                                    }
+                                    goto parse_error;
+                                  case 'o':
+                                    if (op == "i32.atomic.rmw16.or_u"sv) {
+                                      auto ret = makeAtomicRMW(ctx, pos, AtomicRMWOp::RMWOr, Type::i32, 2);
+                                      CHECK_ERR(ret);
+                                      return *ret;
+                                    }
+                                    goto parse_error;
+                                  case 's':
+                                    if (op == "i32.atomic.rmw16.sub_u"sv) {
+                                      auto ret = makeAtomicRMW(ctx, pos, AtomicRMWOp::RMWSub, Type::i32, 2);
+                                      CHECK_ERR(ret);
+                                      return *ret;
+                                    }
+                                    goto parse_error;
+                                  case 'x': {
+                                    switch (buf[18]) {
+                                      case 'c':
+                                        if (op == "i32.atomic.rmw16.xchg_u"sv) {
+                                          auto ret = makeAtomicRMW(ctx, pos, AtomicRMWOp::RMWXchg, Type::i32, 2);
+                                          CHECK_ERR(ret);
+                                          return *ret;
+                                        }
+                                        goto parse_error;
+                                      case 'o':
+                                        if (op == "i32.atomic.rmw16.xor_u"sv) {
+                                          auto ret = makeAtomicRMW(ctx, pos, AtomicRMWOp::RMWXor, Type::i32, 2);
+                                          CHECK_ERR(ret);
+                                          return *ret;
+                                        }
+                                        goto parse_error;
+                                      default: goto parse_error;
+                                    }
+                                  }
+                                  default: goto parse_error;
+                                }
+                              }
+                              case '8': {
+                                switch (buf[16]) {
+                                  case 'a': {
+                                    switch (buf[17]) {
+                                      case 'd':
+                                        if (op == "i32.atomic.rmw8.add_u"sv) {
+                                          auto ret = makeAtomicRMW(ctx, pos, AtomicRMWOp::RMWAdd, Type::i32, 1);
+                                          CHECK_ERR(ret);
+                                          return *ret;
+                                        }
+                                        goto parse_error;
+                                      case 'n':
+                                        if (op == "i32.atomic.rmw8.and_u"sv) {
+                                          auto ret = makeAtomicRMW(ctx, pos, AtomicRMWOp::RMWAnd, Type::i32, 1);
+                                          CHECK_ERR(ret);
+                                          return *ret;
+                                        }
+                                        goto parse_error;
+                                      default: goto parse_error;
+                                    }
+                                  }
+                                  case 'c':
+                                    if (op == "i32.atomic.rmw8.cmpxchg_u"sv) {
+                                      auto ret = makeAtomicCmpxchg(ctx, pos, Type::i32, 1);
+                                      CHECK_ERR(ret);
+                                      return *ret;
+                                    }
+                                    goto parse_error;
+                                  case 'o':
+                                    if (op == "i32.atomic.rmw8.or_u"sv) {
+                                      auto ret = makeAtomicRMW(ctx, pos, AtomicRMWOp::RMWOr, Type::i32, 1);
+                                      CHECK_ERR(ret);
+                                      return *ret;
+                                    }
+                                    goto parse_error;
+                                  case 's':
+                                    if (op == "i32.atomic.rmw8.sub_u"sv) {
+                                      auto ret = makeAtomicRMW(ctx, pos, AtomicRMWOp::RMWSub, Type::i32, 1);
+                                      CHECK_ERR(ret);
+                                      return *ret;
+                                    }
+                                    goto parse_error;
+                                  case 'x': {
+                                    switch (buf[17]) {
+                                      case 'c':
+                                        if (op == "i32.atomic.rmw8.xchg_u"sv) {
+                                          auto ret = makeAtomicRMW(ctx, pos, AtomicRMWOp::RMWXchg, Type::i32, 1);
+                                          CHECK_ERR(ret);
+                                          return *ret;
+                                        }
+                                        goto parse_error;
+                                      case 'o':
+                                        if (op == "i32.atomic.rmw8.xor_u"sv) {
+                                          auto ret = makeAtomicRMW(ctx, pos, AtomicRMWOp::RMWXor, Type::i32, 1);
+                                          CHECK_ERR(ret);
+                                          return *ret;
+                                        }
+                                        goto parse_error;
+                                      default: goto parse_error;
+                                    }
+                                  }
+                                  default: goto parse_error;
+                                }
+                              }
+                              default: goto parse_error;
+                            }
+                          }
+                          case 's': {
+                            switch (buf[16]) {
+                              case '\0':
+                                if (op == "i32.atomic.store"sv) {
+                                  auto ret = makeStore(ctx, pos, Type::i32, 4, /*isAtomic=*/true);
+                                  CHECK_ERR(ret);
+                                  return *ret;
+                                }
+                                goto parse_error;
+                              case '1':
+                                if (op == "i32.atomic.store16"sv) {
+                                  auto ret = makeStore(ctx, pos, Type::i32, 2, /*isAtomic=*/true);
+                                  CHECK_ERR(ret);
+                                  return *ret;
+                                }
+                                goto parse_error;
+                              case '8':
+                                if (op == "i32.atomic.store8"sv) {
+                                  auto ret = makeStore(ctx, pos, Type::i32, 1, /*isAtomic=*/true);
+                                  CHECK_ERR(ret);
+                                  return *ret;
+                                }
+                                goto parse_error;
+                              default: goto parse_error;
+                            }
+                          }
+                          default: goto parse_error;
+                        }
+                      }
+                      default: goto parse_error;
+                    }
+                  }
+                  case 'c': {
+                    switch (buf[5]) {
+                      case 'l':
+                        if (op == "i32.clz"sv) {
+                          auto ret = makeUnary(ctx, pos, UnaryOp::ClzInt32);
+                          CHECK_ERR(ret);
+                          return *ret;
+                        }
+                        goto parse_error;
+                      case 'o':
+                        if (op == "i32.const"sv) {
+                          auto ret = makeConst(ctx, pos, Type::i32);
+                          CHECK_ERR(ret);
+                          return *ret;
+                        }
+                        goto parse_error;
+                      case 't':
+                        if (op == "i32.ctz"sv) {
+                          auto ret = makeUnary(ctx, pos, UnaryOp::CtzInt32);
+                          CHECK_ERR(ret);
+                          return *ret;
+                        }
+                        goto parse_error;
+                      default: goto parse_error;
+                    }
+                  }
+                  case 'd': {
+                    switch (buf[8]) {
+                      case 's':
+                        if (op == "i32.div_s"sv) {
+                          auto ret = makeBinary(ctx, pos, BinaryOp::DivSInt32);
+                          CHECK_ERR(ret);
+                          return *ret;
+                        }
+                        goto parse_error;
+                      case 'u':
+                        if (op == "i32.div_u"sv) {
+                          auto ret = makeBinary(ctx, pos, BinaryOp::DivUInt32);
+                          CHECK_ERR(ret);
+                          return *ret;
+                        }
+                        goto parse_error;
+                      default: goto parse_error;
+                    }
+                  }
+                  case 'e': {
+                    switch (buf[5]) {
+          
