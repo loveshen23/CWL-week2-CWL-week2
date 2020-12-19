@@ -5480,4 +5480,280 @@ switch (buf[0]) {
                 switch (buf[19]) {
                   case 's':
                     if (op == "i16x8.narrow_i32x4_s"sv) {
-                      auto ret = makeBinary(ctx, pos, BinaryOp::
+                      auto ret = makeBinary(ctx, pos, BinaryOp::NarrowSVecI32x4ToVecI16x8);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 'u':
+                    if (op == "i16x8.narrow_i32x4_u"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::NarrowUVecI32x4ToVecI16x8);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 'e': {
+                switch (buf[8]) {
+                  case '\0':
+                    if (op == "i16x8.ne"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::NeVecI16x8);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 'g':
+                    if (op == "i16x8.neg"sv) {
+                      auto ret = makeUnary(ctx, pos, UnaryOp::NegVecI16x8);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              default: goto parse_error;
+            }
+          }
+          case 'q':
+            if (op == "i16x8.q15mulr_sat_s"sv) {
+              auto ret = makeBinary(ctx, pos, BinaryOp::Q15MulrSatSVecI16x8);
+              CHECK_ERR(ret);
+              return *ret;
+            }
+            goto parse_error;
+          case 'r': {
+            switch (buf[8]) {
+              case 'l':
+                if (op == "i16x8.relaxed_q15mulr_s"sv) {
+                  auto ret = makeBinary(ctx, pos, BinaryOp::RelaxedQ15MulrSVecI16x8);
+                  CHECK_ERR(ret);
+                  return *ret;
+                }
+                goto parse_error;
+              case 'p':
+                if (op == "i16x8.replace_lane"sv) {
+                  auto ret = makeSIMDReplace(ctx, pos, SIMDReplaceOp::ReplaceLaneVecI16x8, 8);
+                  CHECK_ERR(ret);
+                  return *ret;
+                }
+                goto parse_error;
+              default: goto parse_error;
+            }
+          }
+          case 's': {
+            switch (buf[7]) {
+              case 'h': {
+                switch (buf[8]) {
+                  case 'l':
+                    if (op == "i16x8.shl"sv) {
+                      auto ret = makeSIMDShift(ctx, pos, SIMDShiftOp::ShlVecI16x8);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 'r': {
+                    switch (buf[10]) {
+                      case 's':
+                        if (op == "i16x8.shr_s"sv) {
+                          auto ret = makeSIMDShift(ctx, pos, SIMDShiftOp::ShrSVecI16x8);
+                          CHECK_ERR(ret);
+                          return *ret;
+                        }
+                        goto parse_error;
+                      case 'u':
+                        if (op == "i16x8.shr_u"sv) {
+                          auto ret = makeSIMDShift(ctx, pos, SIMDShiftOp::ShrUVecI16x8);
+                          CHECK_ERR(ret);
+                          return *ret;
+                        }
+                        goto parse_error;
+                      default: goto parse_error;
+                    }
+                  }
+                  default: goto parse_error;
+                }
+              }
+              case 'p':
+                if (op == "i16x8.splat"sv) {
+                  auto ret = makeUnary(ctx, pos, UnaryOp::SplatVecI16x8);
+                  CHECK_ERR(ret);
+                  return *ret;
+                }
+                goto parse_error;
+              case 'u': {
+                switch (buf[9]) {
+                  case '\0':
+                    if (op == "i16x8.sub"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::SubVecI16x8);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case '_': {
+                    switch (buf[14]) {
+                      case 's':
+                        if (op == "i16x8.sub_sat_s"sv) {
+                          auto ret = makeBinary(ctx, pos, BinaryOp::SubSatSVecI16x8);
+                          CHECK_ERR(ret);
+                          return *ret;
+                        }
+                        goto parse_error;
+                      case 'u':
+                        if (op == "i16x8.sub_sat_u"sv) {
+                          auto ret = makeBinary(ctx, pos, BinaryOp::SubSatUVecI16x8);
+                          CHECK_ERR(ret);
+                          return *ret;
+                        }
+                        goto parse_error;
+                      default: goto parse_error;
+                    }
+                  }
+                  default: goto parse_error;
+                }
+              }
+              default: goto parse_error;
+            }
+          }
+          default: goto parse_error;
+        }
+      }
+      case '3': {
+        switch (buf[2]) {
+          case '1': {
+            switch (buf[4]) {
+              case 'g': {
+                switch (buf[8]) {
+                  case 's':
+                    if (op == "i31.get_s"sv) {
+                      auto ret = makeI31Get(ctx, pos, true);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 'u':
+                    if (op == "i31.get_u"sv) {
+                      auto ret = makeI31Get(ctx, pos, false);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 'n':
+                if (op == "i31.new"sv) {
+                  auto ret = makeI31New(ctx, pos);
+                  CHECK_ERR(ret);
+                  return *ret;
+                }
+                goto parse_error;
+              default: goto parse_error;
+            }
+          }
+          case '2': {
+            switch (buf[3]) {
+              case '.': {
+                switch (buf[4]) {
+                  case 'a': {
+                    switch (buf[5]) {
+                      case 'd':
+                        if (op == "i32.add"sv) {
+                          auto ret = makeBinary(ctx, pos, BinaryOp::AddInt32);
+                          CHECK_ERR(ret);
+                          return *ret;
+                        }
+                        goto parse_error;
+                      case 'n':
+                        if (op == "i32.and"sv) {
+                          auto ret = makeBinary(ctx, pos, BinaryOp::AndInt32);
+                          CHECK_ERR(ret);
+                          return *ret;
+                        }
+                        goto parse_error;
+                      case 't': {
+                        switch (buf[11]) {
+                          case 'l': {
+                            switch (buf[15]) {
+                              case '\0':
+                                if (op == "i32.atomic.load"sv) {
+                                  auto ret = makeLoad(ctx, pos, Type::i32, /*signed=*/false, 4, /*isAtomic=*/true);
+                                  CHECK_ERR(ret);
+                                  return *ret;
+                                }
+                                goto parse_error;
+                              case '1':
+                                if (op == "i32.atomic.load16_u"sv) {
+                                  auto ret = makeLoad(ctx, pos, Type::i32, /*signed=*/false, 2, /*isAtomic=*/true);
+                                  CHECK_ERR(ret);
+                                  return *ret;
+                                }
+                                goto parse_error;
+                              case '8':
+                                if (op == "i32.atomic.load8_u"sv) {
+                                  auto ret = makeLoad(ctx, pos, Type::i32, /*signed=*/false, 1, /*isAtomic=*/true);
+                                  CHECK_ERR(ret);
+                                  return *ret;
+                                }
+                                goto parse_error;
+                              default: goto parse_error;
+                            }
+                          }
+                          case 'r': {
+                            switch (buf[14]) {
+                              case '.': {
+                                switch (buf[15]) {
+                                  case 'a': {
+                                    switch (buf[16]) {
+                                      case 'd':
+                                        if (op == "i32.atomic.rmw.add"sv) {
+                                          auto ret = makeAtomicRMW(ctx, pos, AtomicRMWOp::RMWAdd, Type::i32, 4);
+                                          CHECK_ERR(ret);
+                                          return *ret;
+                                        }
+                                        goto parse_error;
+                                      case 'n':
+                                        if (op == "i32.atomic.rmw.and"sv) {
+                                          auto ret = makeAtomicRMW(ctx, pos, AtomicRMWOp::RMWAnd, Type::i32, 4);
+                                          CHECK_ERR(ret);
+                                          return *ret;
+                                        }
+                                        goto parse_error;
+                                      default: goto parse_error;
+                                    }
+                                  }
+                                  case 'c':
+                                    if (op == "i32.atomic.rmw.cmpxchg"sv) {
+                                      auto ret = makeAtomicCmpxchg(ctx, pos, Type::i32, 4);
+                                      CHECK_ERR(ret);
+                                      return *ret;
+                                    }
+                                    goto parse_error;
+                                  case 'o':
+                                    if (op == "i32.atomic.rmw.or"sv) {
+                                      auto ret = makeAtomicRMW(ctx, pos, AtomicRMWOp::RMWOr, Type::i32, 4);
+                                      CHECK_ERR(ret);
+                                      return *ret;
+                                    }
+                                    goto parse_error;
+                                  case 's':
+                                    if (op == "i32.atomic.rmw.sub"sv) {
+                                      auto ret = makeAtomicRMW(ctx, pos, AtomicRMWOp::RMWSub, Type::i32, 4);
+                                      CHECK_ERR(ret);
+                                      return *ret;
+                                    }
+                                    goto parse_error;
+                                  case 'x': {
+                                    switch (buf[16]) {
+                                      case 'c':
+                                        if (op == "i32.atomic.rmw.xchg"sv) {
+                                          auto ret = makeAtomicRMW(ctx, pos, AtomicRMWOp::RMWXchg, Type::i32, 4);
+                                          CHECK_ERR(ret);
+                                          return *ret;
+                                        }
+                                        goto parse_error;
+                                      case 'o':
+                                        if (op == "i32.atomic.rmw.xor"sv) {
+                                          auto ret = makeAtom
