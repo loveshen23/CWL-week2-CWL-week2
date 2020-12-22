@@ -5977,4 +5977,270 @@ switch (buf[0]) {
                   }
                   case 'e': {
                     switch (buf[5]) {
-          
+                      case 'q': {
+                        switch (buf[6]) {
+                          case '\0':
+                            if (op == "i32.eq"sv) {
+                              auto ret = makeBinary(ctx, pos, BinaryOp::EqInt32);
+                              CHECK_ERR(ret);
+                              return *ret;
+                            }
+                            goto parse_error;
+                          case 'z':
+                            if (op == "i32.eqz"sv) {
+                              auto ret = makeUnary(ctx, pos, UnaryOp::EqZInt32);
+                              CHECK_ERR(ret);
+                              return *ret;
+                            }
+                            goto parse_error;
+                          default: goto parse_error;
+                        }
+                      }
+                      case 'x': {
+                        switch (buf[10]) {
+                          case '1':
+                            if (op == "i32.extend16_s"sv) {
+                              auto ret = makeUnary(ctx, pos, UnaryOp::ExtendS16Int32);
+                              CHECK_ERR(ret);
+                              return *ret;
+                            }
+                            goto parse_error;
+                          case '8':
+                            if (op == "i32.extend8_s"sv) {
+                              auto ret = makeUnary(ctx, pos, UnaryOp::ExtendS8Int32);
+                              CHECK_ERR(ret);
+                              return *ret;
+                            }
+                            goto parse_error;
+                          default: goto parse_error;
+                        }
+                      }
+                      default: goto parse_error;
+                    }
+                  }
+                  case 'g': {
+                    switch (buf[5]) {
+                      case 'e': {
+                        switch (buf[7]) {
+                          case 's':
+                            if (op == "i32.ge_s"sv) {
+                              auto ret = makeBinary(ctx, pos, BinaryOp::GeSInt32);
+                              CHECK_ERR(ret);
+                              return *ret;
+                            }
+                            goto parse_error;
+                          case 'u':
+                            if (op == "i32.ge_u"sv) {
+                              auto ret = makeBinary(ctx, pos, BinaryOp::GeUInt32);
+                              CHECK_ERR(ret);
+                              return *ret;
+                            }
+                            goto parse_error;
+                          default: goto parse_error;
+                        }
+                      }
+                      case 't': {
+                        switch (buf[7]) {
+                          case 's':
+                            if (op == "i32.gt_s"sv) {
+                              auto ret = makeBinary(ctx, pos, BinaryOp::GtSInt32);
+                              CHECK_ERR(ret);
+                              return *ret;
+                            }
+                            goto parse_error;
+                          case 'u':
+                            if (op == "i32.gt_u"sv) {
+                              auto ret = makeBinary(ctx, pos, BinaryOp::GtUInt32);
+                              CHECK_ERR(ret);
+                              return *ret;
+                            }
+                            goto parse_error;
+                          default: goto parse_error;
+                        }
+                      }
+                      default: goto parse_error;
+                    }
+                  }
+                  case 'l': {
+                    switch (buf[5]) {
+                      case 'e': {
+                        switch (buf[7]) {
+                          case 's':
+                            if (op == "i32.le_s"sv) {
+                              auto ret = makeBinary(ctx, pos, BinaryOp::LeSInt32);
+                              CHECK_ERR(ret);
+                              return *ret;
+                            }
+                            goto parse_error;
+                          case 'u':
+                            if (op == "i32.le_u"sv) {
+                              auto ret = makeBinary(ctx, pos, BinaryOp::LeUInt32);
+                              CHECK_ERR(ret);
+                              return *ret;
+                            }
+                            goto parse_error;
+                          default: goto parse_error;
+                        }
+                      }
+                      case 'o': {
+                        switch (buf[8]) {
+                          case '\0':
+                            if (op == "i32.load"sv) {
+                              auto ret = makeLoad(ctx, pos, Type::i32, /*signed=*/false, 4, /*isAtomic=*/false);
+                              CHECK_ERR(ret);
+                              return *ret;
+                            }
+                            goto parse_error;
+                          case '1': {
+                            switch (buf[11]) {
+                              case 's':
+                                if (op == "i32.load16_s"sv) {
+                                  auto ret = makeLoad(ctx, pos, Type::i32, /*signed=*/true, 2, /*isAtomic=*/false);
+                                  CHECK_ERR(ret);
+                                  return *ret;
+                                }
+                                goto parse_error;
+                              case 'u':
+                                if (op == "i32.load16_u"sv) {
+                                  auto ret = makeLoad(ctx, pos, Type::i32, /*signed=*/false, 2, /*isAtomic=*/false);
+                                  CHECK_ERR(ret);
+                                  return *ret;
+                                }
+                                goto parse_error;
+                              default: goto parse_error;
+                            }
+                          }
+                          case '8': {
+                            switch (buf[10]) {
+                              case 's':
+                                if (op == "i32.load8_s"sv) {
+                                  auto ret = makeLoad(ctx, pos, Type::i32, /*signed=*/true, 1, /*isAtomic=*/false);
+                                  CHECK_ERR(ret);
+                                  return *ret;
+                                }
+                                goto parse_error;
+                              case 'u':
+                                if (op == "i32.load8_u"sv) {
+                                  auto ret = makeLoad(ctx, pos, Type::i32, /*signed=*/false, 1, /*isAtomic=*/false);
+                                  CHECK_ERR(ret);
+                                  return *ret;
+                                }
+                                goto parse_error;
+                              default: goto parse_error;
+                            }
+                          }
+                          default: goto parse_error;
+                        }
+                      }
+                      case 't': {
+                        switch (buf[7]) {
+                          case 's':
+                            if (op == "i32.lt_s"sv) {
+                              auto ret = makeBinary(ctx, pos, BinaryOp::LtSInt32);
+                              CHECK_ERR(ret);
+                              return *ret;
+                            }
+                            goto parse_error;
+                          case 'u':
+                            if (op == "i32.lt_u"sv) {
+                              auto ret = makeBinary(ctx, pos, BinaryOp::LtUInt32);
+                              CHECK_ERR(ret);
+                              return *ret;
+                            }
+                            goto parse_error;
+                          default: goto parse_error;
+                        }
+                      }
+                      default: goto parse_error;
+                    }
+                  }
+                  case 'm':
+                    if (op == "i32.mul"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::MulInt32);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 'n':
+                    if (op == "i32.ne"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::NeInt32);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 'o':
+                    if (op == "i32.or"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::OrInt32);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 'p':
+                    if (op == "i32.popcnt"sv) {
+                      auto ret = makeUnary(ctx, pos, UnaryOp::PopcntInt32);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 'r': {
+                    switch (buf[5]) {
+                      case 'e': {
+                        switch (buf[6]) {
+                          case 'i':
+                            if (op == "i32.reinterpret_f32"sv) {
+                              auto ret = makeUnary(ctx, pos, UnaryOp::ReinterpretFloat32);
+                              CHECK_ERR(ret);
+                              return *ret;
+                            }
+                            goto parse_error;
+                          case 'm': {
+                            switch (buf[8]) {
+                              case 's':
+                                if (op == "i32.rem_s"sv) {
+                                  auto ret = makeBinary(ctx, pos, BinaryOp::RemSInt32);
+                                  CHECK_ERR(ret);
+                                  return *ret;
+                                }
+                                goto parse_error;
+                              case 'u':
+                                if (op == "i32.rem_u"sv) {
+                                  auto ret = makeBinary(ctx, pos, BinaryOp::RemUInt32);
+                                  CHECK_ERR(ret);
+                                  return *ret;
+                                }
+                                goto parse_error;
+                              default: goto parse_error;
+                            }
+                          }
+                          default: goto parse_error;
+                        }
+                      }
+                      case 'o': {
+                        switch (buf[7]) {
+                          case 'l':
+                            if (op == "i32.rotl"sv) {
+                              auto ret = makeBinary(ctx, pos, BinaryOp::RotLInt32);
+                              CHECK_ERR(ret);
+                              return *ret;
+                            }
+                            goto parse_error;
+                          case 'r':
+                            if (op == "i32.rotr"sv) {
+                              auto ret = makeBinary(ctx, pos, BinaryOp::RotRInt32);
+                              CHECK_ERR(ret);
+                              return *ret;
+                            }
+                            goto parse_error;
+                          default: goto parse_error;
+                        }
+                      }
+                      default: goto parse_error;
+                    }
+                  }
+                  case 's': {
+                    switch (buf[5]) {
+                      case 'h': {
+                        switch (buf[6]) {
+                          case 'l':
+                            if (op == "i32.shl"sv) {
+  
