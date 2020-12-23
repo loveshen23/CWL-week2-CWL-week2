@@ -7219,4 +7219,285 @@ switch (buf[0]) {
                                   case 'o':
                                     if (op == "i64.atomic.rmw8.xor_u"sv) {
                                       auto ret = makeAtomicRMW(ctx, pos, AtomicRMWOp::RMWXor, Type::i64, 1);
-                           
+                                      CHECK_ERR(ret);
+                                      return *ret;
+                                    }
+                                    goto parse_error;
+                                  default: goto parse_error;
+                                }
+                              }
+                              default: goto parse_error;
+                            }
+                          }
+                          default: goto parse_error;
+                        }
+                      }
+                      case 's': {
+                        switch (buf[16]) {
+                          case '\0':
+                            if (op == "i64.atomic.store"sv) {
+                              auto ret = makeStore(ctx, pos, Type::i64, 8, /*isAtomic=*/true);
+                              CHECK_ERR(ret);
+                              return *ret;
+                            }
+                            goto parse_error;
+                          case '1':
+                            if (op == "i64.atomic.store16"sv) {
+                              auto ret = makeStore(ctx, pos, Type::i64, 2, /*isAtomic=*/true);
+                              CHECK_ERR(ret);
+                              return *ret;
+                            }
+                            goto parse_error;
+                          case '3':
+                            if (op == "i64.atomic.store32"sv) {
+                              auto ret = makeStore(ctx, pos, Type::i64, 4, /*isAtomic=*/true);
+                              CHECK_ERR(ret);
+                              return *ret;
+                            }
+                            goto parse_error;
+                          case '8':
+                            if (op == "i64.atomic.store8"sv) {
+                              auto ret = makeStore(ctx, pos, Type::i64, 1, /*isAtomic=*/true);
+                              CHECK_ERR(ret);
+                              return *ret;
+                            }
+                            goto parse_error;
+                          default: goto parse_error;
+                        }
+                      }
+                      default: goto parse_error;
+                    }
+                  }
+                  default: goto parse_error;
+                }
+              }
+              case 'c': {
+                switch (buf[5]) {
+                  case 'l':
+                    if (op == "i64.clz"sv) {
+                      auto ret = makeUnary(ctx, pos, UnaryOp::ClzInt64);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 'o':
+                    if (op == "i64.const"sv) {
+                      auto ret = makeConst(ctx, pos, Type::i64);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 't':
+                    if (op == "i64.ctz"sv) {
+                      auto ret = makeUnary(ctx, pos, UnaryOp::CtzInt64);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 'd': {
+                switch (buf[8]) {
+                  case 's':
+                    if (op == "i64.div_s"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::DivSInt64);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 'u':
+                    if (op == "i64.div_u"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::DivUInt64);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 'e': {
+                switch (buf[5]) {
+                  case 'q': {
+                    switch (buf[6]) {
+                      case '\0':
+                        if (op == "i64.eq"sv) {
+                          auto ret = makeBinary(ctx, pos, BinaryOp::EqInt64);
+                          CHECK_ERR(ret);
+                          return *ret;
+                        }
+                        goto parse_error;
+                      case 'z':
+                        if (op == "i64.eqz"sv) {
+                          auto ret = makeUnary(ctx, pos, UnaryOp::EqZInt64);
+                          CHECK_ERR(ret);
+                          return *ret;
+                        }
+                        goto parse_error;
+                      default: goto parse_error;
+                    }
+                  }
+                  case 'x': {
+                    switch (buf[10]) {
+                      case '1':
+                        if (op == "i64.extend16_s"sv) {
+                          auto ret = makeUnary(ctx, pos, UnaryOp::ExtendS16Int64);
+                          CHECK_ERR(ret);
+                          return *ret;
+                        }
+                        goto parse_error;
+                      case '3':
+                        if (op == "i64.extend32_s"sv) {
+                          auto ret = makeUnary(ctx, pos, UnaryOp::ExtendS32Int64);
+                          CHECK_ERR(ret);
+                          return *ret;
+                        }
+                        goto parse_error;
+                      case '8':
+                        if (op == "i64.extend8_s"sv) {
+                          auto ret = makeUnary(ctx, pos, UnaryOp::ExtendS8Int64);
+                          CHECK_ERR(ret);
+                          return *ret;
+                        }
+                        goto parse_error;
+                      case '_': {
+                        switch (buf[15]) {
+                          case 's':
+                            if (op == "i64.extend_i32_s"sv) {
+                              auto ret = makeUnary(ctx, pos, UnaryOp::ExtendSInt32);
+                              CHECK_ERR(ret);
+                              return *ret;
+                            }
+                            goto parse_error;
+                          case 'u':
+                            if (op == "i64.extend_i32_u"sv) {
+                              auto ret = makeUnary(ctx, pos, UnaryOp::ExtendUInt32);
+                              CHECK_ERR(ret);
+                              return *ret;
+                            }
+                            goto parse_error;
+                          default: goto parse_error;
+                        }
+                      }
+                      default: goto parse_error;
+                    }
+                  }
+                  default: goto parse_error;
+                }
+              }
+              case 'g': {
+                switch (buf[5]) {
+                  case 'e': {
+                    switch (buf[7]) {
+                      case 's':
+                        if (op == "i64.ge_s"sv) {
+                          auto ret = makeBinary(ctx, pos, BinaryOp::GeSInt64);
+                          CHECK_ERR(ret);
+                          return *ret;
+                        }
+                        goto parse_error;
+                      case 'u':
+                        if (op == "i64.ge_u"sv) {
+                          auto ret = makeBinary(ctx, pos, BinaryOp::GeUInt64);
+                          CHECK_ERR(ret);
+                          return *ret;
+                        }
+                        goto parse_error;
+                      default: goto parse_error;
+                    }
+                  }
+                  case 't': {
+                    switch (buf[7]) {
+                      case 's':
+                        if (op == "i64.gt_s"sv) {
+                          auto ret = makeBinary(ctx, pos, BinaryOp::GtSInt64);
+                          CHECK_ERR(ret);
+                          return *ret;
+                        }
+                        goto parse_error;
+                      case 'u':
+                        if (op == "i64.gt_u"sv) {
+                          auto ret = makeBinary(ctx, pos, BinaryOp::GtUInt64);
+                          CHECK_ERR(ret);
+                          return *ret;
+                        }
+                        goto parse_error;
+                      default: goto parse_error;
+                    }
+                  }
+                  default: goto parse_error;
+                }
+              }
+              case 'l': {
+                switch (buf[5]) {
+                  case 'e': {
+                    switch (buf[7]) {
+                      case 's':
+                        if (op == "i64.le_s"sv) {
+                          auto ret = makeBinary(ctx, pos, BinaryOp::LeSInt64);
+                          CHECK_ERR(ret);
+                          return *ret;
+                        }
+                        goto parse_error;
+                      case 'u':
+                        if (op == "i64.le_u"sv) {
+                          auto ret = makeBinary(ctx, pos, BinaryOp::LeUInt64);
+                          CHECK_ERR(ret);
+                          return *ret;
+                        }
+                        goto parse_error;
+                      default: goto parse_error;
+                    }
+                  }
+                  case 'o': {
+                    switch (buf[8]) {
+                      case '\0':
+                        if (op == "i64.load"sv) {
+                          auto ret = makeLoad(ctx, pos, Type::i64, /*signed=*/false, 8, /*isAtomic=*/false);
+                          CHECK_ERR(ret);
+                          return *ret;
+                        }
+                        goto parse_error;
+                      case '1': {
+                        switch (buf[11]) {
+                          case 's':
+                            if (op == "i64.load16_s"sv) {
+                              auto ret = makeLoad(ctx, pos, Type::i64, /*signed=*/true, 2, /*isAtomic=*/false);
+                              CHECK_ERR(ret);
+                              return *ret;
+                            }
+                            goto parse_error;
+                          case 'u':
+                            if (op == "i64.load16_u"sv) {
+                              auto ret = makeLoad(ctx, pos, Type::i64, /*signed=*/false, 2, /*isAtomic=*/false);
+                              CHECK_ERR(ret);
+                              return *ret;
+                            }
+                            goto parse_error;
+                          default: goto parse_error;
+                        }
+                      }
+                      case '3': {
+                        switch (buf[11]) {
+                          case 's':
+                            if (op == "i64.load32_s"sv) {
+                              auto ret = makeLoad(ctx, pos, Type::i64, /*signed=*/true, 4, /*isAtomic=*/false);
+                              CHECK_ERR(ret);
+                              return *ret;
+                            }
+                            goto parse_error;
+                          case 'u':
+                            if (op == "i64.load32_u"sv) {
+                              auto ret = makeLoad(ctx, pos, Type::i64, /*signed=*/false, 4, /*isAtomic=*/false);
+                              CHECK_ERR(ret);
+                              return *ret;
+                            }
+                            goto parse_error;
+                          default: goto parse_error;
+                        }
+                      }
+                      case '8': {
+                        switch (buf[10]) {
+                          case 's':
+                            if (op == "i64.load8_s"sv) {
+                              auto ret =
