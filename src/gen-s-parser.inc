@@ -7500,4 +7500,285 @@ switch (buf[0]) {
                         switch (buf[10]) {
                           case 's':
                             if (op == "i64.load8_s"sv) {
-                              auto ret =
+                              auto ret = makeLoad(ctx, pos, Type::i64, /*signed=*/true, 1, /*isAtomic=*/false);
+                              CHECK_ERR(ret);
+                              return *ret;
+                            }
+                            goto parse_error;
+                          case 'u':
+                            if (op == "i64.load8_u"sv) {
+                              auto ret = makeLoad(ctx, pos, Type::i64, /*signed=*/false, 1, /*isAtomic=*/false);
+                              CHECK_ERR(ret);
+                              return *ret;
+                            }
+                            goto parse_error;
+                          default: goto parse_error;
+                        }
+                      }
+                      default: goto parse_error;
+                    }
+                  }
+                  case 't': {
+                    switch (buf[7]) {
+                      case 's':
+                        if (op == "i64.lt_s"sv) {
+                          auto ret = makeBinary(ctx, pos, BinaryOp::LtSInt64);
+                          CHECK_ERR(ret);
+                          return *ret;
+                        }
+                        goto parse_error;
+                      case 'u':
+                        if (op == "i64.lt_u"sv) {
+                          auto ret = makeBinary(ctx, pos, BinaryOp::LtUInt64);
+                          CHECK_ERR(ret);
+                          return *ret;
+                        }
+                        goto parse_error;
+                      default: goto parse_error;
+                    }
+                  }
+                  default: goto parse_error;
+                }
+              }
+              case 'm':
+                if (op == "i64.mul"sv) {
+                  auto ret = makeBinary(ctx, pos, BinaryOp::MulInt64);
+                  CHECK_ERR(ret);
+                  return *ret;
+                }
+                goto parse_error;
+              case 'n':
+                if (op == "i64.ne"sv) {
+                  auto ret = makeBinary(ctx, pos, BinaryOp::NeInt64);
+                  CHECK_ERR(ret);
+                  return *ret;
+                }
+                goto parse_error;
+              case 'o':
+                if (op == "i64.or"sv) {
+                  auto ret = makeBinary(ctx, pos, BinaryOp::OrInt64);
+                  CHECK_ERR(ret);
+                  return *ret;
+                }
+                goto parse_error;
+              case 'p':
+                if (op == "i64.popcnt"sv) {
+                  auto ret = makeUnary(ctx, pos, UnaryOp::PopcntInt64);
+                  CHECK_ERR(ret);
+                  return *ret;
+                }
+                goto parse_error;
+              case 'r': {
+                switch (buf[5]) {
+                  case 'e': {
+                    switch (buf[6]) {
+                      case 'i':
+                        if (op == "i64.reinterpret_f64"sv) {
+                          auto ret = makeUnary(ctx, pos, UnaryOp::ReinterpretFloat64);
+                          CHECK_ERR(ret);
+                          return *ret;
+                        }
+                        goto parse_error;
+                      case 'm': {
+                        switch (buf[8]) {
+                          case 's':
+                            if (op == "i64.rem_s"sv) {
+                              auto ret = makeBinary(ctx, pos, BinaryOp::RemSInt64);
+                              CHECK_ERR(ret);
+                              return *ret;
+                            }
+                            goto parse_error;
+                          case 'u':
+                            if (op == "i64.rem_u"sv) {
+                              auto ret = makeBinary(ctx, pos, BinaryOp::RemUInt64);
+                              CHECK_ERR(ret);
+                              return *ret;
+                            }
+                            goto parse_error;
+                          default: goto parse_error;
+                        }
+                      }
+                      default: goto parse_error;
+                    }
+                  }
+                  case 'o': {
+                    switch (buf[7]) {
+                      case 'l':
+                        if (op == "i64.rotl"sv) {
+                          auto ret = makeBinary(ctx, pos, BinaryOp::RotLInt64);
+                          CHECK_ERR(ret);
+                          return *ret;
+                        }
+                        goto parse_error;
+                      case 'r':
+                        if (op == "i64.rotr"sv) {
+                          auto ret = makeBinary(ctx, pos, BinaryOp::RotRInt64);
+                          CHECK_ERR(ret);
+                          return *ret;
+                        }
+                        goto parse_error;
+                      default: goto parse_error;
+                    }
+                  }
+                  default: goto parse_error;
+                }
+              }
+              case 's': {
+                switch (buf[5]) {
+                  case 'h': {
+                    switch (buf[6]) {
+                      case 'l':
+                        if (op == "i64.shl"sv) {
+                          auto ret = makeBinary(ctx, pos, BinaryOp::ShlInt64);
+                          CHECK_ERR(ret);
+                          return *ret;
+                        }
+                        goto parse_error;
+                      case 'r': {
+                        switch (buf[8]) {
+                          case 's':
+                            if (op == "i64.shr_s"sv) {
+                              auto ret = makeBinary(ctx, pos, BinaryOp::ShrSInt64);
+                              CHECK_ERR(ret);
+                              return *ret;
+                            }
+                            goto parse_error;
+                          case 'u':
+                            if (op == "i64.shr_u"sv) {
+                              auto ret = makeBinary(ctx, pos, BinaryOp::ShrUInt64);
+                              CHECK_ERR(ret);
+                              return *ret;
+                            }
+                            goto parse_error;
+                          default: goto parse_error;
+                        }
+                      }
+                      default: goto parse_error;
+                    }
+                  }
+                  case 't': {
+                    switch (buf[9]) {
+                      case '\0':
+                        if (op == "i64.store"sv) {
+                          auto ret = makeStore(ctx, pos, Type::i64, 8, /*isAtomic=*/false);
+                          CHECK_ERR(ret);
+                          return *ret;
+                        }
+                        goto parse_error;
+                      case '1':
+                        if (op == "i64.store16"sv) {
+                          auto ret = makeStore(ctx, pos, Type::i64, 2, /*isAtomic=*/false);
+                          CHECK_ERR(ret);
+                          return *ret;
+                        }
+                        goto parse_error;
+                      case '3':
+                        if (op == "i64.store32"sv) {
+                          auto ret = makeStore(ctx, pos, Type::i64, 4, /*isAtomic=*/false);
+                          CHECK_ERR(ret);
+                          return *ret;
+                        }
+                        goto parse_error;
+                      case '8':
+                        if (op == "i64.store8"sv) {
+                          auto ret = makeStore(ctx, pos, Type::i64, 1, /*isAtomic=*/false);
+                          CHECK_ERR(ret);
+                          return *ret;
+                        }
+                        goto parse_error;
+                      default: goto parse_error;
+                    }
+                  }
+                  case 'u':
+                    if (op == "i64.sub"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::SubInt64);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 't': {
+                switch (buf[10]) {
+                  case 'f': {
+                    switch (buf[11]) {
+                      case '3': {
+                        switch (buf[14]) {
+                          case 's':
+                            if (op == "i64.trunc_f32_s"sv) {
+                              auto ret = makeUnary(ctx, pos, UnaryOp::TruncSFloat32ToInt64);
+                              CHECK_ERR(ret);
+                              return *ret;
+                            }
+                            goto parse_error;
+                          case 'u':
+                            if (op == "i64.trunc_f32_u"sv) {
+                              auto ret = makeUnary(ctx, pos, UnaryOp::TruncUFloat32ToInt64);
+                              CHECK_ERR(ret);
+                              return *ret;
+                            }
+                            goto parse_error;
+                          default: goto parse_error;
+                        }
+                      }
+                      case '6': {
+                        switch (buf[14]) {
+                          case 's':
+                            if (op == "i64.trunc_f64_s"sv) {
+                              auto ret = makeUnary(ctx, pos, UnaryOp::TruncSFloat64ToInt64);
+                              CHECK_ERR(ret);
+                              return *ret;
+                            }
+                            goto parse_error;
+                          case 'u':
+                            if (op == "i64.trunc_f64_u"sv) {
+                              auto ret = makeUnary(ctx, pos, UnaryOp::TruncUFloat64ToInt64);
+                              CHECK_ERR(ret);
+                              return *ret;
+                            }
+                            goto parse_error;
+                          default: goto parse_error;
+                        }
+                      }
+                      default: goto parse_error;
+                    }
+                  }
+                  case 's': {
+                    switch (buf[15]) {
+                      case '3': {
+                        switch (buf[18]) {
+                          case 's':
+                            if (op == "i64.trunc_sat_f32_s"sv) {
+                              auto ret = makeUnary(ctx, pos, UnaryOp::TruncSatSFloat32ToInt64);
+                              CHECK_ERR(ret);
+                              return *ret;
+                            }
+                            goto parse_error;
+                          case 'u':
+                            if (op == "i64.trunc_sat_f32_u"sv) {
+                              auto ret = makeUnary(ctx, pos, UnaryOp::TruncSatUFloat32ToInt64);
+                              CHECK_ERR(ret);
+                              return *ret;
+                            }
+                            goto parse_error;
+                          default: goto parse_error;
+                        }
+                      }
+                      case '6': {
+                        switch (buf[18]) {
+                          case 's':
+                            if (op == "i64.trunc_sat_f64_s"sv) {
+                              auto ret = makeUnary(ctx, pos, UnaryOp::TruncSatSFloat64ToInt64);
+                              CHECK_ERR(ret);
+                              return *ret;
+                            }
+                            goto parse_error;
+                          case 'u':
+                            if (op == "i64.trunc_sat_f64_u"sv) {
+                              auto ret = makeUnary(ctx, pos, UnaryOp::TruncSatUFloat64ToInt64);
+                              CHECK_ERR(ret);
+                              return *ret;
+                            }
+                            goto parse_error;
+                          default
