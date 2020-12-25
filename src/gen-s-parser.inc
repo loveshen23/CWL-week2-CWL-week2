@@ -7781,4 +7781,288 @@ switch (buf[0]) {
                               return *ret;
                             }
                             goto parse_error;
-                          default
+                          default: goto parse_error;
+                        }
+                      }
+                      default: goto parse_error;
+                    }
+                  }
+                  default: goto parse_error;
+                }
+              }
+              case 'x':
+                if (op == "i64.xor"sv) {
+                  auto ret = makeBinary(ctx, pos, BinaryOp::XorInt64);
+                  CHECK_ERR(ret);
+                  return *ret;
+                }
+                goto parse_error;
+              default: goto parse_error;
+            }
+          }
+          case 'x': {
+            switch (buf[6]) {
+              case 'a': {
+                switch (buf[7]) {
+                  case 'b':
+                    if (op == "i64x2.abs"sv) {
+                      auto ret = makeUnary(ctx, pos, UnaryOp::AbsVecI64x2);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 'd':
+                    if (op == "i64x2.add"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::AddVecI64x2);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 'l':
+                    if (op == "i64x2.all_true"sv) {
+                      auto ret = makeUnary(ctx, pos, UnaryOp::AllTrueVecI64x2);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 'b':
+                if (op == "i64x2.bitmask"sv) {
+                  auto ret = makeUnary(ctx, pos, UnaryOp::BitmaskVecI64x2);
+                  CHECK_ERR(ret);
+                  return *ret;
+                }
+                goto parse_error;
+              case 'e': {
+                switch (buf[7]) {
+                  case 'q':
+                    if (op == "i64x2.eq"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::EqVecI64x2);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 'x': {
+                    switch (buf[9]) {
+                      case 'e': {
+                        switch (buf[13]) {
+                          case 'h': {
+                            switch (buf[24]) {
+                              case 's':
+                                if (op == "i64x2.extend_high_i32x4_s"sv) {
+                                  auto ret = makeUnary(ctx, pos, UnaryOp::ExtendHighSVecI32x4ToVecI64x2);
+                                  CHECK_ERR(ret);
+                                  return *ret;
+                                }
+                                goto parse_error;
+                              case 'u':
+                                if (op == "i64x2.extend_high_i32x4_u"sv) {
+                                  auto ret = makeUnary(ctx, pos, UnaryOp::ExtendHighUVecI32x4ToVecI64x2);
+                                  CHECK_ERR(ret);
+                                  return *ret;
+                                }
+                                goto parse_error;
+                              default: goto parse_error;
+                            }
+                          }
+                          case 'l': {
+                            switch (buf[23]) {
+                              case 's':
+                                if (op == "i64x2.extend_low_i32x4_s"sv) {
+                                  auto ret = makeUnary(ctx, pos, UnaryOp::ExtendLowSVecI32x4ToVecI64x2);
+                                  CHECK_ERR(ret);
+                                  return *ret;
+                                }
+                                goto parse_error;
+                              case 'u':
+                                if (op == "i64x2.extend_low_i32x4_u"sv) {
+                                  auto ret = makeUnary(ctx, pos, UnaryOp::ExtendLowUVecI32x4ToVecI64x2);
+                                  CHECK_ERR(ret);
+                                  return *ret;
+                                }
+                                goto parse_error;
+                              default: goto parse_error;
+                            }
+                          }
+                          default: goto parse_error;
+                        }
+                      }
+                      case 'm': {
+                        switch (buf[13]) {
+                          case 'h': {
+                            switch (buf[24]) {
+                              case 's':
+                                if (op == "i64x2.extmul_high_i32x4_s"sv) {
+                                  auto ret = makeBinary(ctx, pos, BinaryOp::ExtMulHighSVecI64x2);
+                                  CHECK_ERR(ret);
+                                  return *ret;
+                                }
+                                goto parse_error;
+                              case 'u':
+                                if (op == "i64x2.extmul_high_i32x4_u"sv) {
+                                  auto ret = makeBinary(ctx, pos, BinaryOp::ExtMulHighUVecI64x2);
+                                  CHECK_ERR(ret);
+                                  return *ret;
+                                }
+                                goto parse_error;
+                              default: goto parse_error;
+                            }
+                          }
+                          case 'l': {
+                            switch (buf[23]) {
+                              case 's':
+                                if (op == "i64x2.extmul_low_i32x4_s"sv) {
+                                  auto ret = makeBinary(ctx, pos, BinaryOp::ExtMulLowSVecI64x2);
+                                  CHECK_ERR(ret);
+                                  return *ret;
+                                }
+                                goto parse_error;
+                              case 'u':
+                                if (op == "i64x2.extmul_low_i32x4_u"sv) {
+                                  auto ret = makeBinary(ctx, pos, BinaryOp::ExtMulLowUVecI64x2);
+                                  CHECK_ERR(ret);
+                                  return *ret;
+                                }
+                                goto parse_error;
+                              default: goto parse_error;
+                            }
+                          }
+                          default: goto parse_error;
+                        }
+                      }
+                      case 'r':
+                        if (op == "i64x2.extract_lane"sv) {
+                          auto ret = makeSIMDExtract(ctx, pos, SIMDExtractOp::ExtractLaneVecI64x2, 2);
+                          CHECK_ERR(ret);
+                          return *ret;
+                        }
+                        goto parse_error;
+                      default: goto parse_error;
+                    }
+                  }
+                  default: goto parse_error;
+                }
+              }
+              case 'g': {
+                switch (buf[7]) {
+                  case 'e':
+                    if (op == "i64x2.ge_s"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::GeSVecI64x2);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 't':
+                    if (op == "i64x2.gt_s"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::GtSVecI64x2);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 'l': {
+                switch (buf[7]) {
+                  case 'a':
+                    if (op == "i64x2.laneselect"sv) {
+                      auto ret = makeSIMDTernary(ctx, pos, SIMDTernaryOp::LaneselectI64x2);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 'e':
+                    if (op == "i64x2.le_s"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::LeSVecI64x2);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 't':
+                    if (op == "i64x2.lt_s"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::LtSVecI64x2);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 'm':
+                if (op == "i64x2.mul"sv) {
+                  auto ret = makeBinary(ctx, pos, BinaryOp::MulVecI64x2);
+                  CHECK_ERR(ret);
+                  return *ret;
+                }
+                goto parse_error;
+              case 'n': {
+                switch (buf[8]) {
+                  case '\0':
+                    if (op == "i64x2.ne"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::NeVecI64x2);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 'g':
+                    if (op == "i64x2.neg"sv) {
+                      auto ret = makeUnary(ctx, pos, UnaryOp::NegVecI64x2);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 'r':
+                if (op == "i64x2.replace_lane"sv) {
+                  auto ret = makeSIMDReplace(ctx, pos, SIMDReplaceOp::ReplaceLaneVecI64x2, 2);
+                  CHECK_ERR(ret);
+                  return *ret;
+                }
+                goto parse_error;
+              case 's': {
+                switch (buf[7]) {
+                  case 'h': {
+                    switch (buf[8]) {
+                      case 'l':
+                        if (op == "i64x2.shl"sv) {
+                          auto ret = makeSIMDShift(ctx, pos, SIMDShiftOp::ShlVecI64x2);
+                          CHECK_ERR(ret);
+                          return *ret;
+                        }
+                        goto parse_error;
+                      case 'r': {
+                        switch (buf[10]) {
+                          case 's':
+                            if (op == "i64x2.shr_s"sv) {
+                              auto ret = makeSIMDShift(ctx, pos, SIMDShiftOp::ShrSVecI64x2);
+                              CHECK_ERR(ret);
+                              return *ret;
+                            }
+                            goto parse_error;
+                          case 'u':
+                            if (op == "i64x2.shr_u"sv) {
+                              auto ret = makeSIMDShift(ctx, pos, SIMDShiftOp::ShrUVecI64x2);
+                              CHECK_ERR(ret);
+                              return *ret;
+                            }
+                            goto parse_error;
+                          default: goto parse_error;
+                        }
+                      }
+                      default: goto parse_error;
+                    }
+                  }
+                  case 'p':
+                    if (op == "i64x2.splat"sv) {
+                      auto ret = makeUnary(ctx, pos, UnaryOp::SplatVecI64x2);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 'u':
+                    if (op == "i64x2.sub"sv) {
+                 
