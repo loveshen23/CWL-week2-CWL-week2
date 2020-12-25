@@ -8065,4 +8065,330 @@ switch (buf[0]) {
                     goto parse_error;
                   case 'u':
                     if (op == "i64x2.sub"sv) {
-                 
+                      auto ret = makeBinary(ctx, pos, BinaryOp::SubVecI64x2);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              default: goto parse_error;
+            }
+          }
+          default: goto parse_error;
+        }
+      }
+      case '8': {
+        switch (buf[6]) {
+          case 'a': {
+            switch (buf[7]) {
+              case 'b':
+                if (op == "i8x16.abs"sv) {
+                  auto ret = makeUnary(ctx, pos, UnaryOp::AbsVecI8x16);
+                  CHECK_ERR(ret);
+                  return *ret;
+                }
+                goto parse_error;
+              case 'd': {
+                switch (buf[9]) {
+                  case '\0':
+                    if (op == "i8x16.add"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::AddVecI8x16);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case '_': {
+                    switch (buf[14]) {
+                      case 's':
+                        if (op == "i8x16.add_sat_s"sv) {
+                          auto ret = makeBinary(ctx, pos, BinaryOp::AddSatSVecI8x16);
+                          CHECK_ERR(ret);
+                          return *ret;
+                        }
+                        goto parse_error;
+                      case 'u':
+                        if (op == "i8x16.add_sat_u"sv) {
+                          auto ret = makeBinary(ctx, pos, BinaryOp::AddSatUVecI8x16);
+                          CHECK_ERR(ret);
+                          return *ret;
+                        }
+                        goto parse_error;
+                      default: goto parse_error;
+                    }
+                  }
+                  default: goto parse_error;
+                }
+              }
+              case 'l':
+                if (op == "i8x16.all_true"sv) {
+                  auto ret = makeUnary(ctx, pos, UnaryOp::AllTrueVecI8x16);
+                  CHECK_ERR(ret);
+                  return *ret;
+                }
+                goto parse_error;
+              case 'v':
+                if (op == "i8x16.avgr_u"sv) {
+                  auto ret = makeBinary(ctx, pos, BinaryOp::AvgrUVecI8x16);
+                  CHECK_ERR(ret);
+                  return *ret;
+                }
+                goto parse_error;
+              default: goto parse_error;
+            }
+          }
+          case 'b':
+            if (op == "i8x16.bitmask"sv) {
+              auto ret = makeUnary(ctx, pos, UnaryOp::BitmaskVecI8x16);
+              CHECK_ERR(ret);
+              return *ret;
+            }
+            goto parse_error;
+          case 'e': {
+            switch (buf[7]) {
+              case 'q':
+                if (op == "i8x16.eq"sv) {
+                  auto ret = makeBinary(ctx, pos, BinaryOp::EqVecI8x16);
+                  CHECK_ERR(ret);
+                  return *ret;
+                }
+                goto parse_error;
+              case 'x': {
+                switch (buf[19]) {
+                  case 's':
+                    if (op == "i8x16.extract_lane_s"sv) {
+                      auto ret = makeSIMDExtract(ctx, pos, SIMDExtractOp::ExtractLaneSVecI8x16, 16);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 'u':
+                    if (op == "i8x16.extract_lane_u"sv) {
+                      auto ret = makeSIMDExtract(ctx, pos, SIMDExtractOp::ExtractLaneUVecI8x16, 16);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              default: goto parse_error;
+            }
+          }
+          case 'g': {
+            switch (buf[7]) {
+              case 'e': {
+                switch (buf[9]) {
+                  case 's':
+                    if (op == "i8x16.ge_s"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::GeSVecI8x16);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 'u':
+                    if (op == "i8x16.ge_u"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::GeUVecI8x16);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 't': {
+                switch (buf[9]) {
+                  case 's':
+                    if (op == "i8x16.gt_s"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::GtSVecI8x16);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 'u':
+                    if (op == "i8x16.gt_u"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::GtUVecI8x16);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              default: goto parse_error;
+            }
+          }
+          case 'l': {
+            switch (buf[7]) {
+              case 'a':
+                if (op == "i8x16.laneselect"sv) {
+                  auto ret = makeSIMDTernary(ctx, pos, SIMDTernaryOp::LaneselectI8x16);
+                  CHECK_ERR(ret);
+                  return *ret;
+                }
+                goto parse_error;
+              case 'e': {
+                switch (buf[9]) {
+                  case 's':
+                    if (op == "i8x16.le_s"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::LeSVecI8x16);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 'u':
+                    if (op == "i8x16.le_u"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::LeUVecI8x16);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 't': {
+                switch (buf[9]) {
+                  case 's':
+                    if (op == "i8x16.lt_s"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::LtSVecI8x16);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 'u':
+                    if (op == "i8x16.lt_u"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::LtUVecI8x16);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              default: goto parse_error;
+            }
+          }
+          case 'm': {
+            switch (buf[7]) {
+              case 'a': {
+                switch (buf[10]) {
+                  case 's':
+                    if (op == "i8x16.max_s"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::MaxSVecI8x16);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 'u':
+                    if (op == "i8x16.max_u"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::MaxUVecI8x16);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 'i': {
+                switch (buf[10]) {
+                  case 's':
+                    if (op == "i8x16.min_s"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::MinSVecI8x16);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 'u':
+                    if (op == "i8x16.min_u"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::MinUVecI8x16);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              default: goto parse_error;
+            }
+          }
+          case 'n': {
+            switch (buf[7]) {
+              case 'a': {
+                switch (buf[19]) {
+                  case 's':
+                    if (op == "i8x16.narrow_i16x8_s"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::NarrowSVecI16x8ToVecI8x16);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 'u':
+                    if (op == "i8x16.narrow_i16x8_u"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::NarrowUVecI16x8ToVecI8x16);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 'e': {
+                switch (buf[8]) {
+                  case '\0':
+                    if (op == "i8x16.ne"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::NeVecI8x16);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 'g':
+                    if (op == "i8x16.neg"sv) {
+                      auto ret = makeUnary(ctx, pos, UnaryOp::NegVecI8x16);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              default: goto parse_error;
+            }
+          }
+          case 'p':
+            if (op == "i8x16.popcnt"sv) {
+              auto ret = makeUnary(ctx, pos, UnaryOp::PopcntVecI8x16);
+              CHECK_ERR(ret);
+              return *ret;
+            }
+            goto parse_error;
+          case 'r': {
+            switch (buf[8]) {
+              case 'l':
+                if (op == "i8x16.relaxed_swizzle"sv) {
+                  auto ret = makeBinary(ctx, pos, BinaryOp::RelaxedSwizzleVecI8x16);
+                  CHECK_ERR(ret);
+                  return *ret;
+                }
+                goto parse_error;
+              case 'p':
+                if (op == "i8x16.replace_lane"sv) {
+                  auto ret = makeSIMDReplace(ctx, pos, SIMDReplaceOp::ReplaceLaneVecI8x16, 16);
+                  CHECK_ERR(ret);
+                  return *ret;
+                }
+                goto parse_error;
+              default: goto parse_error;
+            }
+          }
+          case 's': {
+            switch (buf[7]) {
+              case 'h': {
+                switch (buf[8]) {
+                  case 'l':
+                    if (op == "i8x16.shl"sv) {
+                      auto ret = makeSIMDShift(ctx, pos, SIMDShiftOp::ShlVecI8x16);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                  
