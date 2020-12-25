@@ -8391,4 +8391,381 @@ switch (buf[0]) {
                       CHECK_ERR(ret);
                       return *ret;
                     }
-                  
+                    goto parse_error;
+                  case 'r': {
+                    switch (buf[10]) {
+                      case 's':
+                        if (op == "i8x16.shr_s"sv) {
+                          auto ret = makeSIMDShift(ctx, pos, SIMDShiftOp::ShrSVecI8x16);
+                          CHECK_ERR(ret);
+                          return *ret;
+                        }
+                        goto parse_error;
+                      case 'u':
+                        if (op == "i8x16.shr_u"sv) {
+                          auto ret = makeSIMDShift(ctx, pos, SIMDShiftOp::ShrUVecI8x16);
+                          CHECK_ERR(ret);
+                          return *ret;
+                        }
+                        goto parse_error;
+                      default: goto parse_error;
+                    }
+                  }
+                  case 'u':
+                    if (op == "i8x16.shuffle"sv) {
+                      auto ret = makeSIMDShuffle(ctx, pos);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 'p':
+                if (op == "i8x16.splat"sv) {
+                  auto ret = makeUnary(ctx, pos, UnaryOp::SplatVecI8x16);
+                  CHECK_ERR(ret);
+                  return *ret;
+                }
+                goto parse_error;
+              case 'u': {
+                switch (buf[9]) {
+                  case '\0':
+                    if (op == "i8x16.sub"sv) {
+                      auto ret = makeBinary(ctx, pos, BinaryOp::SubVecI8x16);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case '_': {
+                    switch (buf[14]) {
+                      case 's':
+                        if (op == "i8x16.sub_sat_s"sv) {
+                          auto ret = makeBinary(ctx, pos, BinaryOp::SubSatSVecI8x16);
+                          CHECK_ERR(ret);
+                          return *ret;
+                        }
+                        goto parse_error;
+                      case 'u':
+                        if (op == "i8x16.sub_sat_u"sv) {
+                          auto ret = makeBinary(ctx, pos, BinaryOp::SubSatUVecI8x16);
+                          CHECK_ERR(ret);
+                          return *ret;
+                        }
+                        goto parse_error;
+                      default: goto parse_error;
+                    }
+                  }
+                  default: goto parse_error;
+                }
+              }
+              case 'w':
+                if (op == "i8x16.swizzle"sv) {
+                  auto ret = makeBinary(ctx, pos, BinaryOp::SwizzleVecI8x16);
+                  CHECK_ERR(ret);
+                  return *ret;
+                }
+                goto parse_error;
+              default: goto parse_error;
+            }
+          }
+          default: goto parse_error;
+        }
+      }
+      case 'f':
+        if (op == "if"sv) {
+          auto ret = makeIf(ctx, pos);
+          CHECK_ERR(ret);
+          return *ret;
+        }
+        goto parse_error;
+      default: goto parse_error;
+    }
+  }
+  case 'l': {
+    switch (buf[2]) {
+      case 'c': {
+        switch (buf[6]) {
+          case 'g':
+            if (op == "local.get"sv) {
+              auto ret = makeLocalGet(ctx, pos);
+              CHECK_ERR(ret);
+              return *ret;
+            }
+            goto parse_error;
+          case 's':
+            if (op == "local.set"sv) {
+              auto ret = makeLocalSet(ctx, pos);
+              CHECK_ERR(ret);
+              return *ret;
+            }
+            goto parse_error;
+          case 't':
+            if (op == "local.tee"sv) {
+              auto ret = makeLocalTee(ctx, pos);
+              CHECK_ERR(ret);
+              return *ret;
+            }
+            goto parse_error;
+          default: goto parse_error;
+        }
+      }
+      case 'o':
+        if (op == "loop"sv) {
+          auto ret = makeLoop(ctx, pos);
+          CHECK_ERR(ret);
+          return *ret;
+        }
+        goto parse_error;
+      default: goto parse_error;
+    }
+  }
+  case 'm': {
+    switch (buf[7]) {
+      case 'a': {
+        switch (buf[14]) {
+          case 'n':
+            if (op == "memory.atomic.notify"sv) {
+              auto ret = makeAtomicNotify(ctx, pos);
+              CHECK_ERR(ret);
+              return *ret;
+            }
+            goto parse_error;
+          case 'w': {
+            switch (buf[18]) {
+              case '3':
+                if (op == "memory.atomic.wait32"sv) {
+                  auto ret = makeAtomicWait(ctx, pos, Type::i32);
+                  CHECK_ERR(ret);
+                  return *ret;
+                }
+                goto parse_error;
+              case '6':
+                if (op == "memory.atomic.wait64"sv) {
+                  auto ret = makeAtomicWait(ctx, pos, Type::i64);
+                  CHECK_ERR(ret);
+                  return *ret;
+                }
+                goto parse_error;
+              default: goto parse_error;
+            }
+          }
+          default: goto parse_error;
+        }
+      }
+      case 'c':
+        if (op == "memory.copy"sv) {
+          auto ret = makeMemoryCopy(ctx, pos);
+          CHECK_ERR(ret);
+          return *ret;
+        }
+        goto parse_error;
+      case 'f':
+        if (op == "memory.fill"sv) {
+          auto ret = makeMemoryFill(ctx, pos);
+          CHECK_ERR(ret);
+          return *ret;
+        }
+        goto parse_error;
+      case 'g':
+        if (op == "memory.grow"sv) {
+          auto ret = makeMemoryGrow(ctx, pos);
+          CHECK_ERR(ret);
+          return *ret;
+        }
+        goto parse_error;
+      case 'i':
+        if (op == "memory.init"sv) {
+          auto ret = makeMemoryInit(ctx, pos);
+          CHECK_ERR(ret);
+          return *ret;
+        }
+        goto parse_error;
+      case 's':
+        if (op == "memory.size"sv) {
+          auto ret = makeMemorySize(ctx, pos);
+          CHECK_ERR(ret);
+          return *ret;
+        }
+        goto parse_error;
+      default: goto parse_error;
+    }
+  }
+  case 'n':
+    if (op == "nop"sv) {
+      auto ret = makeNop(ctx, pos);
+      CHECK_ERR(ret);
+      return *ret;
+    }
+    goto parse_error;
+  case 'p':
+    if (op == "pop"sv) {
+      auto ret = makePop(ctx, pos);
+      CHECK_ERR(ret);
+      return *ret;
+    }
+    goto parse_error;
+  case 'r': {
+    switch (buf[2]) {
+      case 'f': {
+        switch (buf[4]) {
+          case 'a': {
+            switch (buf[7]) {
+              case 'f':
+                if (op == "ref.as_func"sv) {
+                  auto ret = makeRefCast(ctx, pos, Type(HeapType::func, NonNullable));
+                  CHECK_ERR(ret);
+                  return *ret;
+                }
+                goto parse_error;
+              case 'i':
+                if (op == "ref.as_i31"sv) {
+                  auto ret = makeRefCast(ctx, pos, Type(HeapType::i31, NonNullable));
+                  CHECK_ERR(ret);
+                  return *ret;
+                }
+                goto parse_error;
+              case 'n':
+                if (op == "ref.as_non_null"sv) {
+                  auto ret = makeRefAs(ctx, pos, RefAsNonNull);
+                  CHECK_ERR(ret);
+                  return *ret;
+                }
+                goto parse_error;
+              default: goto parse_error;
+            }
+          }
+          case 'c': {
+            switch (buf[8]) {
+              case '\0':
+                if (op == "ref.cast"sv) {
+                  auto ret = makeRefCast(ctx, pos);
+                  CHECK_ERR(ret);
+                  return *ret;
+                }
+                goto parse_error;
+              case '_': {
+                switch (buf[9]) {
+                  case 'n': {
+                    switch (buf[12]) {
+                      case '\0':
+                        if (op == "ref.cast_nop"sv) {
+                          auto ret = makeRefCastNop(ctx, pos);
+                          CHECK_ERR(ret);
+                          return *ret;
+                        }
+                        goto parse_error;
+                      case '_':
+                        if (op == "ref.cast_nop_static"sv) {
+                          auto ret = makeRefCastNop(ctx, pos);
+                          CHECK_ERR(ret);
+                          return *ret;
+                        }
+                        goto parse_error;
+                      default: goto parse_error;
+                    }
+                  }
+                  case 's':
+                    if (op == "ref.cast_static"sv) {
+                      auto ret = makeRefCast(ctx, pos);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              default: goto parse_error;
+            }
+          }
+          case 'e':
+            if (op == "ref.eq"sv) {
+              auto ret = makeRefEq(ctx, pos);
+              CHECK_ERR(ret);
+              return *ret;
+            }
+            goto parse_error;
+          case 'f':
+            if (op == "ref.func"sv) {
+              auto ret = makeRefFunc(ctx, pos);
+              CHECK_ERR(ret);
+              return *ret;
+            }
+            goto parse_error;
+          case 'i': {
+            switch (buf[7]) {
+              case 'f':
+                if (op == "ref.is_func"sv) {
+                  auto ret = makeRefTest(ctx, pos, Type(HeapType::func, NonNullable));
+                  CHECK_ERR(ret);
+                  return *ret;
+                }
+                goto parse_error;
+              case 'i':
+                if (op == "ref.is_i31"sv) {
+                  auto ret = makeRefTest(ctx, pos, Type(HeapType::i31, NonNullable));
+                  CHECK_ERR(ret);
+                  return *ret;
+                }
+                goto parse_error;
+              case 'n':
+                if (op == "ref.is_null"sv) {
+                  auto ret = makeRefIsNull(ctx, pos);
+                  CHECK_ERR(ret);
+                  return *ret;
+                }
+                goto parse_error;
+              default: goto parse_error;
+            }
+          }
+          case 'n':
+            if (op == "ref.null"sv) {
+              auto ret = makeRefNull(ctx, pos);
+              CHECK_ERR(ret);
+              return *ret;
+            }
+            goto parse_error;
+          case 't': {
+            switch (buf[8]) {
+              case '\0':
+                if (op == "ref.test"sv) {
+                  auto ret = makeRefTest(ctx, pos);
+                  CHECK_ERR(ret);
+                  return *ret;
+                }
+                goto parse_error;
+              case '_':
+                if (op == "ref.test_static"sv) {
+                  auto ret = makeRefTest(ctx, pos);
+                  CHECK_ERR(ret);
+                  return *ret;
+                }
+                goto parse_error;
+              default: goto parse_error;
+            }
+          }
+          default: goto parse_error;
+        }
+      }
+      case 't': {
+        switch (buf[3]) {
+          case 'h':
+            if (op == "rethrow"sv) {
+              auto ret = makeRethrow(ctx, pos);
+              CHECK_ERR(ret);
+              return *ret;
+            }
+            goto parse_error;
+          case 'u': {
+            switch (buf[6]) {
+              case '\0':
+                if (op == "return"sv) {
+                  auto ret = makeReturn(ctx, pos);
+                  CHECK_ERR(ret);
+                  return *ret;
+                }
+                goto parse_error;
+              case '_': {
+                switch (buf[11]) {
+                  case '\0':
+                    if (op == "ret
