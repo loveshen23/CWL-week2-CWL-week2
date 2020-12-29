@@ -9395,4 +9395,206 @@ switch (buf[0]) {
                   case 'u':
                     if (op == "v128.load16x4_u"sv) {
                       auto ret = makeSIMDLoad(ctx, pos, SIMDLoadOp::Load16x4UVec128, 8);
-           
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              default: goto parse_error;
+            }
+          }
+          case '3': {
+            switch (buf[11]) {
+              case '_': {
+                switch (buf[12]) {
+                  case 'l':
+                    if (op == "v128.load32_lane"sv) {
+                      auto ret = makeSIMDLoadStoreLane(ctx, pos, SIMDLoadStoreLaneOp::Load32LaneVec128, 4);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 's':
+                    if (op == "v128.load32_splat"sv) {
+                      auto ret = makeSIMDLoad(ctx, pos, SIMDLoadOp::Load32SplatVec128, 4);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 'z':
+                    if (op == "v128.load32_zero"sv) {
+                      auto ret = makeSIMDLoad(ctx, pos, SIMDLoadOp::Load32ZeroVec128, 4);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 'x': {
+                switch (buf[14]) {
+                  case 's':
+                    if (op == "v128.load32x2_s"sv) {
+                      auto ret = makeSIMDLoad(ctx, pos, SIMDLoadOp::Load32x2SVec128, 8);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 'u':
+                    if (op == "v128.load32x2_u"sv) {
+                      auto ret = makeSIMDLoad(ctx, pos, SIMDLoadOp::Load32x2UVec128, 8);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              default: goto parse_error;
+            }
+          }
+          case '6': {
+            switch (buf[12]) {
+              case 'l':
+                if (op == "v128.load64_lane"sv) {
+                  auto ret = makeSIMDLoadStoreLane(ctx, pos, SIMDLoadStoreLaneOp::Load64LaneVec128, 8);
+                  CHECK_ERR(ret);
+                  return *ret;
+                }
+                goto parse_error;
+              case 's':
+                if (op == "v128.load64_splat"sv) {
+                  auto ret = makeSIMDLoad(ctx, pos, SIMDLoadOp::Load64SplatVec128, 8);
+                  CHECK_ERR(ret);
+                  return *ret;
+                }
+                goto parse_error;
+              case 'z':
+                if (op == "v128.load64_zero"sv) {
+                  auto ret = makeSIMDLoad(ctx, pos, SIMDLoadOp::Load64ZeroVec128, 8);
+                  CHECK_ERR(ret);
+                  return *ret;
+                }
+                goto parse_error;
+              default: goto parse_error;
+            }
+          }
+          case '8': {
+            switch (buf[10]) {
+              case '_': {
+                switch (buf[11]) {
+                  case 'l':
+                    if (op == "v128.load8_lane"sv) {
+                      auto ret = makeSIMDLoadStoreLane(ctx, pos, SIMDLoadStoreLaneOp::Load8LaneVec128, 1);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 's':
+                    if (op == "v128.load8_splat"sv) {
+                      auto ret = makeSIMDLoad(ctx, pos, SIMDLoadOp::Load8SplatVec128, 1);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              case 'x': {
+                switch (buf[13]) {
+                  case 's':
+                    if (op == "v128.load8x8_s"sv) {
+                      auto ret = makeSIMDLoad(ctx, pos, SIMDLoadOp::Load8x8SVec128, 8);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  case 'u':
+                    if (op == "v128.load8x8_u"sv) {
+                      auto ret = makeSIMDLoad(ctx, pos, SIMDLoadOp::Load8x8UVec128, 8);
+                      CHECK_ERR(ret);
+                      return *ret;
+                    }
+                    goto parse_error;
+                  default: goto parse_error;
+                }
+              }
+              default: goto parse_error;
+            }
+          }
+          default: goto parse_error;
+        }
+      }
+      case 'n':
+        if (op == "v128.not"sv) {
+          auto ret = makeUnary(ctx, pos, UnaryOp::NotVec128);
+          CHECK_ERR(ret);
+          return *ret;
+        }
+        goto parse_error;
+      case 'o':
+        if (op == "v128.or"sv) {
+          auto ret = makeBinary(ctx, pos, BinaryOp::OrVec128);
+          CHECK_ERR(ret);
+          return *ret;
+        }
+        goto parse_error;
+      case 's': {
+        switch (buf[10]) {
+          case '\0':
+            if (op == "v128.store"sv) {
+              auto ret = makeStore(ctx, pos, Type::v128, 16, /*isAtomic=*/false);
+              CHECK_ERR(ret);
+              return *ret;
+            }
+            goto parse_error;
+          case '1':
+            if (op == "v128.store16_lane"sv) {
+              auto ret = makeSIMDLoadStoreLane(ctx, pos, SIMDLoadStoreLaneOp::Store16LaneVec128, 2);
+              CHECK_ERR(ret);
+              return *ret;
+            }
+            goto parse_error;
+          case '3':
+            if (op == "v128.store32_lane"sv) {
+              auto ret = makeSIMDLoadStoreLane(ctx, pos, SIMDLoadStoreLaneOp::Store32LaneVec128, 4);
+              CHECK_ERR(ret);
+              return *ret;
+            }
+            goto parse_error;
+          case '6':
+            if (op == "v128.store64_lane"sv) {
+              auto ret = makeSIMDLoadStoreLane(ctx, pos, SIMDLoadStoreLaneOp::Store64LaneVec128, 8);
+              CHECK_ERR(ret);
+              return *ret;
+            }
+            goto parse_error;
+          case '8':
+            if (op == "v128.store8_lane"sv) {
+              auto ret = makeSIMDLoadStoreLane(ctx, pos, SIMDLoadStoreLaneOp::Store8LaneVec128, 1);
+              CHECK_ERR(ret);
+              return *ret;
+            }
+            goto parse_error;
+          default: goto parse_error;
+        }
+      }
+      case 'x':
+        if (op == "v128.xor"sv) {
+          auto ret = makeBinary(ctx, pos, BinaryOp::XorVec128);
+          CHECK_ERR(ret);
+          return *ret;
+        }
+        goto parse_error;
+      default: goto parse_error;
+    }
+  }
+  default: goto parse_error;
+}
+parse_error:
+  return ctx.in.err(pos, "unrecognized instruction");
+#endif // NEW_INSTRUCTION_PARSER
+
+// clang-format on
