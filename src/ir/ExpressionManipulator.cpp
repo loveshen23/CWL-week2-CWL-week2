@@ -97,4 +97,21 @@ flexibleCopy(Expression* original, Module& wasm, CustomCopier custom) {
 
 #define DELEGATE_FIELD_INT_ARRAY(id, field) COPY_ARRAY(field)
 
-#include "wasm-delegations-fields.d
+#include "wasm-delegations-fields.def"
+
+    // The type can be simply copied.
+    copy->type = original->type;
+
+    // Write the copy to where it should be referred to.
+    *task.destPointer = copy;
+  }
+  return ret;
+}
+
+// Splice an item into the middle of a block's list
+void spliceIntoBlock(Block* block, Index index, Expression* add) {
+  block->list.insertAt(index, add);
+  block->finalize(block->type);
+}
+
+} // namespace wasm::ExpressionManipulator
