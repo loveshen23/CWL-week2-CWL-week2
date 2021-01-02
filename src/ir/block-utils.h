@@ -31,4 +31,42 @@ namespace wasm::BlockUtils {
 template<typename T>
 inline Expression*
 simplifyToContents(Block* block, T* parent, bool allowTypeChange = false) {
-  auto& list = b
+  auto& list = block->list;
+  if (list.size() == 1 &&
+      !BranchUtils::BranchSeeker::has(list[0], block->name)) {
+    // just one element. try to replace the block
+    auto* singleton = list[0];
+    auto sideEffects =
+      EffectAnalyzer(parent->getPassOptions(), *parent->getModule(), singleton)
+        .hasSideEffects();
+    if (!sideEffects && !singleton->type.isConcrete()) {
+      // no side effects, and singleton is not returning a value, so we can
+      // throw away the block and its contents, basically
+      return Builder(*parent->getModule()).replaceWithIdenticalType(block);
+    } else if (Type::isSubType(singleton->type, block->type) ||
+               allowTypeChange) {
+      return singleton;
+    } else {
+      // (side effects +) type change, must be block with declared value but
+      // inside is unreachable (if both concrete, must match, and since no name
+      // on block, we can't be branched to, so if singleton is unreachable, so
+      // is the block)
+      assert(block->type.isConcrete() && singleton->type == Type::unreachable);
+      // we could replace with unreachable, but would need to update all
+      // the parent's types
+    }
+  } else if (list.size() == 0) {
+    ExpressionManipulator::nop(block);
+  }
+  return block;
+}
+
+// similar, but when we allow the type to change while doing so
+template<typename T>
+inline Expression* simplifyToContentsWithPossibleTypeChange(Block* block,
+                                                            T* parent) {
+  return simplifyToContents(block, parent, true);
+}
+} // namespace wasm::BlockUtils
+
+#endif // wasm_ir_block_h
