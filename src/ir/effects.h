@@ -386,4 +386,338 @@ private:
     static void doStartCatch(InternalAnalyzer* self, Expression** currp) {
       Try* curr = (*currp)->cast<Try>();
       // This is conservative. When an inner try-delegate targets the current
-      // expression, even 
+      // expression, even if the try-delegate's body can't throw, we consider
+      // the current expression can throw for simplicity, unless the current
+      // expression is not inside a try-catch_all. It is hard to figure out
+      // whether the original try-delegate's body throws or not at this point.
+      if (curr->name.is()) {
+        if (self->parent.delegateTargets.count(curr->name) &&
+            self->parent.tryDepth == 0) {
+          self->parent.throws_ = true;
+        }
+        self->parent.delegateTargets.erase(curr->name);
+      }
+      // We only count 'try's with a 'catch_all' because instructions within a
+      // 'try' without a 'catch_all' can still throw outside of the try.
+      if (curr->hasCatchAll()) {
+        assert(self->parent.tryDepth > 0 && "try depth cannot be negative");
+        self->parent.tryDepth--;
+      }
+      self->parent.catchDepth++;
+    }
+
+    static void doEndCatch(InternalAnalyzer* self, Expression** currp) {
+      assert(self->parent.catchDepth > 0 && "catch depth cannot be negative");
+      self->parent.catchDepth--;
+    }
+
+    void visitBlock(Block* curr) {
+      if (curr->name.is()) {
+        parent.breakTargets.erase(curr->name); // these were internal breaks
+      }
+    }
+    void visitIf(If* curr) {}
+    void visitLoop(Loop* curr) {
+      if (curr->name.is() && parent.breakTargets.erase(curr->name) > 0) {
+        // Breaks to this loop exist, which we just removed as they do not have
+        // further effect outside of this loop. One additional thing we need to
+        // take into account is infinite looping, which is a noticeable side
+        // effect we can't normally remove - eventually the VM will time out and
+        // error (see more details in the comment on trapping above).
+        parent.implicitTrap = true;
+      }
+    }
+    void visitBreak(Break* curr) { parent.breakTargets.insert(curr->name); }
+    void visitSwitch(Switch* curr) {
+      for (auto name : curr->targets) {
+        parent.breakTargets.insert(name);
+      }
+      parent.breakTargets.insert(curr->default_);
+    }
+
+    void visitCall(Call* curr) {
+      // call.without.effects has no effects.
+      if (Intrinsics(parent.module).isCallWithoutEffects(curr)) {
+        return;
+      }
+
+      if (curr->isReturn) {
+        parent.branchesOut = true;
+      }
+
+      if (parent.funcEffectsMap) {
+        auto iter = parent.funcEffectsMap->find(curr->target);
+        if (iter != parent.funcEffectsMap->end()) {
+          // We have effect information for this call target, and can just use
+          // that. The one change we may want to make is to remove throws_, if
+          // the target function throws and we know that will be caught anyhow,
+          // the same as the code below for the general path.
+          const auto& targetEffects = iter->second;
+          if (targetEffects.throws_ && parent.tryDepth > 0) {
+            auto filteredEffects = targetEffects;
+            filteredEffects.throws_ = false;
+            parent.mergeIn(filteredEffects);
+          } else {
+            // Just merge in all the effects.
+            parent.mergeIn(targetEffects);
+          }
+          return;
+        }
+      }
+
+      parent.calls = true;
+      // When EH is enabled, any call can throw.
+      if (parent.features.hasExceptionHandling() && parent.tryDepth == 0) {
+        parent.throws_ = true;
+      }
+    }
+    void visitCallIndirect(CallIndirect* curr) {
+      parent.calls = true;
+      if (parent.features.hasExceptionHandling() && parent.tryDepth == 0) {
+        parent.throws_ = true;
+      }
+      if (curr->isReturn) {
+        parent.branchesOut = true;
+      }
+    }
+    void visitLocalGet(LocalGet* curr) {
+      parent.localsRead.insert(curr->index);
+    }
+    void visitLocalSet(LocalSet* curr) {
+      parent.localsWritten.insert(curr->index);
+    }
+    void visitGlobalGet(GlobalGet* curr) {
+      if (parent.module.getGlobal(curr->name)->mutable_ == Mutable) {
+        parent.mutableGlobalsRead.insert(curr->name);
+      }
+    }
+    void visitGlobalSet(GlobalSet* curr) {
+      parent.globalsWritten.insert(curr->name);
+    }
+    void visitLoad(Load* curr) {
+      parent.readsMemory = true;
+      parent.isAtomic |= curr->isAtomic;
+      parent.implicitTrap = true;
+    }
+    void visitStore(Store* curr) {
+      parent.writesMemory = true;
+      parent.isAtomic |= curr->isAtomic;
+      parent.implicitTrap = true;
+    }
+    void visitAtomicRMW(AtomicRMW* curr) {
+      parent.readsMemory = true;
+      parent.writesMemory = true;
+      parent.isAtomic = true;
+      parent.implicitTrap = true;
+    }
+    void visitAtomicCmpxchg(AtomicCmpxchg* curr) {
+      parent.readsMemory = true;
+      parent.writesMemory = true;
+      parent.isAtomic = true;
+      parent.implicitTrap = true;
+    }
+    void visitAtomicWait(AtomicWait* curr) {
+      parent.readsMemory = true;
+      // AtomicWait doesn't strictly write memory, but it does modify the
+      // waiters list associated with the specified address, which we can think
+      // of as a write.
+      parent.writesMemory = true;
+      parent.isAtomic = true;
+      parent.implicitTrap = true;
+    }
+    void visitAtomicNotify(AtomicNotify* curr) {
+      // AtomicNotify doesn't strictly write memory, but it does modify the
+      // waiters list associated with the specified address, which we can think
+      // of as a write.
+      parent.readsMemory = true;
+      parent.writesMemory = true;
+      parent.isAtomic = true;
+      parent.implicitTrap = true;
+    }
+    void visitAtomicFence(AtomicFence* curr) {
+      // AtomicFence should not be reordered with any memory operations, so we
+      // set these to true.
+      parent.readsMemory = true;
+      parent.writesMemory = true;
+      parent.isAtomic = true;
+    }
+    void visitSIMDExtract(SIMDExtract* curr) {}
+    void visitSIMDReplace(SIMDReplace* curr) {}
+    void visitSIMDShuffle(SIMDShuffle* curr) {}
+    void visitSIMDTernary(SIMDTernary* curr) {}
+    void visitSIMDShift(SIMDShift* curr) {}
+    void visitSIMDLoad(SIMDLoad* curr) {
+      parent.readsMemory = true;
+      parent.implicitTrap = true;
+    }
+    void visitSIMDLoadStoreLane(SIMDLoadStoreLane* curr) {
+      if (curr->isLoad()) {
+        parent.readsMemory = true;
+      } else {
+        parent.writesMemory = true;
+      }
+      parent.implicitTrap = true;
+    }
+    void visitMemoryInit(MemoryInit* curr) {
+      parent.writesMemory = true;
+      parent.implicitTrap = true;
+    }
+    void visitDataDrop(DataDrop* curr) {
+      // data.drop does not actually write memory, but it does alter the size of
+      // a segment, which can be noticeable later by memory.init, so we need to
+      // mark it as having a global side effect of some kind.
+      parent.writesMemory = true;
+      parent.implicitTrap = true;
+    }
+    void visitMemoryCopy(MemoryCopy* curr) {
+      parent.readsMemory = true;
+      parent.writesMemory = true;
+      parent.implicitTrap = true;
+    }
+    void visitMemoryFill(MemoryFill* curr) {
+      parent.writesMemory = true;
+      parent.implicitTrap = true;
+    }
+    void visitConst(Const* curr) {}
+    void visitUnary(Unary* curr) {
+      switch (curr->op) {
+        case TruncSFloat32ToInt32:
+        case TruncSFloat32ToInt64:
+        case TruncUFloat32ToInt32:
+        case TruncUFloat32ToInt64:
+        case TruncSFloat64ToInt32:
+        case TruncSFloat64ToInt64:
+        case TruncUFloat64ToInt32:
+        case TruncUFloat64ToInt64: {
+          parent.implicitTrap = true;
+          break;
+        }
+        default: {
+        }
+      }
+    }
+    void visitBinary(Binary* curr) {
+      switch (curr->op) {
+        case DivSInt32:
+        case DivUInt32:
+        case RemSInt32:
+        case RemUInt32:
+        case DivSInt64:
+        case DivUInt64:
+        case RemSInt64:
+        case RemUInt64: {
+          // div and rem may contain implicit trap only if RHS is
+          // non-constant or constant which equal zero or -1 for
+          // signed divisions. Reminder traps only with zero
+          // divider.
+          if (auto* c = curr->right->dynCast<Const>()) {
+            if (c->value.isZero()) {
+              parent.implicitTrap = true;
+            } else if ((curr->op == DivSInt32 || curr->op == DivSInt64) &&
+                       c->value.getInteger() == -1LL) {
+              parent.implicitTrap = true;
+            }
+          } else {
+            parent.implicitTrap = true;
+          }
+          break;
+        }
+        default: {
+        }
+      }
+    }
+    void visitSelect(Select* curr) {}
+    void visitDrop(Drop* curr) {}
+    void visitReturn(Return* curr) { parent.branchesOut = true; }
+    void visitMemorySize(MemorySize* curr) {
+      // memory.size accesses the size of the memory, and thus can be modeled as
+      // reading memory
+      parent.readsMemory = true;
+      // Atomics are sequentially consistent with memory.size.
+      parent.isAtomic = true;
+    }
+    void visitMemoryGrow(MemoryGrow* curr) {
+      // TODO: find out if calls is necessary here
+      parent.calls = true;
+      // memory.grow technically does a read-modify-write operation on the
+      // memory size in the successful case, modifying the set of valid
+      // addresses, and just a read operation in the failure case
+      parent.readsMemory = true;
+      parent.writesMemory = true;
+      // Atomics are also sequentially consistent with memory.grow.
+      parent.isAtomic = true;
+    }
+    void visitRefNull(RefNull* curr) {}
+    void visitRefIsNull(RefIsNull* curr) {}
+    void visitRefFunc(RefFunc* curr) {}
+    void visitRefEq(RefEq* curr) {}
+    void visitTableGet(TableGet* curr) {
+      parent.readsTable = true;
+      parent.implicitTrap = true;
+    }
+    void visitTableSet(TableSet* curr) {
+      parent.writesTable = true;
+      parent.implicitTrap = true;
+    }
+    void visitTableSize(TableSize* curr) { parent.readsTable = true; }
+    void visitTableGrow(TableGrow* curr) {
+      // table.grow technically does a read-modify-write operation on the
+      // table size in the successful case, modifying the set of valid
+      // indices, and just a read operation in the failure case
+      parent.readsTable = true;
+      parent.writesTable = true;
+    }
+    void visitTry(Try* curr) {
+      if (curr->delegateTarget.is()) {
+        parent.delegateTargets.insert(curr->delegateTarget);
+      }
+    }
+    void visitThrow(Throw* curr) {
+      if (parent.tryDepth == 0) {
+        parent.throws_ = true;
+      }
+    }
+    void visitRethrow(Rethrow* curr) {
+      if (parent.tryDepth == 0) {
+        parent.throws_ = true;
+      }
+      // traps when the arg is null
+      parent.implicitTrap = true;
+    }
+    void visitNop(Nop* curr) {}
+    void visitUnreachable(Unreachable* curr) { parent.trap = true; }
+    void visitPop(Pop* curr) {
+      if (parent.catchDepth == 0) {
+        parent.danglingPop = true;
+      }
+    }
+    void visitTupleMake(TupleMake* curr) {}
+    void visitTupleExtract(TupleExtract* curr) {}
+    void visitI31New(I31New* curr) {}
+    void visitI31Get(I31Get* curr) {
+      // traps when the ref is null
+      if (curr->i31->type.isNullable()) {
+        parent.implicitTrap = true;
+      }
+    }
+    void visitCallRef(CallRef* curr) {
+      if (curr->target->type.isNull()) {
+        parent.trap = true;
+        return;
+      }
+      parent.calls = true;
+      if (parent.features.hasExceptionHandling() && parent.tryDepth == 0) {
+        parent.throws_ = true;
+      }
+      if (curr->isReturn) {
+        parent.branchesOut = true;
+      }
+      // traps when the call target is null
+      if (curr->target->type.isNullable()) {
+        parent.implicitTrap = true;
+      }
+    }
+    void visitRefTest(RefTest* curr) {}
+    void visitRefCast(RefCast* curr) {
+      // Traps if the ref is not null and the cast fails.
+      parent.impli
