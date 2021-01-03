@@ -720,4 +720,318 @@ private:
     void visitRefTest(RefTest* curr) {}
     void visitRefCast(RefCast* curr) {
       // Traps if the ref is not null and the cast fails.
-      parent.impli
+      parent.implicitTrap = true;
+    }
+    void visitBrOn(BrOn* curr) { parent.breakTargets.insert(curr->name); }
+    void visitStructNew(StructNew* curr) {}
+    void visitStructGet(StructGet* curr) {
+      if (curr->ref->type == Type::unreachable) {
+        return;
+      }
+      if (curr->ref->type.isNull()) {
+        parent.trap = true;
+        return;
+      }
+      if (curr->ref->type.getHeapType()
+            .getStruct()
+            .fields[curr->index]
+            .mutable_ == Mutable) {
+        parent.readsMutableStruct = true;
+      }
+      // traps when the arg is null
+      if (curr->ref->type.isNullable()) {
+        parent.implicitTrap = true;
+      }
+    }
+    void visitStructSet(StructSet* curr) {
+      if (curr->ref->type.isNull()) {
+        parent.trap = true;
+        return;
+      }
+      parent.writesStruct = true;
+      // traps when the arg is null
+      if (curr->ref->type.isNullable()) {
+        parent.implicitTrap = true;
+      }
+    }
+    void visitArrayNew(ArrayNew* curr) {}
+    void visitArrayNewSeg(ArrayNewSeg* curr) {
+      // Traps on out of bounds access to segments or access to dropped
+      // segments.
+      parent.implicitTrap = true;
+    }
+    void visitArrayNewFixed(ArrayNewFixed* curr) {}
+    void visitArrayGet(ArrayGet* curr) {
+      if (curr->ref->type.isNull()) {
+        parent.trap = true;
+        return;
+      }
+      parent.readsArray = true;
+      // traps when the arg is null or the index out of bounds
+      parent.implicitTrap = true;
+    }
+    void visitArraySet(ArraySet* curr) {
+      if (curr->ref->type.isNull()) {
+        parent.trap = true;
+        return;
+      }
+      parent.writesArray = true;
+      // traps when the arg is null or the index out of bounds
+      parent.implicitTrap = true;
+    }
+    void visitArrayLen(ArrayLen* curr) {
+      if (curr->ref->type.isNull()) {
+        parent.trap = true;
+        return;
+      }
+      // traps when the arg is null
+      if (curr->ref->type.isNullable()) {
+        parent.implicitTrap = true;
+      }
+    }
+    void visitArrayCopy(ArrayCopy* curr) {
+      if (curr->destRef->type.isNull() || curr->srcRef->type.isNull()) {
+        parent.trap = true;
+        return;
+      }
+      parent.readsArray = true;
+      parent.writesArray = true;
+      // traps when a ref is null, or when out of bounds.
+      parent.implicitTrap = true;
+    }
+    void visitRefAs(RefAs* curr) {
+      if (curr->op == ExternInternalize || curr->op == ExternExternalize) {
+        // These conversions are infallible.
+        return;
+      }
+      // traps when the arg is not valid
+      parent.implicitTrap = true;
+      // Note: We could be more precise here and report the lack of a possible
+      // trap if the input is non-nullable (and also of the right kind for
+      // RefAsFunc etc.). However, we have optimization passes that will
+      // remove a RefAs in such a case (in OptimizeInstructions, and also
+      // Vacuum in trapsNeverHappen mode), so duplicating that code here would
+      // only help until the next time those optimizations run. As a tradeoff,
+      // we keep the code here simpler, but it does mean another optimization
+      // cycle may be needed in some cases.
+    }
+    void visitStringNew(StringNew* curr) {
+      // traps when out of bounds in linear memory or ref is null
+      parent.implicitTrap = true;
+      switch (curr->op) {
+        case StringNewUTF8:
+        case StringNewWTF8:
+        case StringNewReplace:
+        case StringNewWTF16:
+          parent.readsMemory = true;
+          break;
+        case StringNewUTF8Array:
+        case StringNewWTF8Array:
+        case StringNewReplaceArray:
+        case StringNewWTF16Array:
+          parent.readsArray = true;
+          break;
+        default: {
+        }
+      }
+    }
+    void visitStringConst(StringConst* curr) {}
+    void visitStringMeasure(StringMeasure* curr) {
+      // traps when ref is null.
+      parent.implicitTrap = true;
+    }
+    void visitStringEncode(StringEncode* curr) {
+      // traps when ref is null or we write out of bounds.
+      parent.implicitTrap = true;
+      switch (curr->op) {
+        case StringEncodeUTF8:
+        case StringEncodeWTF8:
+        case StringEncodeWTF16:
+          parent.writesMemory = true;
+          break;
+        case StringEncodeUTF8Array:
+        case StringEncodeWTF8Array:
+        case StringEncodeWTF16Array:
+          parent.writesArray = true;
+          break;
+        default: {
+        }
+      }
+    }
+    void visitStringConcat(StringConcat* curr) {
+      // traps when an input is null.
+      parent.implicitTrap = true;
+    }
+    void visitStringEq(StringEq* curr) {}
+    void visitStringAs(StringAs* curr) {
+      // traps when ref is null.
+      parent.implicitTrap = true;
+    }
+    void visitStringWTF8Advance(StringWTF8Advance* curr) {
+      // traps when ref is null.
+      parent.implicitTrap = true;
+    }
+    void visitStringWTF16Get(StringWTF16Get* curr) {
+      // traps when ref is null.
+      parent.implicitTrap = true;
+    }
+    void visitStringIterNext(StringIterNext* curr) {
+      // traps when ref is null.
+      parent.implicitTrap = true;
+      // modifies state in the iterator. we model that as accessing heap memory
+      // in an array atm TODO consider adding a new effect type for this (we
+      // added one for arrays because struct/array operations often interleave,
+      // say with vtable accesses, but it's not clear adding overhead to this
+      // class is worth it for string iters)
+      parent.readsArray = true;
+      parent.writesArray = true;
+    }
+    void visitStringIterMove(StringIterMove* curr) {
+      // traps when ref is null.
+      parent.implicitTrap = true;
+      // see StringIterNext.
+      parent.readsArray = true;
+      parent.writesArray = true;
+    }
+    void visitStringSliceWTF(StringSliceWTF* curr) {
+      // traps when ref is null.
+      parent.implicitTrap = true;
+    }
+    void visitStringSliceIter(StringSliceIter* curr) {
+      // traps when ref is null.
+      parent.implicitTrap = true;
+    }
+  };
+
+public:
+  // Helpers
+
+  static bool canReorder(const PassOptions& passOptions,
+                         Module& module,
+                         Expression* a,
+                         Expression* b) {
+    EffectAnalyzer aEffects(passOptions, module, a);
+    EffectAnalyzer bEffects(passOptions, module, b);
+    return !aEffects.invalidates(bEffects);
+  }
+
+  // C-API
+
+  enum SideEffects : uint32_t {
+    None = 0,
+    Branches = 1 << 0,
+    Calls = 1 << 1,
+    ReadsLocal = 1 << 2,
+    WritesLocal = 1 << 3,
+    ReadsGlobal = 1 << 4,
+    WritesGlobal = 1 << 5,
+    ReadsMemory = 1 << 6,
+    WritesMemory = 1 << 7,
+    ReadsTable = 1 << 8,
+    WritesTable = 1 << 9,
+    ImplicitTrap = 1 << 10,
+    IsAtomic = 1 << 11,
+    Throws = 1 << 12,
+    DanglingPop = 1 << 13,
+    TrapsNeverHappen = 1 << 14,
+    Any = (1 << 15) - 1
+  };
+  uint32_t getSideEffects() const {
+    uint32_t effects = 0;
+    if (branchesOut || hasExternalBreakTargets()) {
+      effects |= SideEffects::Branches;
+    }
+    if (calls) {
+      effects |= SideEffects::Calls;
+    }
+    if (localsRead.size() > 0) {
+      effects |= SideEffects::ReadsLocal;
+    }
+    if (localsWritten.size() > 0) {
+      effects |= SideEffects::WritesLocal;
+    }
+    if (mutableGlobalsRead.size()) {
+      effects |= SideEffects::ReadsGlobal;
+    }
+    if (globalsWritten.size() > 0) {
+      effects |= SideEffects::WritesGlobal;
+    }
+    if (readsMemory) {
+      effects |= SideEffects::ReadsMemory;
+    }
+    if (writesMemory) {
+      effects |= SideEffects::WritesMemory;
+    }
+    if (readsTable) {
+      effects |= SideEffects::ReadsTable;
+    }
+    if (writesTable) {
+      effects |= SideEffects::WritesTable;
+    }
+    if (implicitTrap) {
+      effects |= SideEffects::ImplicitTrap;
+    }
+    if (trapsNeverHappen) {
+      effects |= SideEffects::TrapsNeverHappen;
+    }
+    if (isAtomic) {
+      effects |= SideEffects::IsAtomic;
+    }
+    if (throws_) {
+      effects |= SideEffects::Throws;
+    }
+    if (danglingPop) {
+      effects |= SideEffects::DanglingPop;
+    }
+    return effects;
+  }
+
+  // Ignores all forms of control flow transfers: breaks, returns, and
+  // exceptions. (Note that traps are not considered relevant here - a trap does
+  // not just transfer control flow, but can be seen as halting the entire
+  // program.)
+  //
+  // This function matches transfersControlFlow(), that is, after calling this
+  // method transfersControlFlow() will always return false.
+  void ignoreControlFlowTransfers() {
+    branchesOut = false;
+    breakTargets.clear();
+    throws_ = false;
+    delegateTargets.clear();
+    assert(!transfersControlFlow());
+  }
+
+private:
+  void pre() {
+    breakTargets.clear();
+    delegateTargets.clear();
+  }
+
+  void post() {
+    assert(tryDepth == 0);
+
+    if (ignoreImplicitTraps) {
+      implicitTrap = false;
+    } else if (implicitTrap) {
+      trap = true;
+    }
+  }
+};
+
+// Calculate effects only on the node itself (shallowly), and not on
+// children.
+class ShallowEffectAnalyzer : public EffectAnalyzer {
+public:
+  ShallowEffectAnalyzer(const PassOptions& passOptions,
+                        Module& module,
+                        Expression* ast = nullptr)
+    : EffectAnalyzer(passOptions, module) {
+    if (ast) {
+      visit(ast);
+    }
+  }
+};
+
+} // namespace wasm
+
+#endif // wasm_ir_effects_h
