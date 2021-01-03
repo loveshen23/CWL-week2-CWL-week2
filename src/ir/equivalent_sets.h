@@ -75,4 +75,19 @@ struct EquivalentSets {
         return true;
       }
     }
-  
+    return false;
+  }
+
+  // Returns the equivalent set, or nullptr
+  Set* getEquivalents(Index index) {
+    auto iter = indexSets.find(index);
+    if (iter != indexSets.end()) {
+      return iter->second.get();
+    }
+    return nullptr;
+  }
+};
+
+} // namespace wasm
+
+#endif // wasm_ir_equivalent_sets_h
