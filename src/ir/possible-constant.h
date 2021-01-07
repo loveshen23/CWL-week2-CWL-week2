@@ -149,4 +149,40 @@ public:
     return std::get<Literal>(value);
   }
 
-  Name get
+  Name getConstantGlobal() const {
+    assert(isConstant());
+    return std::get<Name>(value);
+  }
+
+  // Assuming we have a single value, make an expression containing that value.
+  Expression* makeExpression(Module& wasm) {
+    Builder builder(wasm);
+    if (isConstantLiteral()) {
+      return builder.makeConstantExpression(getConstantLiteral());
+    } else {
+      auto name = getConstantGlobal();
+      return builder.makeGlobalGet(name, wasm.getGlobal(name)->type);
+    }
+  }
+
+  // Returns whether we have ever noted a value.
+  bool hasNoted() const { return !std::get_if<None>(&value); }
+
+  void dump(std::ostream& o) const {
+    o << '[';
+    if (!hasNoted()) {
+      o << "unwritten";
+    } else if (!isConstant()) {
+      o << "unknown";
+    } else if (isConstantLiteral()) {
+      o << getConstantLiteral();
+    } else if (isConstantGlobal()) {
+      o << '$' << getConstantGlobal();
+    }
+    o << ']';
+  }
+};
+
+} // namespace wasm
+
+#endif // wasm_ir_possible_constant_h
