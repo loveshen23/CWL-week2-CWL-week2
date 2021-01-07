@@ -70,4 +70,4 @@ std::string MinifiedNameGenerator::getName() {
   return name;
 }
 
-} // namespace was
+} // namespace wasm::Names
