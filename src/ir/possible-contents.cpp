@@ -328,4 +328,330 @@ bool PossibleContents::haveIntersection(const PossibleContents& a,
     return bDepthFromRoot - aDepthFromRoot <= a.getCone().depth;
   } else {
     WASM_UNREACHABLE("we ruled out no subtyping before");
- 
+  }
+
+  // TODO: we can also optimize things like different Literals, but existing
+  //       passes do such things already so it is low priority.
+}
+
+bool PossibleContents::isSubContents(const PossibleContents& a,
+                                     const PossibleContents& b) {
+  // TODO: Everything else. For now we only call this when |a| or |b| is a full
+  //       cone type.
+  if (b.isFullConeType()) {
+    if (a.isNone()) {
+      return true;
+    }
+    if (a.isMany()) {
+      return false;
+    }
+    if (a.isNull()) {
+      return b.getType().isNullable();
+    }
+    return Type::isSubType(a.getType(), b.getType());
+  }
+
+  if (a.isFullConeType()) {
+    // We've already ruled out b being a full cone type before, so the only way
+    // |a| can be contained in |b| is if |b| is everything.
+    return b.isMany();
+  }
+
+  WASM_UNREACHABLE("a or b must be a full cone");
+}
+
+namespace {
+
+// We are going to do a very large flow operation, potentially, as we create
+// a Location for every interesting part in the entire wasm, and some of those
+// places will have lots of links (like a struct field may link out to every
+// single struct.get of that type), so we must make the data structures here
+// as efficient as possible. Towards that goal, we work with location
+// *indexes* where possible, which are small (32 bits) and do not require any
+// complex hashing when we use them in sets or maps.
+//
+// Note that we do not use indexes everywhere, since the initial analysis is
+// done in parallel, and we do not have a fixed indexing of locations yet. When
+// we merge the parallel data we create that indexing, and use indexes from then
+// on.
+using LocationIndex = uint32_t;
+
+#ifndef NDEBUG
+// Assert on not having duplicates in a vector.
+template<typename T> void disallowDuplicates(const T& targets) {
+#if defined(POSSIBLE_CONTENTS_DEBUG) && POSSIBLE_CONTENTS_DEBUG >= 2
+  std::unordered_set<LocationIndex> uniqueTargets;
+  for (const auto& target : targets) {
+    uniqueTargets.insert(target);
+  }
+  assert(uniqueTargets.size() == targets.size());
+#endif
+}
+#endif
+
+// A link indicates a flow of content from one location to another. For
+// example, if we do a local.get and return that value from a function, then
+// we have a link from the ExpressionLocation of that local.get to a
+// ResultLocation.
+template<typename T> struct Link {
+  T from;
+  T to;
+
+  bool operator==(const Link<T>& other) const {
+    return from == other.from && to == other.to;
+  }
+};
+
+using LocationLink = Link<Location>;
+using IndexLink = Link<LocationIndex>;
+
+} // anonymous namespace
+
+} // namespace wasm
+
+namespace std {
+
+template<> struct hash<wasm::LocationLink> {
+  size_t operator()(const wasm::LocationLink& loc) const {
+    return std::hash<std::pair<wasm::Location, wasm::Location>>{}(
+      {loc.from, loc.to});
+  }
+};
+
+template<> struct hash<wasm::IndexLink> {
+  size_t operator()(const wasm::IndexLink& loc) const {
+    return std::hash<std::pair<wasm::LocationIndex, wasm::LocationIndex>>{}(
+      {loc.from, loc.to});
+  }
+};
+
+} // namespace std
+
+namespace wasm {
+
+namespace {
+
+// The data we gather from each function, as we process them in parallel. Later
+// this will be merged into a single big graph.
+struct CollectedFuncInfo {
+  // All the links we found in this function. Rarely are there duplicates
+  // in this list (say when writing to the same global location from another
+  // global location), and we do not try to deduplicate here, just store them in
+  // a plain array for now, which is faster (later, when we merge all the info
+  // from the functions, we need to deduplicate anyhow).
+  std::vector<LocationLink> links;
+
+  // All the roots of the graph, that is, places that begin by containing some
+  // particular content. That includes i32.const, ref.func, struct.new, etc. All
+  // possible contents in the rest of the graph flow from such places.
+  //
+  // The vector here is of the location of the root and then its contents.
+  std::vector<std::pair<Location, PossibleContents>> roots;
+
+  // In some cases we need to know the parent of the expression. Consider this:
+  //
+  //  (struct.set $A k
+  //    (local.get $ref)
+  //    (local.get $value)
+  //  )
+  //
+  // Imagine that the first local.get, for $ref, receives a new value. That can
+  // affect where the struct.set sends values: if previously that local.get had
+  // no possible contents, and now it does, then we have DataLocations to
+  // update. Likewise, when the second local.get is updated we must do the same,
+  // but again which DataLocations we update depends on the ref passed to the
+  // struct.set. To handle such things, we set add a childParent link, and then
+  // when we update the child we can find the parent and handle any special
+  // behavior we need there.
+  std::unordered_map<Expression*, Expression*> childParents;
+};
+
+// Walk the wasm and find all the links we need to care about, and the locations
+// and roots related to them. This builds up a CollectedFuncInfo data structure.
+// After all InfoCollectors run, those data structures will be merged and the
+// main flow will begin.
+struct InfoCollector
+  : public PostWalker<InfoCollector, OverriddenVisitor<InfoCollector>> {
+  CollectedFuncInfo& info;
+
+  InfoCollector(CollectedFuncInfo& info) : info(info) {}
+
+  // Check if a type is relevant for us. If not, we can ignore it entirely.
+  bool isRelevant(Type type) {
+    if (type == Type::unreachable || type == Type::none) {
+      return false;
+    }
+    if (type.isTuple()) {
+      for (auto t : type) {
+        if (isRelevant(t)) {
+          return true;
+        }
+      }
+    }
+    return true;
+  }
+
+  bool isRelevant(Signature sig) {
+    return isRelevant(sig.params) || isRelevant(sig.results);
+  }
+
+  bool isRelevant(Expression* curr) { return curr && isRelevant(curr->type); }
+
+  template<typename T> bool isRelevant(const T& vec) {
+    for (auto* expr : vec) {
+      if (isRelevant(expr->type)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // Each visit*() call is responsible for connecting the children of a node to
+  // that node. Responsibility for connecting the node's output to anywhere
+  // else (another expression or the function itself, if we are at the top
+  // level) is the responsibility of the outside.
+
+  void visitBlock(Block* curr) {
+    if (curr->list.empty()) {
+      return;
+    }
+
+    // Values sent to breaks to this block must be received here.
+    handleBreakTarget(curr);
+
+    // The final item in the block can flow a value to here as well.
+    receiveChildValue(curr->list.back(), curr);
+  }
+  void visitIf(If* curr) {
+    // Each arm may flow out a value.
+    receiveChildValue(curr->ifTrue, curr);
+    receiveChildValue(curr->ifFalse, curr);
+  }
+  void visitLoop(Loop* curr) { receiveChildValue(curr->body, curr); }
+  void visitBreak(Break* curr) {
+    // Connect the value (if present) to the break target.
+    handleBreakValue(curr);
+
+    // The value may also flow through in a br_if (the type will indicate that,
+    // which receiveChildValue will notice).
+    receiveChildValue(curr->value, curr);
+  }
+  void visitSwitch(Switch* curr) { handleBreakValue(curr); }
+  void visitLoad(Load* curr) {
+    // We could infer the exact type here, but as no subtyping is possible, it
+    // would have no benefit, so just add a generic root (which will be "Many").
+    // See the comment on the ContentOracle class.
+    addRoot(curr);
+  }
+  void visitStore(Store* curr) {}
+  void visitAtomicRMW(AtomicRMW* curr) { addRoot(curr); }
+  void visitAtomicCmpxchg(AtomicCmpxchg* curr) { addRoot(curr); }
+  void visitAtomicWait(AtomicWait* curr) { addRoot(curr); }
+  void visitAtomicNotify(AtomicNotify* curr) { addRoot(curr); }
+  void visitAtomicFence(AtomicFence* curr) {}
+  void visitSIMDExtract(SIMDExtract* curr) { addRoot(curr); }
+  void visitSIMDReplace(SIMDReplace* curr) { addRoot(curr); }
+  void visitSIMDShuffle(SIMDShuffle* curr) { addRoot(curr); }
+  void visitSIMDTernary(SIMDTernary* curr) { addRoot(curr); }
+  void visitSIMDShift(SIMDShift* curr) { addRoot(curr); }
+  void visitSIMDLoad(SIMDLoad* curr) { addRoot(curr); }
+  void visitSIMDLoadStoreLane(SIMDLoadStoreLane* curr) { addRoot(curr); }
+  void visitMemoryInit(MemoryInit* curr) {}
+  void visitDataDrop(DataDrop* curr) {}
+  void visitMemoryCopy(MemoryCopy* curr) {}
+  void visitMemoryFill(MemoryFill* curr) {}
+  void visitConst(Const* curr) {
+    addRoot(curr, PossibleContents::literal(curr->value));
+  }
+  void visitUnary(Unary* curr) {
+    // We could optimize cases like this using interpreter integration: if the
+    // input is a Literal, we could interpret the Literal result. However, if
+    // the input is a literal then the GUFA pass will emit a Const there, and
+    // the Precompute pass can use that later to interpret a result. That is,
+    // the input we need here, a constant, is already something GUFA can emit as
+    // an output. As a result, integrating the interpreter here would perhaps
+    // make compilation require fewer steps, but it wouldn't let us optimize
+    // more than we could before.
+    addRoot(curr);
+  }
+  void visitBinary(Binary* curr) { addRoot(curr); }
+  void visitSelect(Select* curr) {
+    receiveChildValue(curr->ifTrue, curr);
+    receiveChildValue(curr->ifFalse, curr);
+  }
+  void visitDrop(Drop* curr) {}
+  void visitMemorySize(MemorySize* curr) { addRoot(curr); }
+  void visitMemoryGrow(MemoryGrow* curr) { addRoot(curr); }
+  void visitRefNull(RefNull* curr) {
+    addRoot(
+      curr,
+      PossibleContents::literal(Literal::makeNull(curr->type.getHeapType())));
+  }
+  void visitRefIsNull(RefIsNull* curr) {
+    // TODO: Optimize when possible. For example, if we can infer an exact type
+    //       here which allows us to know the result then we should do so. This
+    //       is unlike the case in visitUnary, above: the information that lets
+    //       us optimize *cannot* be written into Binaryen IR (unlike a Literal)
+    //       so using it during this pass allows us to optimize new things.
+    addRoot(curr);
+  }
+  void visitRefFunc(RefFunc* curr) {
+    addRoot(
+      curr,
+      PossibleContents::literal(Literal(curr->func, curr->type.getHeapType())));
+
+    // The presence of a RefFunc indicates the function may be called
+    // indirectly, so add the relevant connections for this particular function.
+    // We do so here in the RefFunc so that we only do it for functions that
+    // actually have a RefFunc.
+    auto* func = getModule()->getFunction(curr->func);
+    for (Index i = 0; i < func->getParams().size(); i++) {
+      info.links.push_back(
+        {SignatureParamLocation{func->type, i}, ParamLocation{func, i}});
+    }
+    for (Index i = 0; i < func->getResults().size(); i++) {
+      info.links.push_back(
+        {ResultLocation{func, i}, SignatureResultLocation{func->type, i}});
+    }
+  }
+  void visitRefEq(RefEq* curr) {
+    addRoot(curr);
+  }
+  void visitTableGet(TableGet* curr) {
+    addRoot(curr);
+  }
+  void visitTableSet(TableSet* curr) {}
+  void visitTableSize(TableSize* curr) { addRoot(curr); }
+  void visitTableGrow(TableGrow* curr) { addRoot(curr); }
+
+  void visitNop(Nop* curr) {}
+  void visitUnreachable(Unreachable* curr) {}
+
+#ifndef NDEBUG
+  // For now we only handle pops in a catch body, see visitTry(). To check for
+  // errors, use counter of the pops we handled and all the pops; those sums
+  // must agree at the end, or else we've seen something we can't handle.
+  Index totalPops = 0;
+  Index handledPops = 0;
+#endif
+
+  void visitPop(Pop* curr) {
+#ifndef NDEBUG
+    totalPops++;
+#endif
+  }
+  void visitI31New(I31New* curr) {
+    // TODO: optimize like struct references
+    addRoot(curr);
+  }
+  void visitI31Get(I31Get* curr) {
+    // TODO: optimize like struct references
+    addRoot(curr);
+  }
+
+  void visitRefCast(RefCast* curr) { receiveChildValue(curr->ref, curr); }
+  void visitRefTest(RefTest* curr) { addRoot(curr); }
+  void visitBrOn(BrOn* curr) {
+    // TODO: optimize when possible
+    handleBreakValue(curr);
+    receiveChildValue(curr-
