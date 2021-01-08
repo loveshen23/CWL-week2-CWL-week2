@@ -654,4 +654,333 @@ struct InfoCollector
   void visitBrOn(BrOn* curr) {
     // TODO: optimize when possible
     handleBreakValue(curr);
-    receiveChildValue(curr-
+    receiveChildValue(curr->ref, curr);
+  }
+  void visitRefAs(RefAs* curr) {
+    if (curr->op == ExternExternalize || curr->op == ExternInternalize) {
+      // The external conversion ops emit something of a completely different
+      // type, which we must mark as a root.
+      addRoot(curr);
+      return;
+    }
+
+    // All other RefAs operations flow values through while refining them (the
+    // filterExpressionContents method will handle the refinement
+    // automatically).
+    receiveChildValue(curr->value, curr);
+  }
+
+  void visitLocalSet(LocalSet* curr) {
+    if (!isRelevant(curr->value->type)) {
+      return;
+    }
+
+    // Tees flow out the value (receiveChildValue will see if this is a tee
+    // based on the type, automatically).
+    receiveChildValue(curr->value, curr);
+
+    // We handle connecting local.gets to local.sets below, in visitFunction.
+  }
+  void visitLocalGet(LocalGet* curr) {
+    // We handle connecting local.gets to local.sets below, in visitFunction.
+  }
+
+  // Globals read and write from their location.
+  void visitGlobalGet(GlobalGet* curr) {
+    if (isRelevant(curr->type)) {
+      // FIXME: we allow tuples in globals, so GlobalLocation needs a tupleIndex
+      //        and we should loop here.
+      assert(!curr->type.isTuple());
+      info.links.push_back(
+        {GlobalLocation{curr->name}, ExpressionLocation{curr, 0}});
+    }
+  }
+  void visitGlobalSet(GlobalSet* curr) {
+    if (isRelevant(curr->value->type)) {
+      info.links.push_back(
+        {ExpressionLocation{curr->value, 0}, GlobalLocation{curr->name}});
+    }
+  }
+
+  // Iterates over a list of children and adds links to parameters and results
+  // as needed. The param/result functions receive the index and create the
+  // proper location for it.
+  template<typename T>
+  void handleCall(T* curr,
+                  std::function<Location(Index)> makeParamLocation,
+                  std::function<Location(Index)> makeResultLocation) {
+    Index i = 0;
+    for (auto* operand : curr->operands) {
+      if (isRelevant(operand->type)) {
+        info.links.push_back(
+          {ExpressionLocation{operand, 0}, makeParamLocation(i)});
+      }
+      i++;
+    }
+
+    // Add results, if anything flows out.
+    for (Index i = 0; i < curr->type.size(); i++) {
+      if (isRelevant(curr->type[i])) {
+        info.links.push_back(
+          {makeResultLocation(i), ExpressionLocation{curr, i}});
+      }
+    }
+
+    // If this is a return call then send the result to the function return as
+    // well.
+    if (curr->isReturn) {
+      auto results = getFunction()->getResults();
+      for (Index i = 0; i < results.size(); i++) {
+        auto result = results[i];
+        if (isRelevant(result)) {
+          info.links.push_back(
+            {makeResultLocation(i), ResultLocation{getFunction(), i}});
+        }
+      }
+    }
+  }
+
+  // Calls send values to params in their possible targets, and receive
+  // results.
+
+  template<typename T> void handleDirectCall(T* curr, Name targetName) {
+    auto* target = getModule()->getFunction(targetName);
+    handleCall(
+      curr,
+      [&](Index i) {
+        assert(i <= target->getParams().size());
+        return ParamLocation{target, i};
+      },
+      [&](Index i) {
+        assert(i <= target->getResults().size());
+        return ResultLocation{target, i};
+      });
+  }
+  template<typename T> void handleIndirectCall(T* curr, HeapType targetType) {
+    // If the heap type is not a signature, which is the case for a bottom type
+    // (null) then nothing can be called.
+    if (!targetType.isSignature()) {
+      assert(targetType.isBottom());
+      return;
+    }
+    handleCall(
+      curr,
+      [&](Index i) {
+        assert(i <= targetType.getSignature().params.size());
+        return SignatureParamLocation{targetType, i};
+      },
+      [&](Index i) {
+        assert(i <= targetType.getSignature().results.size());
+        return SignatureResultLocation{targetType, i};
+      });
+  }
+  template<typename T> void handleIndirectCall(T* curr, Type targetType) {
+    // If the type is unreachable, nothing can be called (and there is no heap
+    // type to get).
+    if (targetType != Type::unreachable) {
+      handleIndirectCall(curr, targetType.getHeapType());
+    }
+  }
+
+  void visitCall(Call* curr) {
+    Name targetName;
+    if (!Intrinsics(*getModule()).isCallWithoutEffects(curr)) {
+      // This is just a normal call.
+      handleDirectCall(curr, curr->target);
+      return;
+    }
+    // A call-without-effects receives a function reference and calls it, the
+    // same as a CallRef. When we have a flag for non-closed-world, we should
+    // handle this automatically by the reference flowing out to an import,
+    // which is what binaryen intrinsics look like. For now, to support use
+    // cases of a closed world but that also use this intrinsic, handle the
+    // intrinsic specifically here. (Without that, the closed world assumption
+    // makes us ignore the function ref that flows to an import, so we are not
+    // aware that it is actually called.)
+    auto* target = curr->operands.back();
+
+    // We must ignore the last element when handling the call - the target is
+    // used to perform the call, and not sent during the call.
+    curr->operands.pop_back();
+
+    if (auto* refFunc = target->dynCast<RefFunc>()) {
+      // We can see exactly where this goes.
+      handleDirectCall(curr, refFunc->func);
+    } else {
+      // We can't see where this goes. We must be pessimistic and assume it
+      // can call anything of the proper type, the same as a CallRef. (We could
+      // look at the possible contents of |target| during the flow, but that
+      // would require special logic like we have for StructGet etc., and the
+      // intrinsics will be lowered away anyhow, so just running after that is
+      // a workaround.)
+      handleIndirectCall(curr, target->type);
+    }
+
+    // Restore the target.
+    curr->operands.push_back(target);
+  }
+  void visitCallIndirect(CallIndirect* curr) {
+    // TODO: the table identity could also be used here
+    // TODO: optimize the call target like CallRef
+    handleIndirectCall(curr, curr->heapType);
+  }
+  void visitCallRef(CallRef* curr) {
+    handleIndirectCall(curr, curr->target->type);
+  }
+
+  // Creates a location for a null of a particular type and adds a root for it.
+  // Such roots are where the default value of an i32 local comes from, or the
+  // value in a ref.null.
+  Location getNullLocation(Type type) {
+    auto location = NullLocation{type};
+    addRoot(location, PossibleContents::literal(Literal::makeZero(type)));
+    return location;
+  }
+
+  // Iterates over a list of children and adds links from them. The target of
+  // those link is created using a function that is passed in, which receives
+  // the index of the child.
+  void linkChildList(ExpressionList& operands,
+                     std::function<Location(Index)> makeTarget) {
+    Index i = 0;
+    for (auto* operand : operands) {
+      // This helper is not used from places that allow a tuple (hence we can
+      // hardcode the index 0 a few lines down).
+      assert(!operand->type.isTuple());
+
+      if (isRelevant(operand->type)) {
+        info.links.push_back({ExpressionLocation{operand, 0}, makeTarget(i)});
+      }
+      i++;
+    }
+  }
+
+  void visitStructNew(StructNew* curr) {
+    if (curr->type == Type::unreachable) {
+      return;
+    }
+    auto type = curr->type.getHeapType();
+    if (curr->isWithDefault()) {
+      // Link the default values to the struct's fields.
+      auto& fields = type.getStruct().fields;
+      for (Index i = 0; i < fields.size(); i++) {
+        info.links.push_back(
+          {getNullLocation(fields[i].type), DataLocation{type, i}});
+      }
+    } else {
+      // Link the operands to the struct's fields.
+      linkChildList(curr->operands, [&](Index i) {
+        return DataLocation{type, i};
+      });
+    }
+    addRoot(curr, PossibleContents::exactType(curr->type));
+  }
+  void visitArrayNew(ArrayNew* curr) {
+    if (curr->type == Type::unreachable) {
+      return;
+    }
+    auto type = curr->type.getHeapType();
+    if (curr->init) {
+      info.links.push_back(
+        {ExpressionLocation{curr->init, 0}, DataLocation{type, 0}});
+    } else {
+      info.links.push_back(
+        {getNullLocation(type.getArray().element.type), DataLocation{type, 0}});
+    }
+    addRoot(curr, PossibleContents::exactType(curr->type));
+  }
+  void visitArrayNewSeg(ArrayNewSeg* curr) {
+    if (curr->type == Type::unreachable) {
+      return;
+    }
+    addRoot(curr, PossibleContents::exactType(curr->type));
+    auto heapType = curr->type.getHeapType();
+    switch (curr->op) {
+      case NewData: {
+        Type elemType = heapType.getArray().element.type;
+        addRoot(DataLocation{heapType, 0},
+                PossibleContents::fromType(elemType));
+        return;
+      }
+      case NewElem: {
+        Type segType = getModule()->elementSegments[curr->segment]->type;
+        addRoot(DataLocation{heapType, 0}, PossibleContents::fromType(segType));
+        return;
+      }
+    }
+    WASM_UNREACHABLE("unexpected op");
+  }
+  void visitArrayNewFixed(ArrayNewFixed* curr) {
+    if (curr->type == Type::unreachable) {
+      return;
+    }
+    if (!curr->values.empty()) {
+      auto type = curr->type.getHeapType();
+      linkChildList(curr->values, [&](Index i) {
+        // The index i is ignored, as we do not track indexes in Arrays -
+        // everything is modeled as if at index 0.
+        return DataLocation{type, 0};
+      });
+    }
+    addRoot(curr, PossibleContents::exactType(curr->type));
+  }
+
+  // Struct operations access the struct fields' locations.
+  void visitStructGet(StructGet* curr) {
+    if (!isRelevant(curr->ref)) {
+      // If references are irrelevant then we will ignore them, and we won't
+      // have information about this struct.get's reference, which means we
+      // won't have information to compute relevant values for this struct.get.
+      // Instead, just mark this as an unknown value (root).
+      addRoot(curr);
+      return;
+    }
+    // The struct.get will receive different values depending on the contents
+    // in the reference, so mark us as the parent of the ref, and we will
+    // handle all of this in a special way during the flow. Note that we do
+    // not even create a DataLocation here; anything that we need will be
+    // added during the flow.
+    addChildParentLink(curr->ref, curr);
+  }
+  void visitStructSet(StructSet* curr) {
+    if (curr->ref->type == Type::unreachable) {
+      return;
+    }
+    // See comment on visitStructGet. Here we also connect the value.
+    addChildParentLink(curr->ref, curr);
+    addChildParentLink(curr->value, curr);
+  }
+  // Array operations access the array's location, parallel to how structs work.
+  void visitArrayGet(ArrayGet* curr) {
+    if (!isRelevant(curr->ref)) {
+      addRoot(curr);
+      return;
+    }
+    addChildParentLink(curr->ref, curr);
+  }
+  void visitArraySet(ArraySet* curr) {
+    if (curr->ref->type == Type::unreachable) {
+      return;
+    }
+    addChildParentLink(curr->ref, curr);
+    addChildParentLink(curr->value, curr);
+  }
+
+  void visitArrayLen(ArrayLen* curr) {
+    // TODO: optimize when possible (perhaps we can infer a Literal for the
+    //       length)
+    addRoot(curr);
+  }
+  void visitArrayCopy(ArrayCopy* curr) {
+    if (curr->type == Type::unreachable) {
+      return;
+    }
+    // Our flow handling of GC data is not simple: we have special code for each
+    // read and write instruction. Therefore, to avoid adding special code for
+    // ArrayCopy, model it as a combination of an ArrayRead and ArrayWrite, by
+    // just emitting fake expressions for those. The fake expressions are not
+    // part of the main IR, which is potentially confusing during debugging,
+    // however, which is a downside.
+    Builder builder(*getModule());
+    auto* get =
+      builder.makeArrayGet(curr->srcRef, curr->srcIndex,
