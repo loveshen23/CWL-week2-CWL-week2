@@ -1336,4 +1336,310 @@ private:
   // operations are imprecise and so the transitive property does not hold:
   // (AvB)vC may differ from Av(BvC). Likewise (AvB)^C may differ from
   // (A^C)v(B^C). An example of the latter is if a location is sent a null func
-  // and an i31, and the location can only contain
+  // and an i31, and the location can only contain funcref. If the null func
+  // arrives first, then later we'd merge null func + i31 which ends up as Many,
+  // and then we filter that to funcref and get funcref. But if the i31 arrived
+  // first, we'd filter it into nothing, and then the null func that arrives
+  // later would be the final result. This would not happen if our operations
+  // were precise, but we only make approximations here to avoid unacceptable
+  // overhead, such as cone types but not arbitrary unions, etc.
+  InsertOrderedSet<LocationIndex> workQueue;
+
+  // All existing links in the graph. We keep this to know when a link we want
+  // to add is new or not.
+  std::unordered_set<IndexLink> links;
+
+  // Update a location with new contents that are added to everything already
+  // present there. If the update changes the contents at that location (if
+  // there was anything new) then we also need to flow from there, which we will
+  // do by adding the location to the work queue, and eventually flowAfterUpdate
+  // will be called on this location.
+  //
+  // Returns whether it is worth sending new contents to this location in the
+  // future. If we return false, the sending location never needs to do that
+  // ever again.
+  bool updateContents(LocationIndex locationIndex,
+                      PossibleContents newContents);
+
+  // Slow helper that converts a Location to a LocationIndex. This should be
+  // avoided. TODO: remove the remaining uses of this.
+  bool updateContents(const Location& location,
+                      const PossibleContents& newContents) {
+    return updateContents(getIndex(location), newContents);
+  }
+
+  // Flow contents from a location where a change occurred. This sends the new
+  // contents to all the normal targets of this location (using
+  // flowToTargetsAfterUpdate), and also handles special cases of flow after.
+  void flowAfterUpdate(LocationIndex locationIndex);
+
+  // Internal part of flowAfterUpdate that handles sending new values to the
+  // given location index's normal targets (that is, the ones listed in the
+  // |targets| vector).
+  void flowToTargetsAfterUpdate(LocationIndex locationIndex,
+                                const PossibleContents& contents);
+
+  // Add a new connection while the flow is happening. If the link already
+  // exists it is not added.
+  void connectDuringFlow(Location from, Location to);
+
+  // Contents sent to certain locations can be filtered in a special way during
+  // the flow, which is handled in these helpers. These may update
+  // |worthSendingMore| which is whether it is worth sending any more content to
+  // this location in the future.
+  void filterExpressionContents(PossibleContents& contents,
+                                const ExpressionLocation& exprLoc,
+                                bool& worthSendingMore);
+  void filterGlobalContents(PossibleContents& contents,
+                            const GlobalLocation& globalLoc);
+
+  // Reads from GC data: a struct.get or array.get. This is given the type of
+  // the read operation, the field that is read on that type, the known contents
+  // in the reference the read receives, and the read instruction itself. We
+  // compute where we need to read from based on the type and the ref contents
+  // and get that data, adding new links in the graph as needed.
+  void readFromData(Type declaredType,
+                    Index fieldIndex,
+                    const PossibleContents& refContents,
+                    Expression* read);
+
+  // Similar to readFromData, but does a write for a struct.set or array.set.
+  void writeToData(Expression* ref, Expression* value, Index fieldIndex);
+
+  // We will need subtypes during the flow, so compute them once ahead of time.
+  std::unique_ptr<SubTypes> subTypes;
+
+  // The depth of children for each type. This is 0 if the type has no
+  // subtypes, 1 if it has subtypes but none of those have subtypes themselves,
+  // and so forth.
+  std::unordered_map<HeapType, Index> maxDepths;
+
+  // Given a ConeType, return the normalized depth, that is, the canonical depth
+  // given the actual children it has. If this is a full cone, then we can
+  // always pick the actual maximal depth and use that instead of FullDepth==-1.
+  // For a non-full cone, we also reduce the depth as much as possible, so it is
+  // equal to the maximum depth of an existing subtype.
+  Index getNormalizedConeDepth(Type type, Index depth) {
+    return std::min(depth, maxDepths[type.getHeapType()]);
+  }
+
+  void normalizeConeType(PossibleContents& cone) {
+    assert(cone.isConeType());
+    auto type = cone.getType();
+    auto before = cone.getCone().depth;
+    auto normalized = getNormalizedConeDepth(type, before);
+    if (normalized != before) {
+      cone = PossibleContents::coneType(type, normalized);
+    }
+  }
+
+#if defined(POSSIBLE_CONTENTS_DEBUG) && POSSIBLE_CONTENTS_DEBUG >= 2
+  // Dump out a location for debug purposes.
+  void dump(Location location);
+#endif
+};
+
+Flower::Flower(Module& wasm) : wasm(wasm) {
+#ifdef POSSIBLE_CONTENTS_DEBUG
+  std::cout << "parallel phase\n";
+#endif
+
+  // First, collect information from each function.
+  ModuleUtils::ParallelFunctionAnalysis<CollectedFuncInfo> analysis(
+    wasm, [&](Function* func, CollectedFuncInfo& info) {
+      InfoCollector finder(info);
+
+      if (func->imported()) {
+        // Imports return unknown values.
+        auto results = func->getResults();
+        for (Index i = 0; i < results.size(); i++) {
+          finder.addRoot(ResultLocation{func, i},
+                         PossibleContents::fromType(results[i]));
+        }
+        return;
+      }
+
+      finder.walkFunctionInModule(func, &wasm);
+    });
+
+#ifdef POSSIBLE_CONTENTS_DEBUG
+  std::cout << "single phase\n";
+#endif
+
+  // Also walk the global module code (for simplicity, also add it to the
+  // function map, using a "function" key of nullptr).
+  auto& globalInfo = analysis.map[nullptr];
+  InfoCollector finder(globalInfo);
+  finder.walkModuleCode(&wasm);
+
+  // Connect global init values (which we've just processed, as part of the
+  // module code) to the globals they initialize.
+  for (auto& global : wasm.globals) {
+    if (global->imported()) {
+      // Imports are unknown values.
+      finder.addRoot(GlobalLocation{global->name},
+                     PossibleContents::fromType(global->type));
+      continue;
+    }
+    auto* init = global->init;
+    if (finder.isRelevant(init->type)) {
+      globalInfo.links.push_back(
+        {ExpressionLocation{init, 0}, GlobalLocation{global->name}});
+    }
+  }
+
+  // Merge the function information into a single large graph that represents
+  // the entire program all at once, indexing and deduplicating everything as we
+  // go.
+
+#ifdef POSSIBLE_CONTENTS_DEBUG
+  std::cout << "merging+indexing phase\n";
+#endif
+
+  // The merged roots. (Note that all other forms of merged data are declared at
+  // the class level, since we need them during the flow, but the roots are only
+  // needed to start the flow, so we can declare them here.)
+  std::unordered_map<Location, PossibleContents> roots;
+
+  for (auto& [func, info] : analysis.map) {
+    for (auto& link : info.links) {
+      links.insert(getIndexes(link));
+    }
+    for (auto& [root, value] : info.roots) {
+      roots[root] = value;
+
+      // Ensure an index even for a root with no links to it - everything needs
+      // an index.
+      getIndex(root);
+    }
+    for (auto [child, parent] : info.childParents) {
+      // In practice we do not have any childParent connections with a tuple;
+      // assert on that just to be safe.
+      assert(!child->type.isTuple());
+      childParents[getIndex(ExpressionLocation{child, 0})] =
+        getIndex(ExpressionLocation{parent, 0});
+    }
+  }
+
+  // We no longer need the function-level info.
+  analysis.map.clear();
+
+#ifdef POSSIBLE_CONTENTS_DEBUG
+  std::cout << "external phase\n";
+#endif
+
+  // Parameters of exported functions are roots, since exports can have callers
+  // that we can't see, so anything might arrive there.
+  auto calledFromOutside = [&](Name funcName) {
+    auto* func = wasm.getFunction(funcName);
+    auto params = func->getParams();
+    for (Index i = 0; i < func->getParams().size(); i++) {
+      roots[ParamLocation{func, i}] = PossibleContents::fromType(params[i]);
+    }
+  };
+
+  for (auto& ex : wasm.exports) {
+    if (ex->kind == ExternalKind::Function) {
+      calledFromOutside(ex->value);
+    } else if (ex->kind == ExternalKind::Table) {
+      // If any table is exported, assume any function in any table (including
+      // other tables) can be called from the outside.
+      // TODO: This could be more precise about which tables are exported and
+      //       which are not: perhaps one table is exported but we can optimize
+      //       the functions in another table, which is not exported. However,
+      //       it is simpler to treat them all the same, and this handles the
+      //       common case of no tables being exported at all.
+      // TODO: This does not handle table.get/table.set, or call_ref, for which
+      //       we'd need to see which references are used and which escape etc.
+      //       For now, assume a closed world for such such advanced use cases /
+      //       assume this pass won't be run in them anyhow.
+      // TODO: do this only once if multiple tables are exported
+      for (auto& elementSegment : wasm.elementSegments) {
+        for (auto* curr : elementSegment->data) {
+          if (auto* refFunc = curr->dynCast<RefFunc>()) {
+            calledFromOutside(refFunc->func);
+          }
+        }
+      }
+    } else if (ex->kind == ExternalKind::Global) {
+      // Exported mutable globals are roots, since the outside may write any
+      // value to them.
+      auto name = ex->value;
+      auto* global = wasm.getGlobal(name);
+      if (global->mutable_) {
+        roots[GlobalLocation{name}] = PossibleContents::fromType(global->type);
+      }
+    }
+  }
+
+#ifdef POSSIBLE_CONTENTS_DEBUG
+  std::cout << "struct phase\n";
+#endif
+
+  subTypes = std::make_unique<SubTypes>(wasm);
+  maxDepths = subTypes->getMaxDepths();
+
+#ifdef POSSIBLE_CONTENTS_DEBUG
+  std::cout << "Link-targets phase\n";
+#endif
+
+  // Add all links to the targets vectors of the source locations, which we will
+  // use during the flow.
+  for (auto& link : links) {
+    getTargets(link.from).push_back(link.to);
+  }
+
+#ifndef NDEBUG
+  // Each vector of targets (which is a vector for efficiency) must have no
+  // duplicates.
+  for (auto& info : locations) {
+    disallowDuplicates(info.targets);
+  }
+#endif
+
+#ifdef POSSIBLE_CONTENTS_DEBUG
+  std::cout << "roots phase\n";
+#endif
+
+  // Set up the roots, which are the starting state for the flow analysis: send
+  // their initial content to them to start the flow.
+  for (const auto& [location, value] : roots) {
+#if defined(POSSIBLE_CONTENTS_DEBUG) && POSSIBLE_CONTENTS_DEBUG >= 2
+    std::cout << "  init root\n";
+    dump(location);
+    value.dump(std::cout, &wasm);
+    std::cout << '\n';
+#endif
+
+    updateContents(location, value);
+  }
+
+#ifdef POSSIBLE_CONTENTS_DEBUG
+  std::cout << "flow phase\n";
+  size_t iters = 0;
+#endif
+
+  // Flow the data while there is still stuff flowing.
+  while (!workQueue.empty()) {
+#ifdef POSSIBLE_CONTENTS_DEBUG
+    iters++;
+    if ((iters & 255) == 0) {
+      std::cout << iters++ << " iters, work left: " << workQueue.size() << '\n';
+    }
+#endif
+
+    auto iter = workQueue.begin();
+    auto locationIndex = *iter;
+    workQueue.erase(iter);
+
+    flowAfterUpdate(locationIndex);
+  }
+
+  // TODO: Add analysis and retrieval logic for fields of immutable globals,
+  //       including multiple levels of depth (necessary for itables in j2wasm).
+}
+
+bool Flower::updateContents(LocationIndex locationIndex,
+                            PossibleContents newContents) {
+  auto& contents = getContents(locationIndex);
+  auto oldConten
