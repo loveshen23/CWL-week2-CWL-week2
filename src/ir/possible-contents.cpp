@@ -983,4 +983,357 @@ struct InfoCollector
     // however, which is a downside.
     Builder builder(*getModule());
     auto* get =
-      builder.makeArrayGet(curr->srcRef, curr->srcIndex,
+      builder.makeArrayGet(curr->srcRef, curr->srcIndex, curr->srcRef->type);
+    visitArrayGet(get);
+    auto* set = builder.makeArraySet(curr->destRef, curr->destIndex, get);
+    visitArraySet(set);
+  }
+
+  void visitStringNew(StringNew* curr) {
+    if (curr->type == Type::unreachable) {
+      return;
+    }
+    addRoot(curr, PossibleContents::exactType(curr->type));
+  }
+  void visitStringConst(StringConst* curr) {
+    addRoot(curr, PossibleContents::exactType(curr->type));
+  }
+  void visitStringMeasure(StringMeasure* curr) {
+    // TODO: optimize when possible
+    addRoot(curr);
+  }
+  void visitStringEncode(StringEncode* curr) {
+    // TODO: optimize when possible
+    addRoot(curr);
+  }
+  void visitStringConcat(StringConcat* curr) {
+    // TODO: optimize when possible
+    addRoot(curr);
+  }
+  void visitStringEq(StringEq* curr) {
+    // TODO: optimize when possible
+    addRoot(curr);
+  }
+  void visitStringAs(StringAs* curr) {
+    // TODO: optimize when possible
+    addRoot(curr);
+  }
+  void visitStringWTF8Advance(StringWTF8Advance* curr) {
+    // TODO: optimize when possible
+    addRoot(curr);
+  }
+  void visitStringWTF16Get(StringWTF16Get* curr) {
+    // TODO: optimize when possible
+    addRoot(curr);
+  }
+  void visitStringIterNext(StringIterNext* curr) {
+    // TODO: optimize when possible
+    addRoot(curr);
+  }
+  void visitStringIterMove(StringIterMove* curr) {
+    // TODO: optimize when possible
+    addRoot(curr);
+  }
+  void visitStringSliceWTF(StringSliceWTF* curr) {
+    // TODO: optimize when possible
+    addRoot(curr);
+  }
+  void visitStringSliceIter(StringSliceIter* curr) {
+    // TODO: optimize when possible
+    addRoot(curr);
+  }
+
+  // TODO: Model which throws can go to which catches. For now, anything thrown
+  //       is sent to the location of that tag, and any catch of that tag can
+  //       read them.
+  void visitTry(Try* curr) {
+    receiveChildValue(curr->body, curr);
+    for (auto* catchBody : curr->catchBodies) {
+      receiveChildValue(catchBody, curr);
+    }
+
+    auto numTags = curr->catchTags.size();
+    for (Index tagIndex = 0; tagIndex < numTags; tagIndex++) {
+      auto tag = curr->catchTags[tagIndex];
+      auto* body = curr->catchBodies[tagIndex];
+
+      auto params = getModule()->getTag(tag)->sig.params;
+      if (params.size() == 0) {
+        continue;
+      }
+
+      // Find the pop of the tag's contents. The body must start with such a
+      // pop, which might be of a tuple.
+      auto* pop = EHUtils::findPop(body);
+      // There must be a pop since we checked earlier if it was an empty tag,
+      // and would not reach here.
+      assert(pop);
+      assert(pop->type.size() == params.size());
+      for (Index i = 0; i < params.size(); i++) {
+        if (isRelevant(params[i])) {
+          info.links.push_back(
+            {TagLocation{tag, i}, ExpressionLocation{pop, i}});
+        }
+      }
+
+#ifndef NDEBUG
+      // This pop was in the position we can handle, note that (see visitPop
+      // for details).
+      handledPops++;
+#endif
+    }
+  }
+  void visitThrow(Throw* curr) {
+    auto& operands = curr->operands;
+    if (!isRelevant(operands)) {
+      return;
+    }
+
+    auto tag = curr->tag;
+    for (Index i = 0; i < curr->operands.size(); i++) {
+      info.links.push_back(
+        {ExpressionLocation{operands[i], 0}, TagLocation{tag, i}});
+    }
+  }
+  void visitRethrow(Rethrow* curr) {}
+
+  void visitTupleMake(TupleMake* curr) {
+    if (isRelevant(curr->type)) {
+      for (Index i = 0; i < curr->operands.size(); i++) {
+        info.links.push_back({ExpressionLocation{curr->operands[i], 0},
+                              ExpressionLocation{curr, i}});
+      }
+    }
+  }
+  void visitTupleExtract(TupleExtract* curr) {
+    if (isRelevant(curr->type)) {
+      info.links.push_back({ExpressionLocation{curr->tuple, curr->index},
+                            ExpressionLocation{curr, 0}});
+    }
+  }
+
+  // Adds a result to the current function, such as from a return or the value
+  // that flows out.
+  void addResult(Expression* value) {
+    if (value && isRelevant(value->type)) {
+      for (Index i = 0; i < value->type.size(); i++) {
+        info.links.push_back(
+          {ExpressionLocation{value, i}, ResultLocation{getFunction(), i}});
+      }
+    }
+  }
+
+  void visitReturn(Return* curr) { addResult(curr->value); }
+
+  void visitFunction(Function* func) {
+    // Functions with a result can flow a value out from their body.
+    addResult(func->body);
+
+    // See visitPop().
+    assert(handledPops == totalPops);
+
+    // Handle local.get/sets: each set must write to the proper gets.
+    LocalGraph localGraph(func);
+
+    for (auto& [get, setsForGet] : localGraph.getSetses) {
+      auto index = get->index;
+      auto type = func->getLocalType(index);
+      if (!isRelevant(type)) {
+        continue;
+      }
+
+      // Each get reads from its relevant sets.
+      for (auto* set : setsForGet) {
+        for (Index i = 0; i < type.size(); i++) {
+          Location source;
+          if (set) {
+            // This is a normal local.set.
+            source = ExpressionLocation{set->value, i};
+          } else if (getFunction()->isParam(index)) {
+            // This is a parameter.
+            source = ParamLocation{getFunction(), index};
+          } else {
+            // This is the default value from the function entry, a null.
+            source = getNullLocation(type[i]);
+          }
+          info.links.push_back({source, ExpressionLocation{get, i}});
+        }
+      }
+    }
+  }
+
+  // Helpers
+
+  // Handles the value sent in a break instruction. Does not handle anything
+  // else like the condition etc.
+  void handleBreakValue(Expression* curr) {
+    BranchUtils::operateOnScopeNameUsesAndSentValues(
+      curr, [&](Name target, Expression* value) {
+        if (value && isRelevant(value->type)) {
+          for (Index i = 0; i < value->type.size(); i++) {
+            // Breaks send the contents of the break value to the branch target
+            // that the break goes to.
+            info.links.push_back(
+              {ExpressionLocation{value, i},
+               BreakTargetLocation{getFunction(), target, i}});
+          }
+        }
+      });
+  }
+
+  // Handles receiving values from breaks at the target (as in a block).
+  void handleBreakTarget(Expression* curr) {
+    if (isRelevant(curr->type)) {
+      BranchUtils::operateOnScopeNameDefs(curr, [&](Name target) {
+        for (Index i = 0; i < curr->type.size(); i++) {
+          info.links.push_back({BreakTargetLocation{getFunction(), target, i},
+                                ExpressionLocation{curr, i}});
+        }
+      });
+    }
+  }
+
+  // Connect a child's value to the parent, that is, all content in the child is
+  // now considered possible in the parent as well.
+  void receiveChildValue(Expression* child, Expression* parent) {
+    if (isRelevant(parent) && isRelevant(child)) {
+      // The tuple sizes must match (or, if not a tuple, the size should be 1 in
+      // both cases).
+      assert(child->type.size() == parent->type.size());
+      for (Index i = 0; i < child->type.size(); i++) {
+        info.links.push_back(
+          {ExpressionLocation{child, i}, ExpressionLocation{parent, i}});
+      }
+    }
+  }
+
+  // See the comment on CollectedFuncInfo::childParents.
+  void addChildParentLink(Expression* child, Expression* parent) {
+    if (isRelevant(child->type)) {
+      info.childParents[child] = parent;
+    }
+  }
+
+  // Adds a root, if the expression is relevant. If the value is not specified,
+  // mark the root as containing Many (which is the common case, so avoid
+  // verbose code).
+  void addRoot(Expression* curr,
+               PossibleContents contents = PossibleContents::many()) {
+    // TODO Use a cone type here when relevant
+    if (isRelevant(curr)) {
+      if (contents.isMany()) {
+        contents = PossibleContents::fromType(curr->type);
+      }
+      addRoot(ExpressionLocation{curr, 0}, contents);
+    }
+  }
+
+  // As above, but given an arbitrary location and not just an expression.
+  void addRoot(Location loc,
+               PossibleContents contents = PossibleContents::many()) {
+    info.roots.emplace_back(loc, contents);
+  }
+};
+
+// Main logic for building data for the flow analysis and then performing that
+// analysis.
+struct Flower {
+  Module& wasm;
+
+  Flower(Module& wasm);
+
+  // Each LocationIndex will have one LocationInfo that contains the relevant
+  // information we need for each location.
+  struct LocationInfo {
+    // The location at this index.
+    Location location;
+
+    // The possible contents in that location.
+    PossibleContents contents;
+
+    // A list of the target locations to which this location sends content.
+    // TODO: benchmark SmallVector<1> here, as commonly there may be a single
+    //       target (an expression has one parent)
+    std::vector<LocationIndex> targets;
+
+    LocationInfo(Location location) : location(location) {}
+  };
+
+  // Maps location indexes to the info stored there, as just described above.
+  std::vector<LocationInfo> locations;
+
+  // Reverse mapping of locations to their indexes.
+  std::unordered_map<Location, LocationIndex> locationIndexes;
+
+  const Location& getLocation(LocationIndex index) {
+    assert(index < locations.size());
+    return locations[index].location;
+  }
+
+  PossibleContents& getContents(LocationIndex index) {
+    assert(index < locations.size());
+    return locations[index].contents;
+  }
+
+private:
+  std::vector<LocationIndex>& getTargets(LocationIndex index) {
+    assert(index < locations.size());
+    return locations[index].targets;
+  }
+
+  // Convert the data into the efficient LocationIndex form we will use during
+  // the flow analysis. This method returns the index of a location, allocating
+  // one if this is the first time we see it.
+  LocationIndex getIndex(const Location& location) {
+    auto iter = locationIndexes.find(location);
+    if (iter != locationIndexes.end()) {
+      return iter->second;
+    }
+
+    // Allocate a new index here.
+    size_t index = locations.size();
+#if defined(POSSIBLE_CONTENTS_DEBUG) && POSSIBLE_CONTENTS_DEBUG >= 2
+    std::cout << "  new index " << index << " for ";
+    dump(location);
+#endif
+    if (index >= std::numeric_limits<LocationIndex>::max()) {
+      // 32 bits should be enough since each location takes at least one byte
+      // in the binary, and we don't have 4GB wasm binaries yet... do we?
+      Fatal() << "Too many locations for 32 bits";
+    }
+    locations.emplace_back(location);
+    locationIndexes[location] = index;
+
+    return index;
+  }
+
+  bool hasIndex(const Location& location) {
+    return locationIndexes.find(location) != locationIndexes.end();
+  }
+
+  IndexLink getIndexes(const LocationLink& link) {
+    return {getIndex(link.from), getIndex(link.to)};
+  }
+
+  // See the comment on CollectedFuncInfo::childParents. This is the merged info
+  // from all the functions and the global scope.
+  std::unordered_map<LocationIndex, LocationIndex> childParents;
+
+  // The work remaining to do during the flow: locations that we need to flow
+  // content from, after new content reached them.
+  //
+  // Using a set here is efficient as multiple updates may arrive to a location
+  // before we get to processing it.
+  //
+  // The items here could be {location, newContents}, but it is more efficient
+  // to have already written the new contents to the main data structure. That
+  // avoids larger data here, and also, updating the contents as early as
+  // possible is helpful as anything reading them meanwhile (before we get to
+  // their work item in the queue) will see the newer value, possibly avoiding
+  // flowing an old value that would later be overwritten.
+  //
+  // This must be ordered to avoid nondeterminism. The problem is that our
+  // operations are imprecise and so the transitive property does not hold:
+  // (AvB)vC may differ from Av(BvC). Likewise (AvB)^C may differ from
+  // (A^C)v(B^C). An example of the latter is if a location is sent a null func
+  // and an i31, and the location can only contain
