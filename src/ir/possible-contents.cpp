@@ -1642,4 +1642,302 @@ Flower::Flower(Module& wasm) : wasm(wasm) {
 bool Flower::updateContents(LocationIndex locationIndex,
                             PossibleContents newContents) {
   auto& contents = getContents(locationIndex);
-  auto oldConten
+  auto oldContents = contents;
+
+#if defined(POSSIBLE_CONTENTS_DEBUG) && POSSIBLE_CONTENTS_DEBUG >= 2
+  std::cout << "updateContents\n";
+  dump(getLocation(locationIndex));
+  contents.dump(std::cout, &wasm);
+  std::cout << "\n with new contents \n";
+  newContents.dump(std::cout, &wasm);
+  std::cout << '\n';
+#endif
+
+  contents.combine(newContents);
+
+  if (contents.isNone()) {
+    // There is still nothing here. There is nothing more to do here but to
+    // return that it is worth sending more.
+    return true;
+  }
+
+  // It is not worth sending any more to this location if we are now in the
+  // worst possible case, as no future value could cause any change.
+  bool worthSendingMore = true;
+  if (contents.isConeType()) {
+    if (!contents.getType().isRef()) {
+      // A cone type of a non-reference is the worst case, since subtyping is
+      // not relevant there, and so if we only know something about the type
+      // then we already know nothing beyond what the type in the wasm tells us
+      // (and from there we can only go to Many).
+      worthSendingMore = false;
+    } else {
+      // Normalize all reference cones. There is never a point to flow around
+      // anything non-normalized, which might lead to extra work. For example,
+      // if A has no subtypes, then a full cone for A is really the same as one
+      // with depth 0 (an exact type). And we don't want to see the full cone
+      // arrive and think it was an improvement over the one with depth 0 and do
+      // more flowing based on that.
+      normalizeConeType(contents);
+    }
+  }
+
+  // Check if anything changed.
+  if (contents == oldContents) {
+    // Nothing actually changed, so just return.
+    return worthSendingMore;
+  }
+
+  // Handle special cases: Some locations can only contain certain contents, so
+  // filter accordingly.
+  auto location = getLocation(locationIndex);
+  bool filtered = false;
+  if (auto* exprLoc = std::get_if<ExpressionLocation>(&location)) {
+    // TODO: Replace this with specific filterFoo or flowBar methods like we
+    //       have for filterGlobalContents. That could save a little wasted work
+    //       here. Might be best to do that after the spec is fully stable.
+    filterExpressionContents(contents, *exprLoc, worthSendingMore);
+    filtered = true;
+  } else if (auto* globalLoc = std::get_if<GlobalLocation>(&location)) {
+    filterGlobalContents(contents, *globalLoc);
+    filtered = true;
+  }
+
+  // Check if anything changed after filtering, if we did so.
+  if (filtered) {
+#if defined(POSSIBLE_CONTENTS_DEBUG) && POSSIBLE_CONTENTS_DEBUG >= 2
+    std::cout << "  filtered contents:\n";
+    contents.dump(std::cout, &wasm);
+    std::cout << '\n';
+#endif
+
+    if (contents == oldContents) {
+      return worthSendingMore;
+    }
+  }
+
+  // After filtering we should always have more precise information than "many"
+  // - in the worst case, we can have the type declared in the wasm.
+  assert(!contents.isMany());
+
+#if defined(POSSIBLE_CONTENTS_DEBUG) && POSSIBLE_CONTENTS_DEBUG >= 2
+  std::cout << "  updateContents has something new\n";
+  contents.dump(std::cout, &wasm);
+  std::cout << '\n';
+#endif
+
+  // Add a work item if there isn't already.
+  workQueue.insert(locationIndex);
+
+  return worthSendingMore;
+}
+
+void Flower::flowAfterUpdate(LocationIndex locationIndex) {
+  const auto location = getLocation(locationIndex);
+  auto& contents = getContents(locationIndex);
+
+  // We are called after a change at a location. A change means that some
+  // content has arrived, since we never send empty values around. Assert on
+  // that.
+  assert(!contents.isNone());
+
+#if defined(POSSIBLE_CONTENTS_DEBUG) && POSSIBLE_CONTENTS_DEBUG >= 2
+  std::cout << "\nflowAfterUpdate to:\n";
+  dump(location);
+  std::cout << "  arriving:\n";
+  contents.dump(std::cout, &wasm);
+  std::cout << '\n';
+#endif
+
+  // Flow the contents to the normal targets of this location.
+  flowToTargetsAfterUpdate(locationIndex, contents);
+
+  // We are mostly done, except for handling interesting/special cases in the
+  // flow, additional operations that we need to do aside from sending the new
+  // contents to the normal (statically linked) targets.
+
+  if (auto* exprLoc = std::get_if<ExpressionLocation>(&location)) {
+    auto iter = childParents.find(locationIndex);
+    if (iter == childParents.end()) {
+      return;
+    }
+
+    // This is indeed one of the special cases where it is the child of a
+    // parent, and we need to do some special handling because of that child-
+    // parent connection.
+    [[maybe_unused]] auto* child = exprLoc->expr;
+    auto parentIndex = iter->second;
+    auto* parent = std::get<ExpressionLocation>(getLocation(parentIndex)).expr;
+
+#if defined(POSSIBLE_CONTENTS_DEBUG) && POSSIBLE_CONTENTS_DEBUG >= 2
+    std::cout << "  special, parent:\n" << *parent << '\n';
+#endif
+
+    if (auto* get = parent->dynCast<StructGet>()) {
+      // |child| is the reference child of a struct.get.
+      assert(get->ref == child);
+      readFromData(get->ref->type, get->index, contents, get);
+    } else if (auto* set = parent->dynCast<StructSet>()) {
+      // |child| is either the reference or the value child of a struct.set.
+      assert(set->ref == child || set->value == child);
+      writeToData(set->ref, set->value, set->index);
+    } else if (auto* get = parent->dynCast<ArrayGet>()) {
+      assert(get->ref == child);
+      readFromData(get->ref->type, 0, contents, get);
+    } else if (auto* set = parent->dynCast<ArraySet>()) {
+      assert(set->ref == child || set->value == child);
+      writeToData(set->ref, set->value, 0);
+    } else {
+      // TODO: ref.test and all other casts can be optimized (see the cast
+      //       helper code used in OptimizeInstructions and RemoveUnusedBrs)
+      WASM_UNREACHABLE("bad childParents content");
+    }
+  }
+}
+
+void Flower::flowToTargetsAfterUpdate(LocationIndex locationIndex,
+                                      const PossibleContents& contents) {
+  // Send the new contents to all the targets of this location. As we do so,
+  // prune any targets that we do not need to bother sending content to in the
+  // future, to save space and work later.
+  auto& targets = getTargets(locationIndex);
+  targets.erase(std::remove_if(targets.begin(),
+                               targets.end(),
+                               [&](LocationIndex targetIndex) {
+#if defined(POSSIBLE_CONTENTS_DEBUG) && POSSIBLE_CONTENTS_DEBUG >= 2
+                                 std::cout << "  send to target\n";
+                                 dump(getLocation(targetIndex));
+#endif
+                                 return !updateContents(targetIndex, contents);
+                               }),
+                targets.end());
+
+  if (contents.isMany()) {
+    // We contain Many, and just called updateContents on our targets to send
+    // that value to them. We'll never need to send anything from here ever
+    // again, since we sent the worst case possible already, so we can just
+    // clear our targets vector. But we should have already removed all the
+    // targets in the above remove_if operation, since they should have all
+    // notified us that we do not need to send them any more updates.
+    assert(targets.empty());
+  }
+}
+
+void Flower::connectDuringFlow(Location from, Location to) {
+  auto newLink = LocationLink{from, to};
+  auto newIndexLink = getIndexes(newLink);
+  if (links.count(newIndexLink) == 0) {
+    // This is a new link. Add it to the known links.
+    links.insert(newIndexLink);
+
+    // Add it to the |targets| vector.
+    auto& targets = getTargets(newIndexLink.from);
+    targets.push_back(newIndexLink.to);
+#ifndef NDEBUG
+    disallowDuplicates(targets);
+#endif
+
+    // In addition to adding the link, which will ensure new contents appearing
+    // later will be sent along, we also update with the current contents.
+    updateContents(to, getContents(getIndex(from)));
+  }
+}
+
+void Flower::filterExpressionContents(PossibleContents& contents,
+                                      const ExpressionLocation& exprLoc,
+                                      bool& worthSendingMore) {
+  auto type = exprLoc.expr->type;
+  if (!type.isRef()) {
+    return;
+  }
+
+  // The caller cannot know of a situation where it might not be worth sending
+  // more to a reference - all that logic is in here. That is, the rest of this
+  // function is the only place we can mark |worthSendingMore| as false for a
+  // reference.
+  assert(worthSendingMore);
+
+  // The maximal contents here are the declared type and all subtypes. Nothing
+  // else can pass through, so filter such things out.
+  auto maximalContents = PossibleContents::fullConeType(type);
+  contents.intersectWithFullCone(maximalContents);
+  if (contents.isNone()) {
+    // Nothing was left here at all.
+    return;
+  }
+
+  // Normalize the intersection. We want to check later if any more content can
+  // arrive here, and also we want to avoid flowing around anything non-
+  // normalized, as explained earlier.
+  //
+  // Note that this normalization is necessary even though |contents| was
+  // normalized before the intersection, e.g.:
+  /*
+  //      A
+  //     / \
+  //    B   C
+  //        |
+  //        D
+  */
+  // Consider the case where |maximalContents| is Cone(B, Infinity) and the
+  // original |contents| was Cone(A, 2) (which is normalized). The naive
+  // intersection is Cone(B, 1), since the core intersection logic makes no
+  // assumptions about the rest of the types. That is then normalized to
+  // Cone(B, 0) since there happens to be no subtypes for B.
+  //
+  // Note that the intersection may also not be a cone type, if it is a global
+  // or literal. In that case we don't have anything more to do here.
+  if (!contents.isConeType()) {
+    return;
+  }
+
+  normalizeConeType(contents);
+
+  // There is a chance that the intersection is equal to the maximal contents,
+  // which would mean nothing more can arrive here. (Note that we can't
+  // normalize |maximalContents| before the intersection as
+  // intersectWithFullCone assumes a full/infinite cone.)
+  normalizeConeType(maximalContents);
+
+  if (contents == maximalContents) {
+    // We already contain everything possible, so this is the worst case.
+    worthSendingMore = false;
+  }
+}
+
+void Flower::filterGlobalContents(PossibleContents& contents,
+                                  const GlobalLocation& globalLoc) {
+  auto* global = wasm.getGlobal(globalLoc.name);
+  if (global->mutable_ == Immutable) {
+    // This is an immutable global. We never need to consider this value as
+    // "Many", since in the worst case we can just use the immutable value. That
+    // is, we can always replace this value with (global.get $name) which will
+    // get the right value. Likewise, using the immutable global value is often
+    // better than a cone type (even an exact one), but TODO: we could note both
+    // a cone/exact type *and* that something is equal to a global, in some
+    // cases. See https://github.com/WebAssembly/binaryen/pull/5083
+    if (contents.isMany() || contents.isConeType()) {
+      contents = PossibleContents::global(global->name, global->type);
+
+      // TODO: We could do better here, to set global->init->type instead of
+      //       global->type, or even the contents.getType() - either of those
+      //       may be more refined. But other passes will handle that in
+      //       general (by refining the global's type).
+
+#if defined(POSSIBLE_CONTENTS_DEBUG) && POSSIBLE_CONTENTS_DEBUG >= 2
+      std::cout << "  setting immglobal to ImmutableGlobal\n";
+      contents.dump(std::cout, &wasm);
+      std::cout << '\n';
+#endif
+    }
+  }
+}
+
+void Flower::readFromData(Type declaredType,
+                          Index fieldIndex,
+                          const PossibleContents& refContents,
+                          Expression* read) {
+#ifndef NDEBUG
+  // We must not have anything in the reference that is invalid for the wasm
+  // type there.
+ 
