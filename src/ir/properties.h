@@ -81,4 +81,328 @@ inline bool isNamedControlFlow(Expression* curr) {
 // when two constant expressions compare equal at compile time, their values at
 // runtime will be equal as well. TODO: combine this with
 // isValidInConstantExpression or find better names(#4845)
-inline bool isSingleConstantExpression(const Expression* 
+inline bool isSingleConstantExpression(const Expression* curr) {
+  return curr->is<Const>() || curr->is<RefNull>() || curr->is<RefFunc>() ||
+         curr->is<StringConst>();
+}
+
+inline bool isConstantExpression(const Expression* curr) {
+  if (isSingleConstantExpression(curr)) {
+    return true;
+  }
+  if (auto* tuple = curr->dynCast<TupleMake>()) {
+    for (auto* op : tuple->operands) {
+      if (!isSingleConstantExpression(op)) {
+        return false;
+      }
+    }
+    return true;
+  }
+  return false;
+}
+
+inline bool isBranch(const Expression* curr) {
+  return curr->is<Break>() || curr->is<Switch>() || curr->is<BrOn>();
+}
+
+inline Literal getLiteral(const Expression* curr) {
+  if (auto* c = curr->dynCast<Const>()) {
+    return c->value;
+  } else if (auto* n = curr->dynCast<RefNull>()) {
+    return Literal(n->type);
+  } else if (auto* r = curr->dynCast<RefFunc>()) {
+    return Literal(r->func, r->type.getHeapType());
+  } else if (auto* i = curr->dynCast<I31New>()) {
+    if (auto* c = i->value->dynCast<Const>()) {
+      return Literal::makeI31(c->value.geti32());
+    }
+  } else if (auto* s = curr->dynCast<StringConst>()) {
+    return Literal(s->string.toString());
+  }
+  WASM_UNREACHABLE("non-constant expression");
+}
+
+inline Literals getLiterals(const Expression* curr) {
+  if (isSingleConstantExpression(curr)) {
+    return {getLiteral(curr)};
+  } else if (auto* tuple = curr->dynCast<TupleMake>()) {
+    Literals literals;
+    for (auto* op : tuple->operands) {
+      literals.push_back(getLiteral(op));
+    }
+    return literals;
+  } else {
+    WASM_UNREACHABLE("non-constant expression");
+  }
+}
+
+// Check if an expression is a sign-extend, and if so, returns the value
+// that is extended, otherwise nullptr
+inline Expression* getSignExtValue(Expression* curr) {
+  // We only care about i32s here, and ignore i64s, unreachables, etc.
+  if (curr->type != Type::i32) {
+    return nullptr;
+  }
+  if (auto* unary = curr->dynCast<Unary>()) {
+    if (unary->op == ExtendS8Int32 || unary->op == ExtendS16Int32) {
+      return unary->value;
+    }
+    return nullptr;
+  }
+  using namespace Match;
+  int32_t leftShift = 0, rightShift = 0;
+  Expression* extended = nullptr;
+  if (matches(curr,
+              binary(ShrSInt32,
+                     binary(ShlInt32, any(&extended), i32(&leftShift)),
+                     i32(&rightShift))) &&
+      leftShift == rightShift && leftShift != 0) {
+    return extended;
+  }
+  return nullptr;
+}
+
+// gets the size of the sign-extended value
+inline Index getSignExtBits(Expression* curr) {
+  assert(curr->type == Type::i32);
+  if (auto* unary = curr->dynCast<Unary>()) {
+    switch (unary->op) {
+      case ExtendS8Int32:
+        return 8;
+      case ExtendS16Int32:
+        return 16;
+      default:
+        WASM_UNREACHABLE("invalid unary operation");
+    }
+  } else {
+    auto* rightShift = curr->cast<Binary>()->right;
+    return 32 - Bits::getEffectiveShifts(rightShift);
+  }
+}
+
+// Check if an expression is almost a sign-extend: perhaps the inner shift
+// is too large. We can split the shifts in that case, which is sometimes
+// useful (e.g. if we can remove the signext)
+inline Expression* getAlmostSignExt(Expression* curr) {
+  using namespace Match;
+  int32_t leftShift = 0, rightShift = 0;
+  Expression* extended = nullptr;
+  if (matches(curr,
+              binary(ShrSInt32,
+                     binary(ShlInt32, any(&extended), i32(&leftShift)),
+                     i32(&rightShift))) &&
+      Bits::getEffectiveShifts(rightShift, Type::i32) <=
+        Bits::getEffectiveShifts(leftShift, Type::i32) &&
+      rightShift != 0) {
+    return extended;
+  }
+  return nullptr;
+}
+
+// gets the size of the almost sign-extended value, as well as the
+// extra shifts, if any
+inline Index getAlmostSignExtBits(Expression* curr, Index& extraLeftShifts) {
+  auto* leftShift = curr->cast<Binary>()->left->cast<Binary>()->right;
+  auto* rightShift = curr->cast<Binary>()->right;
+  extraLeftShifts =
+    Bits::getEffectiveShifts(leftShift) - Bits::getEffectiveShifts(rightShift);
+  return getSignExtBits(curr);
+}
+
+// Check if an expression is a zero-extend, and if so, returns the value
+// that is extended, otherwise nullptr
+inline Expression* getZeroExtValue(Expression* curr) {
+  // We only care about i32s here, and ignore i64s, unreachables, etc.
+  if (curr->type != Type::i32) {
+    return nullptr;
+  }
+  using namespace Match;
+  int32_t mask = 0;
+  Expression* extended = nullptr;
+  if (matches(curr, binary(AndInt32, any(&extended), i32(&mask))) &&
+      Bits::getMaskedBits(mask) != 0) {
+    return extended;
+  }
+  return nullptr;
+}
+
+// gets the size of the sign-extended value
+inline Index getZeroExtBits(Expression* curr) {
+  assert(curr->type == Type::i32);
+  int32_t mask = curr->cast<Binary>()->right->cast<Const>()->value.geti32();
+  return Bits::getMaskedBits(mask);
+}
+
+// Returns a falling-through value, that is, it looks through a local.tee
+// and other operations that receive a value and let it flow through them. If
+// there is no value falling through, returns the node itself (as that is the
+// value that trivially falls through, with 0 steps in the middle).
+//
+// Note that this returns the value that would fall through if one does in fact
+// do so. For example, the final element in a block may not fall through if we
+// hit a return or a trap or an exception is thrown before we get there.
+//
+// This method returns the 'immediate' fallthrough, that is, the immediate
+// child of this expression. See getFallthrough for a method that looks all the
+// way to the final value falling through, potentially through multiple
+// intermediate expressions.
+//
+// Behavior wrt tee/br_if is customizable, since in some cases we do not want to
+// look through them (for example, the type of a tee is related to the local,
+// not the value, so if we returned the fallthrough of the tee we'd have a
+// possible difference between the type in the IR and the type of the value,
+// which some cases care about; the same for a br_if, whose type is related to
+// the branch target).
+//
+// TODO: Receive a Module instead of FeatureSet, to pass to EffectAnalyzer?
+
+enum class FallthroughBehavior { AllowTeeBrIf, NoTeeBrIf };
+
+inline Expression** getImmediateFallthroughPtr(
+  Expression** currp,
+  const PassOptions& passOptions,
+  Module& module,
+  FallthroughBehavior behavior = FallthroughBehavior::AllowTeeBrIf) {
+  auto* curr = *currp;
+  // If the current node is unreachable, there is no value
+  // falling through.
+  if (curr->type == Type::unreachable) {
+    return currp;
+  }
+  if (auto* set = curr->dynCast<LocalSet>()) {
+    if (set->isTee() && behavior == FallthroughBehavior::AllowTeeBrIf) {
+      return &set->value;
+    }
+  } else if (auto* block = curr->dynCast<Block>()) {
+    // if no name, we can't be broken to, and then can look at the fallthrough
+    if (!block->name.is() && block->list.size() > 0) {
+      return &block->list.back();
+    }
+  } else if (auto* loop = curr->dynCast<Loop>()) {
+    return &loop->body;
+  } else if (auto* iff = curr->dynCast<If>()) {
+    if (iff->ifFalse) {
+      // Perhaps just one of the two actually returns.
+      if (iff->ifTrue->type == Type::unreachable) {
+        return &iff->ifFalse;
+      } else if (iff->ifFalse->type == Type::unreachable) {
+        return &iff->ifTrue;
+      }
+    }
+  } else if (auto* br = curr->dynCast<Break>()) {
+    // Note that we must check for the ability to reorder the condition and the
+    // value, as the value is first, which would be a problem here:
+    //
+    //  (br_if ..
+    //    (local.get $x)    ;; value
+    //    (tee_local $x ..) ;; condition
+    //  )
+    //
+    // We must not say that the fallthrough value is $x, since it is the
+    // *earlier* value of $x before the tee that is passed out. But, if we can
+    // reorder then that means that the value could have been last and so we do
+    // know the fallthrough in that case.
+    if (br->condition && br->value &&
+        behavior == FallthroughBehavior::AllowTeeBrIf &&
+        EffectAnalyzer::canReorder(
+          passOptions, module, br->condition, br->value)) {
+      return &br->value;
+    }
+  } else if (auto* tryy = curr->dynCast<Try>()) {
+    if (!EffectAnalyzer(passOptions, module, tryy->body).throws()) {
+      return &tryy->body;
+    }
+  } else if (auto* as = curr->dynCast<RefCast>()) {
+    return &as->ref;
+  } else if (auto* as = curr->dynCast<RefAs>()) {
+    // Extern conversions are not casts and actually produce new values.
+    // Treating them as fallthroughs would lead to misoptimizations of
+    // subsequent casts.
+    if (as->op != ExternInternalize && as->op != ExternExternalize) {
+      return &as->value;
+    }
+  } else if (auto* br = curr->dynCast<BrOn>()) {
+    return &br->ref;
+  }
+  return currp;
+}
+
+inline Expression* getImmediateFallthrough(
+  Expression* curr,
+  const PassOptions& passOptions,
+  Module& module,
+  FallthroughBehavior behavior = FallthroughBehavior::AllowTeeBrIf) {
+  return *getImmediateFallthroughPtr(&curr, passOptions, module, behavior);
+}
+
+// Similar to getImmediateFallthrough, but looks through multiple children to
+// find the final value that falls through.
+inline Expression* getFallthrough(
+  Expression* curr,
+  const PassOptions& passOptions,
+  Module& module,
+  FallthroughBehavior behavior = FallthroughBehavior::AllowTeeBrIf) {
+  while (1) {
+    auto* next = getImmediateFallthrough(curr, passOptions, module, behavior);
+    if (next == curr) {
+      return curr;
+    }
+    curr = next;
+  }
+}
+
+inline Index getNumChildren(Expression* curr) {
+  Index ret = 0;
+
+#define DELEGATE_ID curr->_id
+
+#define DELEGATE_START(id) [[maybe_unused]] auto* cast = curr->cast<id>();
+
+#define DELEGATE_GET_FIELD(id, field) cast->field
+
+#define DELEGATE_FIELD_CHILD(id, field) ret++;
+
+#define DELEGATE_FIELD_OPTIONAL_CHILD(id, field)                               \
+  if (cast->field) {                                                           \
+    ret++;                                                                     \
+  }
+
+#define DELEGATE_FIELD_INT(id, field)
+#define DELEGATE_FIELD_INT_ARRAY(id, field)
+#define DELEGATE_FIELD_LITERAL(id, field)
+#define DELEGATE_FIELD_NAME(id, field)
+#define DELEGATE_FIELD_NAME_VECTOR(id, field)
+#define DELEGATE_FIELD_SCOPE_NAME_DEF(id, field)
+#define DELEGATE_FIELD_SCOPE_NAME_USE(id, field)
+#define DELEGATE_FIELD_SCOPE_NAME_USE_VECTOR(id, field)
+#define DELEGATE_FIELD_TYPE(id, field)
+#define DELEGATE_FIELD_HEAPTYPE(id, field)
+#define DELEGATE_FIELD_ADDRESS(id, field)
+
+#include "wasm-delegations-fields.def"
+
+  return ret;
+}
+
+// Returns whether the resulting value here must fall through without being
+// modified. For example, a tee always does so. That is, this returns false if
+// and only if the return value may have some computation performed on it to
+// change it from the inputs the instruction receives.
+// This differs from getFallthrough() which returns a single value that falls
+// through - here if more than one value can fall through, like in if-else,
+// we can return true. That is, there we care about a value falling through and
+// for us to get that actual value to look at; here we just care whether the
+// value falls through without being changed, even if it might be one of
+// several options.
+inline bool isResultFallthrough(Expression* curr) {
+  // Note that we don't check if there is a return value here; the node may be
+  // unreachable, for example, but then there is no meaningful answer to give
+  // anyhow.
+  return curr->is<LocalSet>() || curr->is<Block>() || curr->is<If>() ||
+         curr->is<Loop>() || curr->is<Try>() || curr->is<Select>() ||
+         curr->is<Break>();
+}
+
+inline bool canEmitSelectWithArms(Expression* ifTrue, Expression* ifFalse) {
+  // A select only allows a single value in its arms in the spec:
+  // https://webassembly.github.io/spec/core/valid/instructions.html#xref-syntax-instructions-syntax
