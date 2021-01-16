@@ -405,4 +405,75 @@ inline bool isResultFallthrough(Expression* curr) {
 
 inline bool canEmitSelectWithArms(Expression* ifTrue, Expression* ifFalse) {
   // A select only allows a single value in its arms in the spec:
-  // https://webassembly.github.io/spec/core/valid/instructions.html#xref-syntax-instructions-syntax
+  // https://webassembly.github.io/spec/core/valid/instructions.html#xref-syntax-instructions-syntax-instr-parametric-mathsf-select-t-ast
+  return ifTrue->type.isSingle() && ifFalse->type.isSingle();
+}
+
+// A "generative" expression is one that can generate different results for the
+// same inputs, and that difference is *not* explained by other expressions that
+// interact with this one. This is an intrinsic/internal property of the
+// expression.
+//
+// To see the issue more concretely, consider these:
+//
+//    x = load(100);
+//    ..
+//    y = load(100);
+//
+//  versus
+//
+//    x = struct.new();
+//    ..
+//    y = struct.new();
+//
+// Are x and y identical in both cases? For loads, we can look at the code
+// in ".." to see: if there are no possible stores to memory, then the
+// result is identical (and we have EffectAnalyzer for that). For the GC
+// allocations, though, it doesn't matter what is in "..": there is nothing
+// in the wasm that we can check to find out if the results are the same or
+// not. (In fact, in this case they are always not the same.) So the
+// generativity is "intrinsic" to the expression and it is because each call to
+// struct.new generates a new value.
+//
+// Thus, loads are nondeterministic but not generative, while GC allocations
+// are in fact generative. Note that "generative" need not mean "allocation" as
+// if wasm were to add "get current time" or "get a random number" instructions
+// then those would also be generative - generating a new current time value or
+// a new random number on each execution, respectively.
+//
+//  * Note that NaN nondeterminism is ignored here. It is a valid wasm
+//    implementation to have deterministic NaN behavior, and we optimize under
+//    that simplifying assumption.
+//  * Note that calls are ignored here. In theory this concept could be defined
+//    either way for them - that is, we could potentially define them as
+//    generative, as they might contain such an instruction, or we could define
+//    this property as only looking at code in the current function. We choose
+//    the latter because calls are already handled best in other manners (using
+//    EffectAnalyzer).
+//
+bool isGenerative(Expression* curr, FeatureSet features);
+
+inline bool isValidInConstantExpression(Expression* expr, FeatureSet features) {
+  if (isSingleConstantExpression(expr) || expr->is<GlobalGet>() ||
+      expr->is<StructNew>() || expr->is<ArrayNew>() ||
+      expr->is<ArrayNewFixed>() || expr->is<I31New>() ||
+      expr->is<StringConst>()) {
+    return true;
+  }
+
+  if (features.hasExtendedConst()) {
+    if (expr->is<Binary>()) {
+      auto bin = static_cast<Binary*>(expr);
+      if (bin->op == AddInt64 || bin->op == SubInt64 || bin->op == MulInt64 ||
+          bin->op == AddInt32 || bin->op == SubInt32 || bin->op == MulInt32) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+} // namespace wasm::Properties
+
+#endif // wasm_ir_properties_h
