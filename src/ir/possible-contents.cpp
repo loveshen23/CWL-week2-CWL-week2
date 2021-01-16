@@ -1940,4 +1940,191 @@ void Flower::readFromData(Type declaredType,
 #ifndef NDEBUG
   // We must not have anything in the reference that is invalid for the wasm
   // type there.
- 
+  auto maximalContents = PossibleContents::fullConeType(declaredType);
+  assert(PossibleContents::isSubContents(refContents, maximalContents));
+#endif
+
+  // The data that a struct.get reads depends on two things: the reference that
+  // we read from, and the relevant DataLocations. The reference determines
+  // which DataLocations are relevant: if it is an exact type then we have a
+  // single DataLocation to read from, the one type that can be read from there.
+  // Otherwise, we might read from any subtype, and so all their DataLocations
+  // are relevant.
+  //
+  // What can be confusing is that the information about the reference is also
+  // inferred during the flow. That is, we use our current information about the
+  // reference to decide what to do here. But the flow is not finished yet!
+  // To keep things valid, we must therefore react to changes in either the
+  // reference - when we see that more types might be read from here - or the
+  // DataLocations - when new things are written to the data we can read from.
+  // Specifically, at every point in time we want to preserve the property that
+  // we've read from all relevant types based on the current reference, and
+  // we've read the very latest possible contents from those types. And then
+  // since we preserve that property til the end of the flow, it is also valid
+  // then. At the end of the flow, the current reference's contents are the
+  // final and correct contents for that location, which means we've ended up
+  // with the proper result: the struct.get reads everything it should.
+  //
+  // To implement what was just described, we call this function when the
+  // reference is updated. This function will then set up connections in the
+  // graph so that updates to the relevant DataLocations will reach us in the
+  // future.
+
+  if (refContents.isNull() || refContents.isNone()) {
+    // Nothing is read here as this is either a null or unreachable code. (Note
+    // that the contents must be a subtype of the wasm type, which rules out
+    // other possibilities like a non-null literal such as an integer or a
+    // function reference.)
+    return;
+  }
+
+#if defined(POSSIBLE_CONTENTS_DEBUG) && POSSIBLE_CONTENTS_DEBUG >= 2
+  std::cout << "    add special reads\n";
+#endif
+
+  // The only possibilities left are a cone type (the worst case is where the
+  // cone matches the wasm type), or a global.
+  //
+  // TODO: The Global case may have a different cone type than the heapType,
+  //       which we could use here.
+  // TODO: A Global may refer to an immutable global, which we can read the
+  //       field from potentially (reading it from the struct.new/array.new
+  //       in the definition of it, if it is not imported; or, we could track
+  //       the contents of immutable fields of allocated objects, and not just
+  //       represent them as an exact type).
+  //       See the test TODO with text "We optimize some of this, but stop at
+  //       reading from the immutable global"
+  assert(refContents.isGlobal() || refContents.isConeType());
+
+  // Just look at the cone here, discarding information about this being a
+  // global, if it was one. All that matters from now is the cone. We also
+  // normalize the cone to avoid wasted work later.
+  auto cone = refContents.getCone();
+  auto normalizedDepth = getNormalizedConeDepth(cone.type, cone.depth);
+
+  // We create a ConeReadLocation for the canonical cone of this type, to
+  // avoid bloating the graph, see comment on ConeReadLocation().
+  auto coneReadLocation =
+    ConeReadLocation{cone.type.getHeapType(), normalizedDepth, fieldIndex};
+  if (!hasIndex(coneReadLocation)) {
+    // This is the first time we use this location, so create the links for it
+    // in the graph.
+    subTypes->iterSubTypes(
+      cone.type.getHeapType(),
+      normalizedDepth,
+      [&](HeapType type, Index depth) {
+        connectDuringFlow(DataLocation{type, fieldIndex}, coneReadLocation);
+      });
+
+    // TODO: we can end up with redundant links here if we see one cone first
+    //       and then a larger one later. But removing links is not efficient,
+    //       so for now just leave that.
+  }
+
+  // Link to the canonical location.
+  connectDuringFlow(coneReadLocation, ExpressionLocation{read, 0});
+}
+
+void Flower::writeToData(Expression* ref, Expression* value, Index fieldIndex) {
+#if defined(POSSIBLE_CONTENTS_DEBUG) && POSSIBLE_CONTENTS_DEBUG >= 2
+  std::cout << "    add special writes\n";
+#endif
+
+  auto refContents = getContents(getIndex(ExpressionLocation{ref, 0}));
+
+#ifndef NDEBUG
+  // We must not have anything in the reference that is invalid for the wasm
+  // type there.
+  auto maximalContents = PossibleContents::fullConeType(ref->type);
+  assert(PossibleContents::isSubContents(refContents, maximalContents));
+#endif
+
+  // We could set up links here as we do for reads, but as we get to this code
+  // in any case, we can just flow the values forward directly. This avoids
+  // adding any links (edges) to the graph (and edges are what we want to avoid
+  // adding, as there can be a quadratic number of them). In other words, we'll
+  // loop over the places we need to send info to, which we can figure out in a
+  // simple way, and by doing so we avoid materializing edges into the graph.
+  //
+  // Note that this is different from readFromData, above, which does add edges
+  // to the graph (and works hard to add as few as possible, see the "canonical
+  // cone reads" logic). The difference is because readFromData must "subscribe"
+  // to get notifications from the relevant DataLocations. But when writing that
+  // is not a problem: whenever a change happens in the reference or the value
+  // of a struct.set then this function will get called, and those are the only
+  // things we care about. And we can then just compute the values we are
+  // sending (based on the current contents of the reference and the value), and
+  // where we should send them to, and do that right here. (And as commented in
+  // readFromData, that is guaranteed to give us the right result in the end: at
+  // every point in time we send the right data, so when the flow is finished
+  // we've sent information based on the final and correct information about our
+  // reference and value.)
+
+  auto valueContents = getContents(getIndex(ExpressionLocation{value, 0}));
+
+  // See the related comment in readFromData() as to why these are the only
+  // things we need to check, and why the assertion afterwards contains the only
+  // things possible.
+  if (refContents.isNone() || refContents.isNull()) {
+    return;
+  }
+  assert(refContents.isGlobal() || refContents.isConeType());
+
+  // As in readFromData, normalize to the proper cone.
+  auto cone = refContents.getCone();
+  auto normalizedDepth = getNormalizedConeDepth(cone.type, cone.depth);
+
+  subTypes->iterSubTypes(
+    cone.type.getHeapType(), normalizedDepth, [&](HeapType type, Index depth) {
+      auto heapLoc = DataLocation{type, fieldIndex};
+      updateContents(heapLoc, valueContents);
+    });
+}
+
+#if defined(POSSIBLE_CONTENTS_DEBUG) && POSSIBLE_CONTENTS_DEBUG >= 2
+void Flower::dump(Location location) {
+  if (auto* loc = std::get_if<ExpressionLocation>(&location)) {
+    std::cout << "  exprloc \n" << *loc->expr << '\n';
+  } else if (auto* loc = std::get_if<DataLocation>(&location)) {
+    std::cout << "  dataloc ";
+    if (wasm.typeNames.count(loc->type)) {
+      std::cout << '$' << wasm.typeNames[loc->type].name;
+    } else {
+      std::cout << loc->type << '\n';
+    }
+    std::cout << " : " << loc->index << '\n';
+  } else if (auto* loc = std::get_if<TagLocation>(&location)) {
+    std::cout << "  tagloc " << loc->tag << '\n';
+  } else if (auto* loc = std::get_if<ParamLocation>(&location)) {
+    std::cout << "  paramloc " << loc->func->name << " : " << loc->index
+              << '\n';
+  } else if (auto* loc = std::get_if<ResultLocation>(&location)) {
+    std::cout << "  resultloc $" << loc->func->name << " : " << loc->index
+              << '\n';
+  } else if (auto* loc = std::get_if<GlobalLocation>(&location)) {
+    std::cout << "  globalloc " << loc->name << '\n';
+  } else if (auto* loc = std::get_if<BreakTargetLocation>(&location)) {
+    std::cout << "  branchloc " << loc->func->name << " : " << loc->target
+              << " tupleIndex " << loc->tupleIndex << '\n';
+  } else if (std::get_if<SignatureParamLocation>(&location)) {
+    std::cout << "  sigparamloc " << '\n';
+  } else if (std::get_if<SignatureResultLocation>(&location)) {
+    std::cout << "  sigresultloc " << '\n';
+  } else if (auto* loc = std::get_if<NullLocation>(&location)) {
+    std::cout << "  Nullloc " << loc->type << '\n';
+  } else {
+    std::cout << "  (other)\n";
+  }
+}
+#endif
+
+} // anonymous namespace
+
+void ContentOracle::analyze() {
+  Flower flower(wasm);
+  for (LocationIndex i = 0; i < flower.locations.size(); i++) {
+    locationContents[flower.getLocation(i)] = flower.getContents(i);
+  }
+}
+
+} // namespace wasm
