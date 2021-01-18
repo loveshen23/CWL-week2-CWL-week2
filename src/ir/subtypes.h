@@ -184,4 +184,24 @@ struct SubTypes {
   }
 
   // All the types in the program. This is computed here anyhow, and can be
-  // useful for callers to iterate o
+  // useful for callers to iterate on, so it is public.
+  std::vector<HeapType> types;
+
+private:
+  // Add a type to the graph.
+  void note(HeapType type) {
+    if (auto super = type.getSuperType()) {
+      typeSubTypes[*super].push_back(type);
+    }
+  }
+
+  // Maps a type to its subtypes.
+  //
+  // After our constructor we never modify this data structure, so we can take
+  // references to the vectors here safely.
+  std::unordered_map<HeapType, std::vector<HeapType>> typeSubTypes;
+};
+
+} // namespace wasm
+
+#endif // wasm_ir_subtypes_h
