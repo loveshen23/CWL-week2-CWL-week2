@@ -220,4 +220,79 @@ struct AbstractTypeRefining : public Pass {
     // However, the type rewriter will create a single new rec group for all new
     // types anyhow, so they all remain distinct from each other. The only thing
     // that would actually merge them is if we run TypeMerging, which is not run
-    // by default exactly for this reason, that it can limi
+    // by default exactly for this reason, that it can limit optimizations.
+    // Thus, this pass does only "safe" merging, that cannot limit later
+    // optimizations - merging $A and $B is of course fine as one of them was
+    // not even used anywhere.
+
+    TypeMapper::TypeUpdates mapping;
+
+    for (auto type : subTypes.types) {
+      if (!type.isStruct()) {
+        // TODO: support arrays and funcs
+        continue;
+      }
+
+      // Add a mapping of types that are never created (and none of their
+      // subtypes) to the bottom type. This is valid because all locations of
+      // that type, like a local variable, will only contain null at runtime.
+      // Likewise, if we have a ref.test of such a type, we can only be looking
+      // for a null at best. This can be seen as "refining" uses of these
+      // never-created types to the bottom type.
+      //
+      // We check this first as it is the most powerful change.
+      if (createdTypesOrSubTypes.count(type) == 0) {
+        mapping[type] = type.getBottom();
+        continue;
+      }
+
+      // Otherwise, apply a refining if we found one before.
+      if (auto iter = refinableTypes.find(type); iter != refinableTypes.end()) {
+        mapping[type] = iter->second;
+      }
+    }
+
+    if (mapping.empty()) {
+      return;
+    }
+
+    // A TypeMapper that handles the patterns we have in our mapping, where we
+    // end up mapping a type to a *subtype*. We need to properly create
+    // supertypes while doing this rewriting. For example, say we have this:
+    //
+    //  A :> B :> C
+    //
+    // Say we see B is never created, so we want to map B to its subtype C. C's
+    // supertype must now be A.
+    class AbstractTypeRefiningTypeMapper : public TypeMapper {
+    public:
+      AbstractTypeRefiningTypeMapper(Module& wasm, const TypeUpdates& mapping)
+        : TypeMapper(wasm, mapping) {}
+
+      std::optional<HeapType> getSuperType(HeapType oldType) override {
+        auto super = oldType.getSuperType();
+
+        // Go up the chain of supertypes, skipping things we are mapping away,
+        // as those things will not appear in the output. This skips B in the
+        // example above.
+        while (super && mapping.count(*super)) {
+          super = super->getSuperType();
+        }
+        return super;
+      }
+    };
+
+    AbstractTypeRefiningTypeMapper(*module, mapping).map();
+
+    // Refinalize to propagate the type changes we made. For example, a refined
+    // cast may lead to a struct.get reading a more refined type using that
+    // type.
+    ReFinalize().run(getPassRunner(), module);
+  }
+};
+
+} // anonymous namespace
+
+Pass* createAbstractTypeRefiningPass() { return new AbstractTypeRefining(); }
+
+} // namespace wasm
