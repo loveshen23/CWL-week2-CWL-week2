@@ -284,4 +284,132 @@ public:
 
     Iterator() : parent(nullptr), index(0) {}
     Iterator(const SubType* parent, size_t index)
-      : parent(parent), index(ind
+      : parent(parent), index(index) {}
+
+    bool operator==(const Iterator& other) const {
+      return index == other.index && parent == other.parent;
+    }
+
+    bool operator!=(const Iterator& other) const { return !(*this == other); }
+
+    bool operator<(const Iterator& other) const {
+      assert(parent == other.parent);
+      return index < other.index;
+    }
+
+    bool operator>(const Iterator& other) const { return other < *this; }
+
+    bool operator<=(const Iterator& other) const { return !(other < *this); }
+
+    bool operator>=(const Iterator& other) const { return !(*this < other); }
+
+    Iterator& operator++() {
+      index++;
+      return *this;
+    }
+
+    Iterator& operator--() {
+      index--;
+      return *this;
+    }
+
+    Iterator operator++(int) {
+      Iterator it = *this;
+      ++*this;
+      return it;
+    }
+
+    Iterator operator--(int) {
+      Iterator it = *this;
+      --*this;
+      return it;
+    }
+
+    Iterator& operator+=(std::ptrdiff_t off) {
+      index += off;
+      return *this;
+    }
+
+    Iterator& operator-=(std::ptrdiff_t off) { return *this += -off; }
+
+    Iterator operator+(std::ptrdiff_t off) const {
+      return Iterator(*this) += off;
+    }
+
+    Iterator operator-(std::ptrdiff_t off) const { return *this + -off; }
+
+    std::ptrdiff_t operator-(const Iterator& other) const {
+      assert(parent == other.parent);
+      return index - other.index;
+    }
+
+    friend Iterator operator+(std::ptrdiff_t off, const Iterator& it) {
+      return it + off;
+    }
+
+    T& operator*() const { return (*parent)[index]; }
+
+    T& operator[](std::ptrdiff_t off) const { return (*parent)[index + off]; }
+
+    T* operator->() const { return &(*parent)[index]; }
+  };
+
+  Iterator begin() const {
+    return Iterator(static_cast<const SubType*>(this), 0);
+  }
+  Iterator end() const {
+    return Iterator(static_cast<const SubType*>(this), usedElements);
+  }
+
+  void allocate(size_t size) {
+    abort(); // must be implemented in children
+  }
+
+  // C-API
+
+  void insertAt(size_t index, T item) {
+    assert(index <= size()); // appending is ok
+    resize(size() + 1);
+    for (auto i = size() - 1; i > index; --i) {
+      data[i] = data[i - 1];
+    }
+    data[index] = item;
+  }
+
+  T removeAt(size_t index) {
+    assert(index < size());
+    auto item = data[index];
+    for (auto i = index; i < size() - 1; ++i) {
+      data[i] = data[i + 1];
+    }
+    resize(size() - 1);
+    return item;
+  }
+};
+
+// A vector that has an allocator for arena allocation
+//
+// TODO: consider not saving the allocator, but requiring it be
+//       passed in when needed, would make this (and thus Blocks etc.
+//       smaller)
+
+template<typename T>
+class ArenaVector : public ArenaVectorBase<ArenaVector<T>, T> {
+private:
+  MixedArena& allocator;
+
+public:
+  ArenaVector(MixedArena& allocator) : allocator(allocator) {}
+
+  ArenaVector(ArenaVector<T>&& other) : allocator(other.allocator) {
+    *this = other;
+  }
+
+  void allocate(size_t size) {
+    this->allocatedElements = size;
+    this->data = static_cast<T*>(
+      allocator.allocSpace(sizeof(T) * this->allocatedElements, alignof(T)));
+  }
+};
+
+#endif // wasm_mixed_arena_h
