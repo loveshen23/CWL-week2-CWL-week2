@@ -156,4 +156,102 @@ struct DataFlowOpts : public WalkerPass<PostWalker<DataFlowOpts>> {
     assert(node->isConst());
     // We no longer have values, and so do not use anything.
     nodeUsers.stopUsingValues(node);
-    nod
+    node->values.clear();
+    // Our contents changed, update our users.
+    replaceAllUsesWith(node, node);
+  }
+
+  // Replaces all uses of a node with another value. This both modifies
+  // the DataFlow IR to make the other users point to this one, and
+  // updates the underlying Binaryen IR as well.
+  // This can be used to "replace" a node with itself, which makes sense
+  // when the node contents have changed and so the users must be updated.
+  void replaceAllUsesWith(DataFlow::Node* node, DataFlow::Node* with) {
+    // Const nodes are trivial to replace, but other stuff is trickier -
+    // in particular phis.
+    assert(with->isConst()); // TODO
+    // All the users should be worked on later, as we will update them.
+    auto& users = nodeUsers.getUsers(node);
+    for (auto* user : users) {
+      // Add the user to the work left to do, as we are modifying it.
+      workLeft.insert(user);
+      // `with` is getting another user.
+      nodeUsers.addUser(with, user);
+      // Replacing in the DataFlow IR is simple - just replace it,
+      // in all the indexes it appears.
+      std::vector<Index> indexes;
+      for (Index i = 0; i < user->values.size(); i++) {
+        if (user->values[i] == node) {
+          user->values[i] = with;
+          indexes.push_back(i);
+        }
+      }
+      assert(!indexes.empty());
+      // Replacing in the Binaryen IR requires more care
+      switch (user->type) {
+        case DataFlow::Node::Type::Expr: {
+          auto* expr = user->expr;
+          for (auto index : indexes) {
+            *(getIndexPointer(expr, index)) = graph.makeUse(with);
+          }
+          break;
+        }
+        case DataFlow::Node::Type::Phi: {
+          // Nothing to do: a phi is not in the Binaryen IR.
+          // If the entire phi can become a constant, that will be
+          // propagated when we process that phi later.
+          break;
+        }
+        case DataFlow::Node::Type::Cond: {
+          // Nothing to do: a cond is not in the Binaryen IR.
+          // If the cond input is a constant, that might indicate
+          // useful optimizations are possible, which perhaps we
+          // should look into TODO
+          break;
+        }
+        case DataFlow::Node::Type::Zext: {
+          // Nothing to do: a zext is not in the Binaryen IR.
+          // If the cond input is a constant, that might indicate
+          // useful optimizations are possible, which perhaps we
+          // should look into TODO
+          break;
+        }
+        default:
+          WASM_UNREACHABLE("unexpected dataflow node type");
+      }
+    }
+    // No one is a user of this node after we replaced all the uses.
+    nodeUsers.removeAllUsesOf(node);
+  }
+
+  // Gets a pointer to the expression pointer in an expression.
+  // That is, given an index in the values() vector, get an
+  // Expression** that we can assign to so as to modify it.
+  Expression** getIndexPointer(Expression* expr, Index index) {
+    if (auto* unary = expr->dynCast<Unary>()) {
+      assert(index == 0);
+      return &unary->value;
+    } else if (auto* binary = expr->dynCast<Binary>()) {
+      if (index == 0) {
+        return &binary->left;
+      } else if (index == 1) {
+        return &binary->right;
+      }
+      WASM_UNREACHABLE("unexpected index");
+    } else if (auto* select = expr->dynCast<Select>()) {
+      if (index == 0) {
+        return &select->condition;
+      } else if (index == 1) {
+        return &select->ifTrue;
+      } else if (index == 2) {
+        return &select->ifFalse;
+      }
+      WASM_UNREACHABLE("unexpected index");
+    }
+    WASM_UNREACHABLE("unexpected expression type");
+  }
+};
+
+Pass* createDataFlowOptsPass() { return new DataFlowOpts(); }
+
+} // namespace wasm
