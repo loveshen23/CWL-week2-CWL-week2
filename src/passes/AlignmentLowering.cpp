@@ -247,4 +247,155 @@ struct AlignmentLowering : public WalkerPass<PostWalker<AlignmentLowering>> {
       return;
     }
     if (curr->align == 0 || curr->align == curr->bytes) {
-      // Nothing to do: leave the node unchanged. All code lower down
+      // Nothing to do: leave the node unchanged. All code lower down assumes
+      // the operation is unaligned.
+      return;
+    }
+    Builder builder(*getModule());
+    auto type = curr->type.getBasic();
+    Expression* replacement;
+    switch (type) {
+      default:
+        WASM_UNREACHABLE("unhandled unaligned load");
+      case Type::i32:
+        replacement = lowerLoadI32(curr);
+        break;
+      case Type::f32:
+        curr->type = Type::i32;
+        replacement = builder.makeUnary(ReinterpretInt32, lowerLoadI32(curr));
+        break;
+      case Type::i64:
+      case Type::f64:
+        if (type == Type::i64 && curr->bytes != 8) {
+          // A load of <64 bits.
+          curr->type = Type::i32;
+          replacement = builder.makeUnary(
+            curr->signed_ ? ExtendSInt32 : ExtendUInt32, lowerLoadI32(curr));
+          break;
+        }
+        // Load two 32-bit pieces, and combine them.
+        auto mem = getModule()->getMemory(curr->memory);
+        auto indexType = mem->indexType;
+        auto temp = builder.addVar(getFunction(), indexType);
+        auto* set = builder.makeLocalSet(temp, curr->ptr);
+        Expression* low =
+          lowerLoadI32(builder.makeLoad(4,
+                                        false,
+                                        curr->offset,
+                                        curr->align,
+                                        builder.makeLocalGet(temp, indexType),
+                                        Type::i32,
+                                        curr->memory));
+        low = builder.makeUnary(ExtendUInt32, low);
+        // Note that the alignment is assumed to be the same here, even though
+        // we add an offset of 4. That is because this is an unaligned load, so
+        // the alignment is 1, 2, or 4, which means it stays the same after
+        // adding 4.
+        Expression* high =
+          lowerLoadI32(builder.makeLoad(4,
+                                        false,
+                                        curr->offset + 4,
+                                        curr->align,
+                                        builder.makeLocalGet(temp, indexType),
+                                        Type::i32,
+                                        curr->memory));
+        high = builder.makeUnary(ExtendUInt32, high);
+        high =
+          builder.makeBinary(ShlInt64, high, builder.makeConst(int64_t(32)));
+        auto* combined = builder.makeBinary(OrInt64, low, high);
+        replacement = builder.makeSequence(set, combined);
+        // Ensure the proper output type.
+        if (type == Type::f64) {
+          replacement = builder.makeUnary(ReinterpretInt64, replacement);
+        }
+        break;
+    }
+    replaceCurrent(replacement);
+  }
+
+  void visitStore(Store* curr) {
+    Builder builder(*getModule());
+    // If unreachable, just remove the store, which removes the unaligned
+    // operation in a trivial way.
+    if (curr->type == Type::unreachable) {
+      replaceCurrent(builder.makeBlock(
+        {builder.makeDrop(curr->ptr), builder.makeDrop(curr->value)}));
+      return;
+    }
+    if (curr->align == 0 || curr->align == curr->bytes) {
+      // Nothing to do: leave the node unchanged. All code lower down assumes
+      // the operation is unaligned.
+      return;
+    }
+    auto type = curr->value->type.getBasic();
+    Expression* replacement;
+    switch (type) {
+      default:
+        WASM_UNREACHABLE("unhandled unaligned store");
+      case Type::i32:
+        replacement = lowerStoreI32(curr);
+        break;
+      case Type::f32:
+        curr->type = Type::i32;
+        curr->value = builder.makeUnary(ReinterpretFloat32, curr->value);
+        replacement = lowerStoreI32(curr);
+        break;
+      case Type::i64:
+      case Type::f64:
+        if (type == Type::i64 && curr->bytes != 8) {
+          // A store of <64 bits.
+          curr->type = Type::i32;
+          curr->value = builder.makeUnary(WrapInt64, curr->value);
+          replacement = lowerStoreI32(curr);
+          break;
+        }
+        // Otherwise, fall through to f64 case for a 64-bit load.
+        // Ensure an integer input value.
+        auto* value = curr->value;
+        if (type == Type::f64) {
+          value = builder.makeUnary(ReinterpretFloat64, value);
+        }
+        // Store as two 32-bit pieces.
+        auto mem = getModule()->getMemory(curr->memory);
+        auto indexType = mem->indexType;
+        auto tempPtr = builder.addVar(getFunction(), indexType);
+        auto* setPtr = builder.makeLocalSet(tempPtr, curr->ptr);
+        auto tempValue = builder.addVar(getFunction(), Type::i64);
+        auto* setValue = builder.makeLocalSet(tempValue, value);
+        Expression* low = builder.makeUnary(
+          WrapInt64, builder.makeLocalGet(tempValue, Type::i64));
+        low = lowerStoreI32(
+          builder.makeStore(4,
+                            curr->offset,
+                            curr->align,
+                            builder.makeLocalGet(tempPtr, indexType),
+                            low,
+                            Type::i32,
+                            curr->memory));
+        Expression* high =
+          builder.makeBinary(ShrUInt64,
+                             builder.makeLocalGet(tempValue, Type::i64),
+                             builder.makeConst(int64_t(32)));
+        high = builder.makeUnary(WrapInt64, high);
+        // Note that the alignment is assumed to be the same here, even though
+        // we add an offset of 4. That is because this is an unaligned store, so
+        // the alignment is 1, 2, or 4, which means it stays the same after
+        // adding 4.
+        high = lowerStoreI32(
+          builder.makeStore(4,
+                            curr->offset + 4,
+                            curr->align,
+                            builder.makeLocalGet(tempPtr, indexType),
+                            high,
+                            Type::i32,
+                            curr->memory));
+        replacement = builder.makeBlock({setPtr, setValue, low, high});
+        break;
+    }
+    replaceCurrent(replacement);
+  }
+};
+
+Pass* createAlignmentLoweringPass() { return new AlignmentLowering(); }
+
+} // namespace wasm
