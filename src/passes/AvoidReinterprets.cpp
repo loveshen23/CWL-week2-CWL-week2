@@ -118,4 +118,96 @@ struct AvoidReinterprets : public WalkerPass<PostWalker<AvoidReinterprets>> {
   void optimize(Function* func) {
     std::set<Load*> unoptimizables;
     for (auto& [load, info] : infos) {
-      if (info.reinterpreted && canReplaceWithRein
+      if (info.reinterpreted && canReplaceWithReinterpret(load)) {
+        // We should use another load here, to avoid reinterprets.
+        auto mem = getModule()->getMemory(load->memory);
+        info.ptrLocal = Builder::addVar(func, mem->indexType);
+        info.reinterpretedLocal =
+          Builder::addVar(func, load->type.reinterpret());
+      } else {
+        unoptimizables.insert(load);
+      }
+    }
+    for (auto* load : unoptimizables) {
+      infos.erase(load);
+    }
+    // We now know which we can optimize, and how.
+    struct FinalOptimizer : public PostWalker<FinalOptimizer> {
+      std::map<Load*, Info>& infos;
+      LocalGraph* localGraph;
+      Module* module;
+      const PassOptions& passOptions;
+
+      FinalOptimizer(std::map<Load*, Info>& infos,
+                     LocalGraph* localGraph,
+                     Module* module,
+                     const PassOptions& passOptions)
+        : infos(infos), localGraph(localGraph), module(module),
+          passOptions(passOptions) {}
+
+      void visitUnary(Unary* curr) {
+        if (isReinterpret(curr)) {
+          auto* value = curr->value;
+          if (auto* load = value->dynCast<Load>()) {
+            // A reinterpret of a load - flip it right here if we can.
+            if (canReplaceWithReinterpret(load)) {
+              replaceCurrent(makeReinterpretedLoad(load, load->ptr));
+            }
+          } else if (auto* get = value->dynCast<LocalGet>()) {
+            if (auto* load =
+                  getSingleLoad(localGraph, get, passOptions, *module)) {
+              auto iter = infos.find(load);
+              if (iter != infos.end()) {
+                auto& info = iter->second;
+                // A reinterpret of a get of a load - use the new local.
+                Builder builder(*module);
+                replaceCurrent(builder.makeLocalGet(info.reinterpretedLocal,
+                                                    load->type.reinterpret()));
+              }
+            }
+          }
+        }
+      }
+
+      void visitLoad(Load* curr) {
+        auto iter = infos.find(curr);
+        if (iter != infos.end()) {
+          auto& info = iter->second;
+          Builder builder(*module);
+          auto* ptr = curr->ptr;
+          auto mem = getModule()->getMemory(curr->memory);
+          auto indexType = mem->indexType;
+          curr->ptr = builder.makeLocalGet(info.ptrLocal, indexType);
+          // Note that the other load can have its sign set to false - if the
+          // original were an integer, the other is a float anyhow; and if
+          // original were a float, we don't know what sign to use.
+          replaceCurrent(builder.makeBlock(
+            {builder.makeLocalSet(info.ptrLocal, ptr),
+             builder.makeLocalSet(
+               info.reinterpretedLocal,
+               makeReinterpretedLoad(
+                 curr, builder.makeLocalGet(info.ptrLocal, indexType))),
+             curr}));
+        }
+      }
+
+      Load* makeReinterpretedLoad(Load* load, Expression* ptr) {
+        Builder builder(*module);
+        return builder.makeLoad(load->bytes,
+                                false,
+                                load->offset,
+                                load->align,
+                                ptr,
+                                load->type.reinterpret(),
+                                load->memory);
+      }
+    } finalOptimizer(infos, localGraph, getModule(), getPassOptions());
+
+    finalOptimizer.setModule(getModule());
+    finalOptimizer.walk(func->body);
+  }
+};
+
+Pass* createAvoidReinterpretsPass() { return new AvoidReinterprets(); }
+
+} // namespace wasm
