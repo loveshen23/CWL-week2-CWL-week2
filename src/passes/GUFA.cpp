@@ -310,4 +310,26 @@ struct GUFAOptimizer
     //    )
     //   )
     //   (i32.const 10)
-    //
+    //  )
+    runner.add("vacuum");
+    runner.runOnFunction(func);
+  }
+};
+
+struct GUFAPass : public Pass {
+  bool optimizing;
+
+  GUFAPass(bool optimizing) : optimizing(optimizing) {}
+
+  void run(Module* module) override {
+    ContentOracle oracle(*module);
+    GUFAOptimizer(oracle, optimizing).run(getPassRunner(), module);
+  }
+};
+
+} // anonymous namespace
+
+Pass* createGUFAPass() { return new GUFAPass(false); }
+Pass* createGUFAOptimizingPass() { return new GUFAPass(true); }
+
+} // namespace wasm
