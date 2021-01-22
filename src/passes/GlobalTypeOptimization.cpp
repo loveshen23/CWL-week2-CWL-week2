@@ -370,4 +370,84 @@ struct GlobalTypeOptimization : public Pass {
             ChildLocalizer(curr, func, getModule(), getPassOptions()).sets;
           block->list.set(sets);
           block->list.push_back(curr);
-        
+          block->finalize(curr->type);
+          replaceCurrent(block);
+        }
+
+        // Remove the unneeded operands.
+        Index removed = 0;
+        for (Index i = 0; i < operands.size(); i++) {
+          auto newIndex = indexesAfterRemoval[i];
+          if (newIndex != RemovedField) {
+            assert(newIndex < operands.size());
+            operands[newIndex] = operands[i];
+          } else {
+            removed++;
+          }
+        }
+        operands.resize(operands.size() - removed);
+      }
+
+      void visitStructSet(StructSet* curr) {
+        if (curr->ref->type == Type::unreachable) {
+          return;
+        }
+
+        auto newIndex = getNewIndex(curr->ref->type.getHeapType(), curr->index);
+        if (newIndex != RemovedField) {
+          // Map to the new index.
+          curr->index = newIndex;
+        } else {
+          // This field was removed, so just emit drops of our children, plus a
+          // trap if the ref is null. Note that we must preserve the order of
+          // operations here: the trap on a null ref happens after the value,
+          // which might have side effects.
+          Builder builder(*getModule());
+          auto flipped = getResultOfFirst(curr->ref,
+                                          builder.makeDrop(curr->value),
+                                          getFunction(),
+                                          getModule(),
+                                          getPassOptions());
+          replaceCurrent(
+            builder.makeDrop(builder.makeRefAs(RefAsNonNull, flipped)));
+        }
+      }
+
+      void visitStructGet(StructGet* curr) {
+        if (curr->ref->type == Type::unreachable) {
+          return;
+        }
+
+        auto newIndex = getNewIndex(curr->ref->type.getHeapType(), curr->index);
+        // We must not remove a field that is read from.
+        assert(newIndex != RemovedField);
+        curr->index = newIndex;
+      }
+
+    private:
+      Index getNewIndex(HeapType type, Index index) {
+        auto iter = parent.indexesAfterRemovals.find(type);
+        if (iter == parent.indexesAfterRemovals.end()) {
+          return index;
+        }
+        auto& indexesAfterRemoval = iter->second;
+        auto newIndex = indexesAfterRemoval[index];
+        assert(newIndex < indexesAfterRemoval.size() ||
+               newIndex == RemovedField);
+        return newIndex;
+      }
+    };
+
+    FieldRemover remover(*this);
+    remover.run(getPassRunner(), &wasm);
+    remover.runOnModuleCode(getPassRunner(), &wasm);
+  }
+};
+
+} // anonymous namespace
+
+Pass* createGlobalTypeOptimizationPass() {
+  return new GlobalTypeOptimization();
+}
+
+} // namespace wasm
