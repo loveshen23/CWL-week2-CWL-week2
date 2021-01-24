@@ -271,4 +271,309 @@ struct Heap2LocalOptimizer {
 
     // Adjust the type that flows through an expression, updating that type as
     // necessary.
-    void adjustTypeFlowingThrough(Expression* cu
+    void adjustTypeFlowingThrough(Expression* curr) {
+      if (!reached.count(curr)) {
+        return;
+      }
+
+      // Our allocation passes through this expr. We must turn its type into a
+      // nullable one, because we will remove things like RefAsNonNull of it,
+      // which means we may no longer have a non-nullable value as our input,
+      // and we could fail to validate. It is safe to make this change in terms
+      // of our parent, since we know very specifically that only safe things
+      // will end up using our value, like a StructGet or a Drop, which do not
+      // care about non-nullability.
+      assert(curr->type.isRef());
+      curr->type = Type(curr->type.getHeapType(), Nullable);
+    }
+
+    void visitBlock(Block* curr) { adjustTypeFlowingThrough(curr); }
+
+    void visitLoop(Loop* curr) { adjustTypeFlowingThrough(curr); }
+
+    void visitLocalSet(LocalSet* curr) {
+      if (!reached.count(curr)) {
+        return;
+      }
+
+      // We don't need any sets of the reference to any of the locals it
+      // originally was written to.
+      if (curr->isTee()) {
+        replaceCurrent(curr->value);
+      } else {
+        replaceCurrent(builder.makeDrop(curr->value));
+      }
+    }
+
+    void visitLocalGet(LocalGet* curr) {
+      if (!reached.count(curr)) {
+        return;
+      }
+
+      // Uses of this get will drop it, so the value does not matter. Replace it
+      // with something else, which avoids issues with non-nullability (when
+      // non-nullable locals are enabled), which could happen like this:
+      //
+      //   (local $x (ref $foo))
+      //   (local.set $x ..)
+      //   (.. (local.get $x))
+      //
+      // If we remove the set but not the get then the get would appear to read
+      // the default value of a non-nullable local, which is not allowed.
+      //
+      // For simplicity, replace the get with a null. We anyhow have null types
+      // in the places where our allocation was earlier, see notes on
+      // visitBlock, and so using a null here adds no extra complexity.
+      replaceCurrent(builder.makeRefNull(curr->type.getHeapType()));
+    }
+
+    void visitBreak(Break* curr) {
+      if (!reached.count(curr)) {
+        return;
+      }
+
+      // Breaks that our allocation flows through may change type, as we now
+      // have a nullable type there.
+      curr->finalize();
+    }
+
+    void visitStructNew(StructNew* curr) {
+      if (curr != allocation) {
+        return;
+      }
+
+      // First, assign the initial values to the new locals.
+      std::vector<Expression*> contents;
+
+      if (!allocation->isWithDefault()) {
+        // We must assign the initial values to temp indexes, then copy them
+        // over all at once. If instead we did set them as we go, then we might
+        // hit a problem like this:
+        //
+        //  (local.set X (new_X))
+        //  (local.set Y (block (result ..)
+        //                 (.. (local.get X) ..) ;; returns new_X, wrongly
+        //                 (new_Y)
+        //               )
+        //
+        // Note how we assign to the local X and use it during the assignment to
+        // the local Y - but we should still see the old value of X, not new_X.
+        // Temp locals X', Y' can ensure that:
+        //
+        //  (local.set X' (new_X))
+        //  (local.set Y' (block (result ..)
+        //                  (.. (local.get X) ..) ;; returns the proper, old X
+        //                  (new_Y)
+        //                )
+        //  ..
+        //  (local.set X (local.get X'))
+        //  (local.set Y (local.get Y'))
+        std::vector<Index> tempIndexes;
+
+        for (auto field : fields) {
+          tempIndexes.push_back(builder.addVar(func, field.type));
+        }
+
+        // Store the initial values into the temp locals.
+        for (Index i = 0; i < tempIndexes.size(); i++) {
+          contents.push_back(
+            builder.makeLocalSet(tempIndexes[i], allocation->operands[i]));
+        }
+
+        // Copy them to the normal ones.
+        for (Index i = 0; i < tempIndexes.size(); i++) {
+          contents.push_back(builder.makeLocalSet(
+            localIndexes[i],
+            builder.makeLocalGet(tempIndexes[i], fields[i].type)));
+        }
+
+        // TODO Check if the nondefault case does not increase code size in some
+        //      cases. A heap allocation that implicitly sets the default values
+        //      is smaller than multiple explicit settings of locals to
+        //      defaults.
+      } else {
+        // Set the default values.
+        // Note that we must assign the defaults because we might be in a loop,
+        // that is, there might be a previous value.
+        for (Index i = 0; i < localIndexes.size(); i++) {
+          contents.push_back(builder.makeLocalSet(
+            localIndexes[i],
+            builder.makeConstantExpression(Literal::makeZero(fields[i].type))));
+        }
+      }
+
+      // Replace the allocation with a null reference. This changes the type
+      // from non-nullable to nullable, but as we optimize away the code that
+      // the allocation reaches, we will handle that.
+      contents.push_back(builder.makeRefNull(allocation->type.getHeapType()));
+      replaceCurrent(builder.makeBlock(contents));
+    }
+
+    void visitRefAs(RefAs* curr) {
+      if (!reached.count(curr)) {
+        return;
+      }
+
+      // It is safe to optimize out this RefAsNonNull, since we proved it
+      // contains our allocation, and so cannot trap.
+      assert(curr->op == RefAsNonNull);
+      replaceCurrent(curr->value);
+    }
+
+    void visitStructSet(StructSet* curr) {
+      if (!reached.count(curr)) {
+        return;
+      }
+
+      // Drop the ref (leaving it to other opts to remove, when possible), and
+      // write the data to the local instead of the heap allocation.
+      replaceCurrent(builder.makeSequence(
+        builder.makeDrop(curr->ref),
+        builder.makeLocalSet(localIndexes[curr->index], curr->value)));
+    }
+
+    void visitStructGet(StructGet* curr) {
+      if (!reached.count(curr)) {
+        return;
+      }
+
+      replaceCurrent(
+        builder.makeSequence(builder.makeDrop(curr->ref),
+                             builder.makeLocalGet(localIndexes[curr->index],
+                                                  fields[curr->index].type)));
+    }
+  };
+
+  // All the expressions we have already looked at.
+  std::unordered_set<Expression*> seen;
+
+  enum class ParentChildInteraction {
+    // The parent lets the child escape. E.g. the parent is a call.
+    Escapes,
+    // The parent fully consumes the child in a safe, non-escaping way, and
+    // after consuming it nothing remains to flow further through the parent.
+    // E.g. the parent is a struct.get, which reads from the allocated heap
+    // value and does nothing more with the reference.
+    FullyConsumes,
+    // The parent flows the child out, that is, the child is the single value
+    // that can flow out from the parent. E.g. the parent is a block with no
+    // branches and the child is the final value that is returned.
+    Flows,
+    // The parent does not consume the child completely, so the child's value
+    // can be used through it. However the child does not flow cleanly through.
+    // E.g. the parent is a block with branches, and the value on them may be
+    // returned from the block and not only the child. This means the allocation
+    // is not used in an exclusive way, and we cannot optimize it.
+    Mixes,
+  };
+
+  // Analyze an allocation to see if we can convert it from a heap allocation to
+  // locals.
+  void convertToLocals(StructNew* allocation) {
+    Rewriter rewriter(allocation, func, module);
+
+    // A queue of flows from children to parents. When something is in the queue
+    // here then it assumed that it is ok for the allocation to be at the child
+    // (that is, we have already checked the child before placing it in the
+    // queue), and we need to check if it is ok to be at the parent, and to flow
+    // from the child to the parent. We will analyze that (see
+    // ParentChildInteraction, above) and continue accordingly.
+    using ChildAndParent = std::pair<Expression*, Expression*>;
+    UniqueNonrepeatingDeferredQueue<ChildAndParent> flows;
+
+    // Start the flow from the allocation itself to its parent.
+    flows.push({allocation, parents.getParent(allocation)});
+
+    // Keep flowing while we can.
+    while (!flows.empty()) {
+      auto flow = flows.pop();
+      auto* child = flow.first;
+      auto* parent = flow.second;
+
+      // If we've already seen an expression, stop since we cannot optimize
+      // things that overlap in any way (see the notes on exclusivity, above).
+      // Note that we use a nonrepeating queue here, so we already do not visit
+      // the same thing more than once; what this check does is verify we don't
+      // look at something that another allocation reached, which would be in a
+      // different call to this function and use a different queue (any overlap
+      // between calls would prove non-exclusivity).
+      if (!seen.emplace(parent).second) {
+        return;
+      }
+
+      switch (getParentChildInteraction(parent, child)) {
+        case ParentChildInteraction::Escapes: {
+          // If the parent may let us escape then we are done.
+          return;
+        }
+        case ParentChildInteraction::FullyConsumes: {
+          // If the parent consumes us without letting us escape then all is
+          // well (and there is nothing flowing from the parent to check).
+          break;
+        }
+        case ParentChildInteraction::Flows: {
+          // The value flows through the parent; we need to look further at the
+          // grandparent.
+          flows.push({parent, parents.getParent(parent)});
+          break;
+        }
+        case ParentChildInteraction::Mixes: {
+          // Our allocation is not used exclusively via the parent, as other
+          // values are mixed with it. Give up.
+          return;
+        }
+      }
+
+      if (auto* set = parent->dynCast<LocalSet>()) {
+        // This is one of the sets we are written to, and so we must check for
+        // exclusive use of our allocation by all the gets that read the value.
+        // Note the set, and we will check the gets at the end once we know all
+        // of our sets.
+        rewriter.sets.insert(set);
+
+        // We must also look at how the value flows from those gets.
+        if (auto* getsReached = getGetsReached(set)) {
+          for (auto* get : *getsReached) {
+            flows.push({get, parents.getParent(get)});
+          }
+        }
+      }
+
+      // If the parent may send us on a branch, we will need to look at the flow
+      // to the branch target(s).
+      for (auto name : branchesSentByParent(child, parent)) {
+        flows.push({child, branchTargets.getTarget(name)});
+      }
+
+      // If we got to here, then we can continue to hope that we can optimize
+      // this allocation. Mark the parent and child as reached by it, and
+      // continue.
+      rewriter.reached.insert(parent);
+      rewriter.reached.insert(child);
+    }
+
+    // We finished the loop over the flows. Do the final checks.
+    if (!getsAreExclusiveToSets(rewriter.sets)) {
+      return;
+    }
+
+    // We can do it, hurray!
+    rewriter.applyOptimization();
+  }
+
+  ParentChildInteraction getParentChildInteraction(Expression* parent,
+                                                   Expression* child) {
+    // If there is no parent then we are the body of the function, and that
+    // means we escape by flowing to the caller.
+    if (!parent) {
+      return ParentChildInteraction::Escapes;
+    }
+
+    struct Checker : public Visitor<Checker> {
+      Expression* child;
+
+      // Assume escaping (or some other problem we cannot analyze) unless we are
+      // certain otherwise.
+      bool escapes = true;
+
+      // Assume we do not fully consu
