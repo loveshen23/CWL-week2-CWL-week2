@@ -576,4 +576,182 @@ struct Heap2LocalOptimizer {
       // certain otherwise.
       bool escapes = true;
 
-      // Assume we do not fully consu
+      // Assume we do not fully consume the value unless we are certain
+      // otherwise. If this is set to true, then we do not need to check any
+      // further. If it remains false, then we will analyze the value that
+      // falls through later to check for mixing.
+      //
+      // Note that this does not need to be set for expressions if their type
+      // proves that the value does not continue onwards (e.g. if their type is
+      // none, or not a reference type), but for clarity some do still mark this
+      // field as true when it is clearly so.
+      bool fullyConsumes = false;
+
+      // General operations
+      void visitBlock(Block* curr) {
+        escapes = false;
+        // We do not mark fullyConsumes as the value may continue through this
+        // and other control flow structures.
+      }
+      // Note that If is not supported here, because for our value to flow
+      // through it there must be an if-else, and that means there is no single
+      // value falling through anyhow.
+      void visitLoop(Loop* curr) { escapes = false; }
+      void visitDrop(Drop* curr) {
+        escapes = false;
+        fullyConsumes = true;
+      }
+      void visitBreak(Break* curr) { escapes = false; }
+      void visitSwitch(Switch* curr) { escapes = false; }
+
+      // Local operations. Locals by themselves do not escape; the analysis
+      // tracks where locals are used.
+      void visitLocalGet(LocalGet* curr) { escapes = false; }
+      void visitLocalSet(LocalSet* curr) { escapes = false; }
+
+      // Reference operations. TODO add more
+      void visitRefAs(RefAs* curr) {
+        // TODO General OptimizeInstructions integration, that is, since we know
+        //      that our allocation is what flows into this RefAs, we can
+        //      know the exact outcome of the operation.
+        if (curr->op == RefAsNonNull) {
+          // As it is our allocation that flows through here, we know it is not
+          // null (so there is no trap), and we can continue to (hopefully)
+          // optimize this allocation.
+          escapes = false;
+        }
+      }
+
+      // GC operations.
+      void visitStructSet(StructSet* curr) {
+        // The reference does not escape (but the value is stored to memory and
+        // therefore might).
+        if (curr->ref == child) {
+          escapes = false;
+          fullyConsumes = true;
+        }
+      }
+      void visitStructGet(StructGet* curr) {
+        escapes = false;
+        fullyConsumes = true;
+      }
+
+      // TODO Array and I31 operations
+    } checker;
+
+    checker.child = child;
+    checker.visit(parent);
+
+    if (checker.escapes) {
+      return ParentChildInteraction::Escapes;
+    }
+
+    // If the parent returns a type that is not a reference, then by definition
+    // it fully consumes the value as it does not flow our allocation onward.
+    if (checker.fullyConsumes || !parent->type.isRef()) {
+      return ParentChildInteraction::FullyConsumes;
+    }
+
+    // Finally, check for mixing. If the child is the immediate fallthrough
+    // of the parent then no other values can be mixed in.
+    if (Properties::getImmediateFallthrough(parent, passOptions, *module) ==
+        child) {
+      return ParentChildInteraction::Flows;
+    }
+
+    // Likewise, if the child branches to the parent, and it is the sole branch,
+    // with no other value exiting the block (in particular, no final value at
+    // the end that flows out), then there is no mixing.
+    auto branches =
+      branchTargets.getBranches(BranchUtils::getDefinedName(parent));
+    if (branches.size() == 1 &&
+        BranchUtils::getSentValue(*branches.begin()) == child) {
+      // TODO: support more types of branch targets.
+      if (auto* parentAsBlock = parent->dynCast<Block>()) {
+        if (parentAsBlock->list.back()->type == Type::unreachable) {
+          return ParentChildInteraction::Flows;
+        }
+      }
+    }
+
+    // TODO: Also check for safe merges where our allocation is in all places,
+    //       like two if or select arms, or branches.
+
+    return ParentChildInteraction::Mixes;
+  }
+
+  LocalGraph::SetInfluences* getGetsReached(LocalSet* set) {
+    auto iter = localGraph.setInfluences.find(set);
+    if (iter != localGraph.setInfluences.end()) {
+      return &iter->second;
+    }
+    return nullptr;
+  }
+
+  BranchUtils::NameSet branchesSentByParent(Expression* child,
+                                            Expression* parent) {
+    BranchUtils::NameSet names;
+    BranchUtils::operateOnScopeNameUsesAndSentValues(
+      parent, [&](Name name, Expression* value) {
+        if (value == child) {
+          names.insert(name);
+        }
+      });
+    return names;
+  }
+
+  // Verify exclusivity of all the gets for a bunch of sets. That is, assuming
+  // the sets are exclusive (they all write exactly our allocation, and nothing
+  // else), we need to check whether all the gets that read that value cannot
+  // read anything else (which would be the case if another set writes to that
+  // local, in the right live range).
+  bool getsAreExclusiveToSets(const std::unordered_set<LocalSet*>& sets) {
+    // Find all the relevant gets (which may overlap between the sets).
+    std::unordered_set<LocalGet*> gets;
+    for (auto* set : sets) {
+      if (auto* getsReached = getGetsReached(set)) {
+        for (auto* get : *getsReached) {
+          gets.insert(get);
+        }
+      }
+    }
+
+    // Check that the gets can only read from the specific known sets.
+    for (auto* get : gets) {
+      for (auto* set : localGraph.getSetses[get]) {
+        if (sets.count(set) == 0) {
+          return false;
+        }
+      }
+    }
+
+    return true;
+  }
+};
+
+struct Heap2Local : public WalkerPass<PostWalker<Heap2Local>> {
+  bool isFunctionParallel() override { return true; }
+
+  std::unique_ptr<Pass> create() override {
+    return std::make_unique<Heap2Local>();
+  }
+
+  void doWalkFunction(Function* func) {
+    // Multiple rounds of optimization may work in theory, as once we turn one
+    // allocation into locals, references written to its fields become
+    // references written to locals, which we may see do not escape. However,
+    // this does not work yet, since we do not remove the original allocation -
+    // we just "detach" it from other things and then depend on other
+    // optimizations to remove it. That means this pass must be interleaved with
+    // vacuum, in particular, to optimize such nested allocations.
+    // TODO Consider running multiple iterations here, and running vacuum in
+    //      between them.
+    Heap2LocalOptimizer(func, getModule(), getPassOptions());
+  }
+};
+
+} // anonymous namespace
+
+Pass* createHeap2LocalPass() { return new Heap2Local(); }
+
+} // namespace wasm
