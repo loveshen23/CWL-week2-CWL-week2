@@ -492,3 +492,346 @@ struct I64ToI32Lowering : public WalkerPass<PostWalker<I64ToI32Lowering>> {
     if (!getFunction()) {
       return; // if in a global init, skip - we already handled that.
     }
+    if (curr->type != Type::i64) {
+      return;
+    }
+    TempVar highBits = getTemp();
+    Const* lowVal =
+      builder->makeConst(int32_t(curr->value.geti64() & 0xffffffff));
+    LocalSet* setHigh = builder->makeLocalSet(
+      highBits,
+      builder->makeConst(int32_t(uint64_t(curr->value.geti64()) >> 32)));
+    Block* result = builder->blockify(setHigh, lowVal);
+    setOutParam(result, std::move(highBits));
+    replaceCurrent(result);
+  }
+
+  void lowerEqZInt64(Unary* curr) {
+    TempVar highBits = fetchOutParam(curr->value);
+
+    auto* result = builder->makeUnary(
+      EqZInt32,
+      builder->makeBinary(
+        OrInt32, curr->value, builder->makeLocalGet(highBits, Type::i32)));
+
+    replaceCurrent(result);
+  }
+
+  void lowerExtendUInt32(Unary* curr) {
+    TempVar highBits = getTemp();
+    Block* result = builder->blockify(
+      builder->makeLocalSet(highBits, builder->makeConst(int32_t(0))),
+      curr->value);
+    setOutParam(result, std::move(highBits));
+    replaceCurrent(result);
+  }
+
+  void lowerExtendSInt32(Unary* curr) {
+    TempVar highBits = getTemp();
+    TempVar lowBits = getTemp();
+
+    LocalSet* setLow = builder->makeLocalSet(lowBits, curr->value);
+    LocalSet* setHigh = builder->makeLocalSet(
+      highBits,
+      builder->makeBinary(ShrSInt32,
+                          builder->makeLocalGet(lowBits, Type::i32),
+                          builder->makeConst(int32_t(31))));
+
+    Block* result = builder->blockify(
+      setLow, setHigh, builder->makeLocalGet(lowBits, Type::i32));
+
+    setOutParam(result, std::move(highBits));
+    replaceCurrent(result);
+  }
+
+  void lowerExtendSInt64(Unary* curr) {
+    TempVar highBits = getTemp();
+    TempVar lowBits = getTemp();
+
+    // free the temp var
+    fetchOutParam(curr->value);
+
+    Expression* lowValue = curr->value;
+    switch (curr->op) {
+      case ExtendS8Int64:
+        lowValue = builder->makeUnary(ExtendS8Int32, lowValue);
+        break;
+      case ExtendS16Int64:
+        lowValue = builder->makeUnary(ExtendS16Int32, lowValue);
+        break;
+      default:
+        break;
+    }
+
+    LocalSet* setLow = builder->makeLocalSet(lowBits, lowValue);
+    LocalSet* setHigh = builder->makeLocalSet(
+      highBits,
+      builder->makeBinary(ShrSInt32,
+                          builder->makeLocalGet(lowBits, Type::i32),
+                          builder->makeConst(int32_t(31))));
+
+    Block* result = builder->blockify(
+      setLow, setHigh, builder->makeLocalGet(lowBits, Type::i32));
+
+    setOutParam(result, std::move(highBits));
+    replaceCurrent(result);
+  }
+
+  void lowerWrapInt64(Unary* curr) {
+    // free the temp var
+    fetchOutParam(curr->value);
+    replaceCurrent(curr->value);
+  }
+
+  void lowerReinterpretFloat64(Unary* curr) {
+    // Assume that the wasm file assumes the address 0 is invalid and roundtrip
+    // our f64 through memory at address 0
+    TempVar highBits = getTemp();
+    Block* result = builder->blockify(
+      builder->makeCall(
+        ABI::wasm2js::SCRATCH_STORE_F64, {curr->value}, Type::none),
+      builder->makeLocalSet(highBits,
+                            builder->makeCall(ABI::wasm2js::SCRATCH_LOAD_I32,
+                                              {builder->makeConst(int32_t(1))},
+                                              Type::i32)),
+      builder->makeCall(ABI::wasm2js::SCRATCH_LOAD_I32,
+                        {builder->makeConst(int32_t(0))},
+                        Type::i32));
+    setOutParam(result, std::move(highBits));
+    replaceCurrent(result);
+    MemoryUtils::ensureExists(getModule());
+    ABI::wasm2js::ensureHelpers(getModule());
+  }
+
+  void lowerReinterpretInt64(Unary* curr) {
+    // Assume that the wasm file assumes the address 0 is invalid and roundtrip
+    // our i64 through memory at address 0
+    TempVar highBits = fetchOutParam(curr->value);
+    Block* result = builder->blockify(
+      builder->makeCall(ABI::wasm2js::SCRATCH_STORE_I32,
+                        {builder->makeConst(int32_t(0)), curr->value},
+                        Type::none),
+      builder->makeCall(ABI::wasm2js::SCRATCH_STORE_I32,
+                        {builder->makeConst(int32_t(1)),
+                         builder->makeLocalGet(highBits, Type::i32)},
+                        Type::none),
+      builder->makeCall(ABI::wasm2js::SCRATCH_LOAD_F64, {}, Type::f64));
+    replaceCurrent(result);
+    MemoryUtils::ensureExists(getModule());
+    ABI::wasm2js::ensureHelpers(getModule());
+  }
+
+  void lowerTruncFloatToInt(Unary* curr) {
+    // hiBits = if abs(f) >= 1.0 {
+    //    if f > 0.0 {
+    //        (unsigned) min(
+    //          floor(f / (float) U32_MAX),
+    //          (float) U32_MAX - 1,
+    //        )
+    //    } else {
+    //        (unsigned) ceil((f - (float) (unsigned) f) / ((float) U32_MAX))
+    //    }
+    // } else {
+    //    0
+    // }
+    //
+    // loBits = (unsigned) f;
+
+    Literal litZero, litOne, u32Max;
+    UnaryOp trunc, convert, abs, floor, ceil;
+    Type localType;
+    BinaryOp ge, gt, min, div, sub;
+    switch (curr->op) {
+      case TruncSFloat32ToInt64:
+      case TruncUFloat32ToInt64: {
+        litZero = Literal((float)0);
+        litOne = Literal((float)1);
+        u32Max = Literal(((float)UINT_MAX) + 1);
+        trunc = TruncUFloat32ToInt32;
+        convert = ConvertUInt32ToFloat32;
+        localType = Type::f32;
+        abs = AbsFloat32;
+        ge = GeFloat32;
+        gt = GtFloat32;
+        min = MinFloat32;
+        floor = FloorFloat32;
+        ceil = CeilFloat32;
+        div = DivFloat32;
+        sub = SubFloat32;
+        break;
+      }
+      case TruncSFloat64ToInt64:
+      case TruncUFloat64ToInt64: {
+        litZero = Literal((double)0);
+        litOne = Literal((double)1);
+        u32Max = Literal(((double)UINT_MAX) + 1);
+        trunc = TruncUFloat64ToInt32;
+        convert = ConvertUInt32ToFloat64;
+        localType = Type::f64;
+        abs = AbsFloat64;
+        ge = GeFloat64;
+        gt = GtFloat64;
+        min = MinFloat64;
+        floor = FloorFloat64;
+        ceil = CeilFloat64;
+        div = DivFloat64;
+        sub = SubFloat64;
+        break;
+      }
+      default:
+        abort();
+    }
+
+    TempVar f = getTemp(localType);
+    TempVar highBits = getTemp();
+
+    Expression* gtZeroBranch = builder->makeBinary(
+      min,
+      builder->makeUnary(
+        floor,
+        builder->makeBinary(div,
+                            builder->makeLocalGet(f, localType),
+                            builder->makeConst(u32Max))),
+      builder->makeBinary(
+        sub, builder->makeConst(u32Max), builder->makeConst(litOne)));
+    Expression* ltZeroBranch = builder->makeUnary(
+      ceil,
+      builder->makeBinary(
+        div,
+        builder->makeBinary(
+          sub,
+          builder->makeLocalGet(f, localType),
+          builder->makeUnary(
+            convert,
+            builder->makeUnary(trunc, builder->makeLocalGet(f, localType)))),
+        builder->makeConst(u32Max)));
+
+    If* highBitsCalc = builder->makeIf(
+      builder->makeBinary(
+        gt, builder->makeLocalGet(f, localType), builder->makeConst(litZero)),
+      builder->makeUnary(trunc, gtZeroBranch),
+      builder->makeUnary(trunc, ltZeroBranch));
+    If* highBitsVal = builder->makeIf(
+      builder->makeBinary(
+        ge,
+        builder->makeUnary(abs, builder->makeLocalGet(f, localType)),
+        builder->makeConst(litOne)),
+      highBitsCalc,
+      builder->makeConst(int32_t(0)));
+    Block* result = builder->blockify(
+      builder->makeLocalSet(f, curr->value),
+      builder->makeLocalSet(highBits, highBitsVal),
+      builder->makeUnary(trunc, builder->makeLocalGet(f, localType)));
+    setOutParam(result, std::move(highBits));
+    replaceCurrent(result);
+  }
+
+  void lowerConvertIntToFloat(Unary* curr) {
+    // Here the same strategy as `emcc` is taken which takes the two halves of
+    // the 64-bit integer and creates a mathematical expression using float
+    // arithmetic to reassemble the final floating point value.
+    //
+    // For example for i64 -> f32 we generate:
+    //
+    //  ((double) (unsigned) lowBits) +
+    //      ((double) U32_MAX) * ((double) (int) highBits)
+    //
+    // Mostly just shuffling things around here with coercions and whatnot!
+    // Note though that all arithmetic is done with f64 to have as much
+    // precision as we can.
+    //
+    // NB: this is *not* accurate for i64 -> f32. Using f64s for intermediate
+    // operations can give slightly inaccurate results in some cases, as we
+    // round to an f64, then round again to an f32, which is not always the
+    // same as a single rounding of i64 to f32 directly. Example:
+    //
+    //   #include <stdio.h>
+    //   int main() {
+    //     unsigned long long x = 18446743523953737727ULL;
+    //     float y = x;
+    //     double z = x;
+    //     float w = z;
+    //     printf("i64          : %llu\n"
+    //            "i64->f32     : %f\n"
+    //            "i64->f64     : %f\n"
+    //            "i64->f64->f32: %f\n", x, y, z, w);
+    //   }
+    //
+    //   i64          : 18446743523953737727
+    //   i64->f32     : 18446742974197923840.000000 ;; correct rounding to f32
+    //   i64->f64     : 18446743523953737728.000000 ;; correct rounding to f64
+    //   i64->f64->f32: 18446744073709551616.000000 ;; incorrect rounding to f32
+    //
+    // This is even a problem if we use BigInts in JavaScript to represent
+    // i64s, as Math.fround(BigInt) is not supported - the BigInt must be
+    // converted to a Number first, so we again have that extra rounding.
+    //
+    // A more precise approach could use compiled floatdisf/floatundisf from
+    // compiler-rt, but that is much larger and slower. (Note that we are in the
+    // interesting situation of having f32 and f64 operations and only missing
+    // i64 ones, so we have a different problem to solve than compiler-rt, and
+    // maybe there is a better solution we haven't found yet.)
+    TempVar highBits = fetchOutParam(curr->value);
+    TempVar lowBits = getTemp();
+    TempVar highResult = getTemp();
+
+    UnaryOp convertHigh;
+    switch (curr->op) {
+      case ConvertSInt64ToFloat32:
+      case ConvertSInt64ToFloat64:
+        convertHigh = ConvertSInt32ToFloat64;
+        break;
+      case ConvertUInt64ToFloat32:
+      case ConvertUInt64ToFloat64:
+        convertHigh = ConvertUInt32ToFloat64;
+        break;
+      default:
+        abort();
+    }
+
+    Expression* result = builder->blockify(
+      builder->makeLocalSet(lowBits, curr->value),
+      builder->makeLocalSet(highResult, builder->makeConst(int32_t(0))),
+      builder->makeBinary(
+        AddFloat64,
+        builder->makeUnary(ConvertUInt32ToFloat64,
+                           builder->makeLocalGet(lowBits, Type::i32)),
+        builder->makeBinary(
+          MulFloat64,
+          builder->makeConst((double)UINT_MAX + 1),
+          builder->makeUnary(convertHigh,
+                             builder->makeLocalGet(highBits, Type::i32)))));
+
+    switch (curr->op) {
+      case ConvertSInt64ToFloat32:
+      case ConvertUInt64ToFloat32: {
+        result = builder->makeUnary(DemoteFloat64, result);
+        break;
+      }
+      default:
+        break;
+    }
+
+    replaceCurrent(result);
+  }
+
+  void lowerCountZeros(Unary* curr) {
+    auto lower = [&](Block* result,
+                     UnaryOp op32,
+                     TempVar&& first,
+                     TempVar&& second) {
+      TempVar highResult = getTemp();
+      TempVar firstResult = getTemp();
+      LocalSet* setFirst = builder->makeLocalSet(
+        firstResult,
+        builder->makeUnary(op32, builder->makeLocalGet(first, Type::i32)));
+
+      Binary* check =
+        builder->makeBinary(EqInt32,
+                            builder->makeLocalGet(firstResult, Type::i32),
+                            builder->makeConst(int32_t(32)));
+
+      If* conditional = builder->makeIf(
+        check,
+        builder->makeBinary(
+          A
