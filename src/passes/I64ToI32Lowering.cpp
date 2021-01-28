@@ -834,4 +834,345 @@ struct I64ToI32Lowering : public WalkerPass<PostWalker<I64ToI32Lowering>> {
       If* conditional = builder->makeIf(
         check,
         builder->makeBinary(
-          A
+          AddInt32,
+          builder->makeUnary(op32, builder->makeLocalGet(second, Type::i32)),
+          builder->makeConst(int32_t(32))),
+        builder->makeLocalGet(firstResult, Type::i32));
+
+      LocalSet* setHigh =
+        builder->makeLocalSet(highResult, builder->makeConst(int32_t(0)));
+
+      setOutParam(result, std::move(highResult));
+
+      replaceCurrent(builder->blockify(result, setFirst, setHigh, conditional));
+    };
+
+    TempVar highBits = fetchOutParam(curr->value);
+    TempVar lowBits = getTemp();
+    LocalSet* setLow = builder->makeLocalSet(lowBits, curr->value);
+    Block* result = builder->blockify(setLow);
+
+    switch (curr->op) {
+      case ClzInt64:
+        lower(result, ClzInt32, std::move(highBits), std::move(lowBits));
+        break;
+      case CtzInt64:
+        WASM_UNREACHABLE("i64.ctz should be removed already");
+        break;
+      default:
+        abort();
+    }
+  }
+
+  bool unaryNeedsLowering(UnaryOp op) {
+    switch (op) {
+      case ClzInt64:
+      case CtzInt64:
+      case PopcntInt64:
+      case EqZInt64:
+      case ExtendSInt32:
+      case ExtendUInt32:
+      case WrapInt64:
+      case TruncSFloat32ToInt64:
+      case TruncUFloat32ToInt64:
+      case TruncSFloat64ToInt64:
+      case TruncUFloat64ToInt64:
+      case ReinterpretFloat64:
+      case ConvertSInt64ToFloat32:
+      case ConvertSInt64ToFloat64:
+      case ConvertUInt64ToFloat32:
+      case ConvertUInt64ToFloat64:
+      case ReinterpretInt64:
+      case ExtendS8Int64:
+      case ExtendS16Int64:
+      case ExtendS32Int64:
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  void visitUnary(Unary* curr) {
+    if (!unaryNeedsLowering(curr->op)) {
+      return;
+    }
+    if (handleUnreachable(curr)) {
+      return;
+    }
+    assert(hasOutParam(curr->value) || curr->type == Type::i64 ||
+           curr->type == Type::f64);
+    switch (curr->op) {
+      case ClzInt64:
+      case CtzInt64:
+        lowerCountZeros(curr);
+        break;
+      case EqZInt64:
+        lowerEqZInt64(curr);
+        break;
+      case ExtendSInt32:
+        lowerExtendSInt32(curr);
+        break;
+      case ExtendUInt32:
+        lowerExtendUInt32(curr);
+        break;
+      case WrapInt64:
+        lowerWrapInt64(curr);
+        break;
+      case ReinterpretFloat64:
+        lowerReinterpretFloat64(curr);
+        break;
+      case ReinterpretInt64:
+        lowerReinterpretInt64(curr);
+        break;
+      case TruncSFloat32ToInt64:
+      case TruncUFloat32ToInt64:
+      case TruncSFloat64ToInt64:
+      case TruncUFloat64ToInt64:
+        lowerTruncFloatToInt(curr);
+        break;
+      case ConvertSInt64ToFloat32:
+      case ConvertSInt64ToFloat64:
+      case ConvertUInt64ToFloat32:
+      case ConvertUInt64ToFloat64:
+        lowerConvertIntToFloat(curr);
+        break;
+      case ExtendS8Int64:
+      case ExtendS16Int64:
+      case ExtendS32Int64:
+        lowerExtendSInt64(curr);
+        break;
+      case PopcntInt64:
+        WASM_UNREACHABLE("i64.popcnt should already be removed");
+      default:
+        std::cerr << "Unhandled unary operator: " << curr->op << std::endl;
+        abort();
+    }
+  }
+
+  Block* lowerAdd(Block* result,
+                  TempVar&& leftLow,
+                  TempVar&& leftHigh,
+                  TempVar&& rightLow,
+                  TempVar&& rightHigh) {
+    TempVar lowResult = getTemp();
+    TempVar highResult = getTemp();
+    LocalSet* addLow = builder->makeLocalSet(
+      lowResult,
+      builder->makeBinary(AddInt32,
+                          builder->makeLocalGet(leftLow, Type::i32),
+                          builder->makeLocalGet(rightLow, Type::i32)));
+    LocalSet* addHigh = builder->makeLocalSet(
+      highResult,
+      builder->makeBinary(AddInt32,
+                          builder->makeLocalGet(leftHigh, Type::i32),
+                          builder->makeLocalGet(rightHigh, Type::i32)));
+    LocalSet* carryBit = builder->makeLocalSet(
+      highResult,
+      builder->makeBinary(AddInt32,
+                          builder->makeLocalGet(highResult, Type::i32),
+                          builder->makeConst(int32_t(1))));
+    If* checkOverflow = builder->makeIf(
+      builder->makeBinary(LtUInt32,
+                          builder->makeLocalGet(lowResult, Type::i32),
+                          builder->makeLocalGet(rightLow, Type::i32)),
+      carryBit);
+    LocalGet* getLow = builder->makeLocalGet(lowResult, Type::i32);
+    result = builder->blockify(result, addLow, addHigh, checkOverflow, getLow);
+    setOutParam(result, std::move(highResult));
+    return result;
+  }
+
+  Block* lowerSub(Block* result,
+                  TempVar&& leftLow,
+                  TempVar&& leftHigh,
+                  TempVar&& rightLow,
+                  TempVar&& rightHigh) {
+    TempVar lowResult = getTemp();
+    TempVar highResult = getTemp();
+    TempVar borrow = getTemp();
+    LocalSet* subLow = builder->makeLocalSet(
+      lowResult,
+      builder->makeBinary(SubInt32,
+                          builder->makeLocalGet(leftLow, Type::i32),
+                          builder->makeLocalGet(rightLow, Type::i32)));
+    LocalSet* borrowBit = builder->makeLocalSet(
+      borrow,
+      builder->makeBinary(LtUInt32,
+                          builder->makeLocalGet(leftLow, Type::i32),
+                          builder->makeLocalGet(rightLow, Type::i32)));
+    LocalSet* subHigh1 = builder->makeLocalSet(
+      highResult,
+      builder->makeBinary(AddInt32,
+                          builder->makeLocalGet(borrow, Type::i32),
+                          builder->makeLocalGet(rightHigh, Type::i32)));
+    LocalSet* subHigh2 = builder->makeLocalSet(
+      highResult,
+      builder->makeBinary(SubInt32,
+                          builder->makeLocalGet(leftHigh, Type::i32),
+                          builder->makeLocalGet(highResult, Type::i32)));
+    LocalGet* getLow = builder->makeLocalGet(lowResult, Type::i32);
+    result =
+      builder->blockify(result, subLow, borrowBit, subHigh1, subHigh2, getLow);
+    setOutParam(result, std::move(highResult));
+    return result;
+  }
+
+  Block* lowerBitwise(BinaryOp op,
+                      Block* result,
+                      TempVar&& leftLow,
+                      TempVar&& leftHigh,
+                      TempVar&& rightLow,
+                      TempVar&& rightHigh) {
+    BinaryOp op32;
+    switch (op) {
+      case AndInt64:
+        op32 = AndInt32;
+        break;
+      case OrInt64:
+        op32 = OrInt32;
+        break;
+      case XorInt64:
+        op32 = XorInt32;
+        break;
+      default:
+        abort();
+    }
+    result = builder->blockify(
+      result,
+      builder->makeLocalSet(
+        rightHigh,
+        builder->makeBinary(op32,
+                            builder->makeLocalGet(leftHigh, Type::i32),
+                            builder->makeLocalGet(rightHigh, Type::i32))),
+      builder->makeBinary(op32,
+                          builder->makeLocalGet(leftLow, Type::i32),
+                          builder->makeLocalGet(rightLow, Type::i32)));
+    setOutParam(result, std::move(rightHigh));
+    return result;
+  }
+
+  Block* makeLargeShl(Index highBits, Index leftLow, Index shift) {
+    return builder->blockify(
+      builder->makeLocalSet(
+        highBits,
+        builder->makeBinary(ShlInt32,
+                            builder->makeLocalGet(leftLow, Type::i32),
+                            builder->makeLocalGet(shift, Type::i32))),
+      builder->makeConst(int32_t(0)));
+  }
+
+  // a >> b where `b` >= 32
+  //
+  // implement as:
+  //
+  // hi = leftHigh >> 31 // copy sign bit
+  // lo = leftHigh >> (b - 32)
+  Block* makeLargeShrS(Index highBits, Index leftHigh, Index shift) {
+    return builder->blockify(
+      builder->makeLocalSet(
+        highBits,
+        builder->makeBinary(ShrSInt32,
+                            builder->makeLocalGet(leftHigh, Type::i32),
+                            builder->makeConst(int32_t(31)))),
+      builder->makeBinary(ShrSInt32,
+                          builder->makeLocalGet(leftHigh, Type::i32),
+                          builder->makeLocalGet(shift, Type::i32)));
+  }
+
+  Block* makeLargeShrU(Index highBits, Index leftHigh, Index shift) {
+    return builder->blockify(
+      builder->makeLocalSet(highBits, builder->makeConst(int32_t(0))),
+      builder->makeBinary(ShrUInt32,
+                          builder->makeLocalGet(leftHigh, Type::i32),
+                          builder->makeLocalGet(shift, Type::i32)));
+  }
+
+  Block* makeSmallShl(Index highBits,
+                      Index leftLow,
+                      Index leftHigh,
+                      Index shift,
+                      Binary* shiftMask,
+                      Binary* widthLessShift) {
+    Binary* shiftedInBits = builder->makeBinary(
+      AndInt32,
+      shiftMask,
+      builder->makeBinary(
+        ShrUInt32, builder->makeLocalGet(leftLow, Type::i32), widthLessShift));
+    Binary* shiftHigh =
+      builder->makeBinary(ShlInt32,
+                          builder->makeLocalGet(leftHigh, Type::i32),
+                          builder->makeLocalGet(shift, Type::i32));
+    return builder->blockify(
+      builder->makeLocalSet(
+        highBits, builder->makeBinary(OrInt32, shiftedInBits, shiftHigh)),
+      builder->makeBinary(ShlInt32,
+                          builder->makeLocalGet(leftLow, Type::i32),
+                          builder->makeLocalGet(shift, Type::i32)));
+  }
+
+  // a >> b where `b` < 32
+  //
+  // implement as:
+  //
+  // hi = leftHigh >> b
+  // lo = (leftLow >>> b) | (leftHigh << (32 - b))
+  Block* makeSmallShrS(Index highBits,
+                       Index leftLow,
+                       Index leftHigh,
+                       Index shift,
+                       Binary* shiftMask,
+                       Binary* widthLessShift) {
+    Binary* shiftedInBits = builder->makeBinary(
+      ShlInt32,
+      builder->makeBinary(
+        AndInt32, shiftMask, builder->makeLocalGet(leftHigh, Type::i32)),
+      widthLessShift);
+    Binary* shiftLow =
+      builder->makeBinary(ShrUInt32,
+                          builder->makeLocalGet(leftLow, Type::i32),
+                          builder->makeLocalGet(shift, Type::i32));
+    return builder->blockify(
+      builder->makeLocalSet(
+        highBits,
+        builder->makeBinary(ShrSInt32,
+                            builder->makeLocalGet(leftHigh, Type::i32),
+                            builder->makeLocalGet(shift, Type::i32))),
+      builder->makeBinary(OrInt32, shiftedInBits, shiftLow));
+  }
+
+  Block* makeSmallShrU(Index highBits,
+                       Index leftLow,
+                       Index leftHigh,
+                       Index shift,
+                       Binary* shiftMask,
+                       Binary* widthLessShift) {
+    Binary* shiftedInBits = builder->makeBinary(
+      ShlInt32,
+      builder->makeBinary(
+        AndInt32, shiftMask, builder->makeLocalGet(leftHigh, Type::i32)),
+      widthLessShift);
+    Binary* shiftLow =
+      builder->makeBinary(ShrUInt32,
+                          builder->makeLocalGet(leftLow, Type::i32),
+                          builder->makeLocalGet(shift, Type::i32));
+    return builder->blockify(
+      builder->makeLocalSet(
+        highBits,
+        builder->makeBinary(ShrUInt32,
+                            builder->makeLocalGet(leftHigh, Type::i32),
+                            builder->makeLocalGet(shift, Type::i32))),
+      builder->makeBinary(OrInt32, shiftedInBits, shiftLow));
+  }
+
+  Block* lowerShift(BinaryOp op,
+                    Block* result,
+                    TempVar&& leftLow,
+                    TempVar&& leftHigh,
+                    TempVar&& rightLow,
+                    TempVar&& rightHigh) {
+    assert(op == ShlInt64 || op == ShrUInt64 || op == ShrSInt64);
+    // shift left lowered as:
+    // if 32 <= rightLow % 64:
+    //     high = leftLow << k; low = 0
+    // else:
+    //     high = (((1 << k) -
