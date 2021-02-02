@@ -22,4 +22,31 @@
 namespace wasm {
 
 struct IntrinsicLowering : public WalkerPass<PostWalker<IntrinsicLowering>> {
-  bool isFunctionParallel(
+  bool isFunctionParallel() override { return true; }
+
+  std::unique_ptr<Pass> create() override {
+    return std::make_unique<IntrinsicLowering>();
+  }
+
+  void visitCall(Call* curr) {
+    if (Intrinsics(*getModule()).isCallWithoutEffects(curr)) {
+      // Turn into a call, by using the final operand as the function to call.
+      auto& operands = curr->operands;
+      auto* target = operands.back();
+      operands.pop_back();
+      // We could rely on later optimizations here, but at least ensure we emit
+      // a direct call when we can, to avoid a performance cliff if the user
+      // forgets to optimize.
+      Builder builder(*getModule());
+      if (auto* refFunc = target->dynCast<RefFunc>()) {
+        replaceCurrent(builder.makeCall(refFunc->func, operands, curr->type));
+      } else {
+        replaceCurrent(builder.makeCallRef(target, operands, curr->type));
+      }
+    }
+  }
+};
+
+Pass* createIntrinsicLoweringPass() { return new IntrinsicLowering(); }
+
+} // namespace wasm
