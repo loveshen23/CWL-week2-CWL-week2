@@ -1536,4 +1536,107 @@ struct I64ToI32Lowering : public WalkerPass<PostWalker<I64ToI32Lowering>> {
         highBits,
         builder->makeSelect(
           builder->makeLocalGet(cond, Type::i32),
-          builder->makeLocalGet(fetchOu
+          builder->makeLocalGet(fetchOutParam(curr->ifTrue), Type::i32),
+          builder->makeLocalGet(fetchOutParam(curr->ifFalse), Type::i32))),
+      builder->makeLocalGet(lowBits, Type::i32));
+    setOutParam(result, std::move(highBits));
+    replaceCurrent(result);
+  }
+
+  void visitDrop(Drop* curr) {
+    if (!hasOutParam(curr->value)) {
+      return;
+    }
+    // free temp var
+    fetchOutParam(curr->value);
+  }
+
+  void visitReturn(Return* curr) {
+    if (!hasOutParam(curr->value)) {
+      return;
+    }
+    TempVar lowBits = getTemp();
+    TempVar highBits = fetchOutParam(curr->value);
+    LocalSet* setLow = builder->makeLocalSet(lowBits, curr->value);
+    GlobalSet* setHigh = builder->makeGlobalSet(
+      INT64_TO_32_HIGH_BITS, builder->makeLocalGet(highBits, Type::i32));
+    curr->value = builder->makeLocalGet(lowBits, Type::i32);
+    Block* result = builder->blockify(setLow, setHigh, curr);
+    replaceCurrent(result);
+  }
+
+private:
+  std::unique_ptr<Builder> builder;
+  std::unordered_map<Index, Index> indexMap;
+  std::unordered_map<int, std::vector<Index>> freeTemps;
+  std::unordered_map<Expression*, TempVar> highBitVars;
+  std::unordered_map<Index, Type> tempTypes;
+  std::unordered_set<Name> originallyI64Globals;
+  Index nextTemp;
+
+  TempVar getTemp(Type ty = Type::i32) {
+    Index ret;
+    auto& freeList = freeTemps[ty.getBasic()];
+    if (freeList.size() > 0) {
+      ret = freeList.back();
+      freeList.pop_back();
+    } else {
+      ret = nextTemp++;
+      tempTypes[ret] = ty;
+    }
+    assert(tempTypes[ret] == ty);
+    return TempVar(ret, ty, *this);
+  }
+
+  bool hasOutParam(Expression* e) {
+    return highBitVars.find(e) != highBitVars.end();
+  }
+
+  void setOutParam(Expression* e, TempVar&& var) {
+    highBitVars.emplace(e, std::move(var));
+  }
+
+  TempVar fetchOutParam(Expression* e) {
+    auto outParamIt = highBitVars.find(e);
+    assert(outParamIt != highBitVars.end());
+    TempVar ret = std::move(outParamIt->second);
+    highBitVars.erase(e);
+    return ret;
+  }
+
+  // If e.g. a select is unreachable, then one arm may have an out param
+  // but not the other. In this case dce should really have been run
+  // before; handle it in a simple way here by replacing the node with
+  // a block of its children.
+  // This is valid only for nodes that execute their children
+  // unconditionally before themselves, so it is not valid for an if,
+  // in particular.
+  bool handleUnreachable(Expression* curr) {
+    if (curr->type != Type::unreachable) {
+      return false;
+    }
+    std::vector<Expression*> children;
+    bool hasUnreachable = false;
+    for (auto* child : ChildIterator(curr)) {
+      if (child->type.isConcrete()) {
+        child = builder->makeDrop(child);
+      } else if (child->type == Type::unreachable) {
+        hasUnreachable = true;
+      }
+      children.push_back(child);
+    }
+    if (!hasUnreachable) {
+      return false;
+    }
+    // This has an unreachable child, so we can replace it with
+    // the children.
+    auto* block = builder->makeBlock(children);
+    assert(block->type == Type::unreachable);
+    replaceCurrent(block);
+    return true;
+  }
+};
+
+Pass* createI64ToI32LoweringPass() { return new I64ToI32Lowering(); }
+
+} // namespace wasm
