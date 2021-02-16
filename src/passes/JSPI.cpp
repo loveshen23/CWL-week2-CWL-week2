@@ -283,4 +283,16 @@ private:
       // the secondary module will be removed. Create an export of it so that
       // wasm-split can find it.
       module->addExport(
-        builder.makeExport(ModuleSp
+        builder.makeExport(ModuleSplitting::LOAD_SECONDARY_MODULE,
+                           ModuleSplitting::LOAD_SECONDARY_MODULE,
+                           ExternalKind::Function));
+    }
+    module->removeFunction(im->name);
+    module->addFunction(std::move(stub));
+    module->addFunction(std::move(wrapperIm));
+  }
+};
+
+Pass* createJSPIPass() { return new JSPI(); }
+
+} // namespace wasm
