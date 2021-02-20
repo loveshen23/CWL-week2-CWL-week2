@@ -349,4 +349,319 @@ struct MultiMemoryLowering : public Pass {
 
     void visitAtomicCmpxchg(AtomicCmpxchg* curr) {
       curr->ptr = getPtr(curr, curr->bytes);
-      setMemory(
+      setMemory(curr);
+    }
+
+    void visitAtomicWait(AtomicWait* curr) {
+      Index bytes;
+      switch (curr->expectedType.getBasic()) {
+        case Type::i32: {
+          bytes = 4;
+          break;
+        }
+        case Type::i64: {
+          bytes = 8;
+          break;
+        }
+        default:
+          WASM_UNREACHABLE("unexpected type");
+      }
+      curr->ptr = getPtr(curr, bytes);
+      setMemory(curr);
+    }
+
+    void visitAtomicNotify(AtomicNotify* curr) {
+      curr->ptr = getPtr(curr, Index(4));
+      setMemory(curr);
+    }
+  };
+
+  void run(Module* module) override {
+    module->features.disable(FeatureSet::MultiMemories);
+
+    // If there are no memories or 1 memory, skip this pass
+    if (module->memories.size() <= 1) {
+      return;
+    }
+
+    this->wasm = module;
+
+    prepCombinedMemory();
+    makeOffsetGlobals();
+    adjustActiveDataSegmentOffsets();
+    createMemorySizeFunctions();
+    createMemoryGrowFunctions();
+    removeExistingMemories();
+    addCombinedMemory();
+    if (isExported) {
+      updateMemoryExports();
+    }
+
+    Replacer(*this, *wasm).run(getPassRunner(), wasm);
+  }
+
+  // Returns the global name for the given idx. There is no global for the first
+  // idx, so an empty name is returned
+  Name getOffsetGlobal(Index idx) {
+    // There is no offset global for the first memory
+    if (idx == 0) {
+      return Name();
+    }
+
+    // Since there is no offset global for the first memory, we need to
+    // subtract one when indexing into the offsetGlobalName vector
+    return offsetGlobalNames[idx - 1];
+  }
+
+  // Whether the idx represents the last memory. Since there is no offset global
+  // for the first memory, the last memory is represented by the size of
+  // offsetGlobalNames
+  bool isLastMemory(Index idx) { return idx == offsetGlobalNames.size(); }
+
+  Memory& getFirstMemory() { return *wasm->memories[0]; }
+
+  void prepCombinedMemory() {
+    pointerType = getFirstMemory().indexType;
+    memoryInfo = pointerType == Type::i32 ? Builder::MemoryInfo::Memory32
+                                          : Builder::MemoryInfo::Memory64;
+    isShared = getFirstMemory().shared;
+    isImported = getFirstMemory().imported();
+    for (auto& memory : wasm->memories) {
+      // We are assuming that each memory is configured the same as the first
+      // and assert if any of the memories does not match this configuration
+      assert(memory->shared == isShared);
+      assert(memory->indexType == pointerType);
+
+      // TODO: handle memory import for memories other than the first
+      if (memory->name != getFirstMemory().name && memory->imported()) {
+        Fatal() << "MultiMemoryLowering: only the first memory can be imported";
+      }
+
+      // Calculating the total initial and max page size for the combined memory
+      // by totaling the initial and max page sizes for the memories in the
+      // module
+      totalInitialPages = totalInitialPages + memory->initial;
+      if (memory->hasMax()) {
+        totalMaxPages = totalMaxPages + memory->max;
+      }
+    }
+    // Ensuring valid initial and max page sizes that do not exceed the number
+    // of pages addressable by the pointerType
+    Address maxSize =
+      pointerType == Type::i32 ? Memory::kMaxSize32 : Memory::kMaxSize64;
+    if (totalMaxPages > maxSize || totalMaxPages == 0) {
+      totalMaxPages = Memory::kUnlimitedSize;
+    }
+    if (totalInitialPages > totalMaxPages) {
+      totalInitialPages = totalMaxPages;
+    }
+
+    // Save the module and base to set on the combinedMemory
+    if (isImported) {
+      module = getFirstMemory().module;
+      base = getFirstMemory().base;
+    }
+    // Ensuring only the first memory is an exported memory
+    for (auto& exp : wasm->exports) {
+      if (exp->kind == ExternalKind::Memory &&
+          exp->value == getFirstMemory().name) {
+        isExported = true;
+      } else if (exp->kind == ExternalKind::Memory) {
+        Fatal() << "MultiMemoryLowering: only the first memory can be exported";
+      }
+    }
+    // Creating the combined memory name so we can reference the combined memory
+    // in subsequent instructions before it is added to the module
+    combinedMemory = Names::getValidMemoryName(*wasm, "combined_memory");
+  }
+
+  void makeOffsetGlobals() {
+    auto addGlobal = [&](Name name, size_t offset) {
+      auto global = Builder::makeGlobal(
+        name,
+        pointerType,
+        Builder(*wasm).makeConst(Literal::makeFromInt64(offset, pointerType)),
+        Builder::Mutable);
+      wasm->addGlobal(std::move(global));
+    };
+
+    size_t offsetRunningTotal = 0;
+    for (Index i = 0; i < wasm->memories.size(); i++) {
+      auto& memory = wasm->memories[i];
+      memoryIdxMap[memory->name] = i;
+      // We don't need a page offset global for the first memory as it's always
+      // 0
+      if (i != 0) {
+        Name name = Names::getValidGlobalName(
+          *wasm, memory->name.toString() + "_byte_offset");
+        offsetGlobalNames.push_back(std::move(name));
+        addGlobal(name, offsetRunningTotal * Memory::kPageSize);
+      }
+      offsetRunningTotal += memory->initial;
+    }
+  }
+
+  // TODO: Add a trap for segments that have a non-constant offset that would
+  // have been out of bounds at runtime but is in bounds after multi-memory
+  // lowering
+  void adjustActiveDataSegmentOffsets() {
+    Builder builder(*wasm);
+    ModuleUtils::iterActiveDataSegments(*wasm, [&](DataSegment* dataSegment) {
+      auto idx = memoryIdxMap.at(dataSegment->memory);
+      dataSegment->memory = combinedMemory;
+      // No need to update the offset of data segments for the first memory
+      if (idx != 0) {
+        assert(dataSegment->offset->is<Const>() &&
+               "TODO: handle non-const segment offsets");
+        assert(wasm->features.hasExtendedConst());
+        auto offsetGlobalName = getOffsetGlobal(idx);
+        dataSegment->offset = builder.makeBinary(
+          Abstract::getBinary(pointerType, Abstract::Add),
+          builder.makeGlobalGet(offsetGlobalName, pointerType),
+          dataSegment->offset);
+      }
+    });
+  }
+
+  void createMemorySizeFunctions() {
+    for (Index i = 0; i < wasm->memories.size(); i++) {
+      auto function = memorySize(i, wasm->memories[i]->name);
+      memorySizeNames.push_back(function->name);
+      wasm->addFunction(std::move(function));
+    }
+  }
+
+  void createMemoryGrowFunctions() {
+    for (Index i = 0; i < wasm->memories.size(); i++) {
+      auto function = memoryGrow(i, wasm->memories[i]->name);
+      memoryGrowNames.push_back(function->name);
+      wasm->addFunction(std::move(function));
+    }
+  }
+
+  // This function replaces memory.grow instruction calls in the wasm module.
+  // Because the multiple discrete memories are lowered into a single memory,
+  // we need to adjust offsets as a particular memory receives an
+  // instruction to grow.
+  std::unique_ptr<Function> memoryGrow(Index memIdx, Name memoryName) {
+    Builder builder(*wasm);
+    Name name = memoryName.toString() + "_grow";
+    Name functionName = Names::getValidFunctionName(*wasm, name);
+    auto function = Builder::makeFunction(
+      functionName, Signature(pointerType, pointerType), {});
+    function->setLocalName(0, "page_delta");
+    auto pageSizeConst = [&]() {
+      return builder.makeConst(Literal(Memory::kPageSize));
+    };
+    auto getOffsetDelta = [&]() {
+      return builder.makeBinary(Abstract::getBinary(pointerType, Abstract::Mul),
+                                builder.makeLocalGet(0, pointerType),
+                                pageSizeConst());
+    };
+    auto getMoveSource = [&](Name global) {
+      return builder.makeGlobalGet(global, pointerType);
+    };
+    Expression* functionBody;
+    Index sizeLocal = -1;
+
+    Index returnLocal =
+      Builder::addVar(function.get(), "return_size", pointerType);
+    functionBody = builder.blockify(builder.makeLocalSet(
+      returnLocal, builder.makeCall(memorySizeNames[memIdx], {}, pointerType)));
+
+    if (!isLastMemory(memIdx)) {
+      sizeLocal = Builder::addVar(function.get(), "memory_size", pointerType);
+      functionBody = builder.blockify(
+        functionBody,
+        builder.makeLocalSet(
+          sizeLocal, builder.makeMemorySize(combinedMemory, memoryInfo)));
+    }
+
+    // Attempt to grow the combinedMemory. If -1 returns, enough memory could
+    // not be allocated, so return -1.
+    functionBody = builder.blockify(
+      functionBody,
+      builder.makeIf(
+        builder.makeBinary(
+          EqInt32,
+          builder.makeMemoryGrow(
+            builder.makeLocalGet(0, pointerType), combinedMemory, memoryInfo),
+          builder.makeConst(-1)),
+        builder.makeReturn(builder.makeConst(-1))));
+
+    // If we are not growing the last memory, then we need to copy data,
+    // shifting it over to accomodate the increase from page_delta
+    if (!isLastMemory(memIdx)) {
+      // This offset is the starting pt for copying
+      auto offsetGlobalName = getOffsetGlobal(memIdx + 1);
+      functionBody = builder.blockify(
+        functionBody,
+        builder.makeMemoryCopy(
+          // destination
+          builder.makeBinary(Abstract::getBinary(pointerType, Abstract::Add),
+                             getMoveSource(offsetGlobalName),
+                             getOffsetDelta()),
+          // source
+          getMoveSource(offsetGlobalName),
+          // size
+          builder.makeBinary(
+            Abstract::getBinary(pointerType, Abstract::Sub),
+            builder.makeBinary(Abstract::getBinary(pointerType, Abstract::Mul),
+                               builder.makeLocalGet(sizeLocal, pointerType),
+                               pageSizeConst()),
+            getMoveSource(offsetGlobalName)),
+          combinedMemory,
+          combinedMemory));
+    }
+
+    // Adjust the offsets of the globals impacted by the memory.grow call
+    for (Index i = memIdx; i < offsetGlobalNames.size(); i++) {
+      auto& offsetGlobalName = offsetGlobalNames[i];
+      functionBody = builder.blockify(
+        functionBody,
+        builder.makeGlobalSet(
+          offsetGlobalName,
+          builder.makeBinary(Abstract::getBinary(pointerType, Abstract::Add),
+                             getMoveSource(offsetGlobalName),
+                             getOffsetDelta())));
+    }
+
+    functionBody = builder.blockify(
+      functionBody, builder.makeLocalGet(returnLocal, pointerType));
+
+    function->body = functionBody;
+    return function;
+  }
+
+  // This function replaces memory.size instructions with a function that can
+  // return the size of each memory as if each was discrete and separate.
+  std::unique_ptr<Function> memorySize(Index memIdx, Name memoryName) {
+    Builder builder(*wasm);
+    Name name = memoryName.toString() + "_size";
+    Name functionName = Names::getValidFunctionName(*wasm, name);
+    auto function = Builder::makeFunction(
+      functionName, Signature(Type::none, pointerType), {});
+    Expression* functionBody;
+    auto pageSizeConst = [&]() {
+      return builder.makeConst(Literal(Memory::kPageSize));
+    };
+    auto getOffsetInPageUnits = [&](Name global) {
+      return builder.makeBinary(
+        Abstract::getBinary(pointerType, Abstract::DivU),
+        builder.makeGlobalGet(global, pointerType),
+        pageSizeConst());
+    };
+
+    // offsetGlobalNames does not keep track of a global for the offset of
+    // wasm->memories[0] because it's always 0. As a result, the below
+    // calculations that involve offsetGlobalNames are intrinsically "offset".
+    // Thus, offsetGlobalNames[0] is the offset for wasm->memories[1] and
+    // the size of wasm->memories[0].
+    if (memIdx == 0) {
+      auto offsetGlobalName = getOffsetGlobal(1);
+      functionBody = builder.blockify(
+        builder.makeReturn(getOffsetInPageUnits(offsetGlobalName)));
+    } else if (isLastMemory(memIdx)) {
+      auto offsetGlobalName = getOffsetGlobal(memIdx);
+      functionBody = builder.blockify(builder.makeReturn(
+        bu
