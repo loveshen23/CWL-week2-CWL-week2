@@ -664,4 +664,55 @@ struct MultiMemoryLowering : public Pass {
     } else if (isLastMemory(memIdx)) {
       auto offsetGlobalName = getOffsetGlobal(memIdx);
       functionBody = builder.blockify(builder.makeReturn(
-        bu
+        builder.makeBinary(Abstract::getBinary(pointerType, Abstract::Sub),
+                           builder.makeMemorySize(combinedMemory, memoryInfo),
+                           getOffsetInPageUnits(offsetGlobalName))));
+    } else {
+      auto offsetGlobalName = getOffsetGlobal(memIdx);
+      auto nextOffsetGlobalName = getOffsetGlobal(memIdx + 1);
+      functionBody = builder.blockify(builder.makeReturn(
+        builder.makeBinary(Abstract::getBinary(pointerType, Abstract::Sub),
+                           getOffsetInPageUnits(nextOffsetGlobalName),
+                           getOffsetInPageUnits(offsetGlobalName))));
+    }
+
+    function->body = functionBody;
+    return function;
+  }
+
+  void removeExistingMemories() {
+    wasm->removeMemories([&](Memory* curr) { return true; });
+  }
+
+  void addCombinedMemory() {
+    auto memory = Builder::makeMemory(combinedMemory);
+    memory->shared = isShared;
+    memory->indexType = pointerType;
+    memory->initial = totalInitialPages;
+    memory->max = totalMaxPages;
+    if (isImported) {
+      memory->base = base;
+      memory->module = module;
+    }
+    wasm->addMemory(std::move(memory));
+  }
+
+  void updateMemoryExports() {
+    for (auto& exp : wasm->exports) {
+      if (exp->kind == ExternalKind::Memory) {
+        // We checked in prepCombinedMemory that any memory exports are for
+        // the first memory, so setting the exports to the combinedMemory means
+        // calling JS will not have to worry about offsets
+        exp->value = combinedMemory;
+      }
+    }
+  }
+};
+
+Pass* createMultiMemoryLoweringPass() { return new MultiMemoryLowering(false); }
+
+Pass* createMultiMemoryLoweringWithBoundsChecksPass() {
+  return new MultiMemoryLowering(true);
+}
+
+} // namespace wasm
