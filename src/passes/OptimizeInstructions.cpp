@@ -879,4 +879,326 @@ struct OptimizeInstructions
         // eqz((signed)x % C_pot)  =>  eqz(x & (abs(C_pot) - 1))
         Const* c;
         Binary* inner;
-        if (matches(curr, unary(EqZ, binary(&inner, RemS, any(), ival(&c)))) &
+        if (matches(curr, unary(EqZ, binary(&inner, RemS, any(), ival(&c)))) &&
+            (c->value.isSignedMin() ||
+             Bits::isPowerOf2(c->value.abs().getInteger()))) {
+          inner->op = Abstract::getBinary(c->type, And);
+          if (c->value.isSignedMin()) {
+            c->value = Literal::makeSignedMax(c->type);
+          } else {
+            c->value = c->value.abs().sub(Literal::makeOne(c->type));
+          }
+          return replaceCurrent(curr);
+        }
+      }
+      {
+        // i32.wrap_i64 can be removed if the operations inside it do not
+        // actually require 64 bits, e.g.:
+        //
+        // i32.wrap_i64(i64.extend_i32_u(x))  =>  x
+        if (matches(curr, unary(WrapInt64, any()))) {
+          if (auto* ret = optimizeWrappedResult(curr)) {
+            return replaceCurrent(ret);
+          }
+        }
+      }
+      {
+        // i32.eqz(i32.wrap_i64(x))  =>  i64.eqz(x)
+        //   where maxBits(x) <= 32
+        Unary* inner;
+        Expression* x;
+        if (matches(curr, unary(EqZInt32, unary(&inner, WrapInt64, any(&x)))) &&
+            Bits::getMaxBits(x, this) <= 32) {
+          inner->op = EqZInt64;
+          return replaceCurrent(inner);
+        }
+      }
+      {
+        // i32.eqz(i32.eqz(x))  =>  i32(x) != 0
+        // i32.eqz(i64.eqz(x))  =>  i64(x) != 0
+        //   iff shinkLevel == 0
+        // (1 instruction instead of 2, but 1 more byte)
+        if (getPassRunner()->options.shrinkLevel == 0) {
+          Expression* x;
+          if (matches(curr, unary(EqZInt32, unary(EqZ, any(&x))))) {
+            Builder builder(*getModule());
+            return replaceCurrent(builder.makeBinary(
+              getBinary(x->type, Ne),
+              x,
+              builder.makeConst(Literal::makeZero(x->type))));
+          }
+        }
+      }
+      {
+        // i64.extend_i32_s(i32.wrap_i64(x))  =>  x
+        //   where maxBits(x) <= 31
+        //
+        // i64.extend_i32_u(i32.wrap_i64(x))  =>  x
+        //   where maxBits(x) <= 32
+        Expression* x;
+        UnaryOp unaryOp;
+        if (matches(curr, unary(&unaryOp, unary(WrapInt64, any(&x))))) {
+          if (unaryOp == ExtendSInt32 || unaryOp == ExtendUInt32) {
+            auto maxBits = Bits::getMaxBits(x, this);
+            if ((unaryOp == ExtendSInt32 && maxBits <= 31) ||
+                (unaryOp == ExtendUInt32 && maxBits <= 32)) {
+              return replaceCurrent(x);
+            }
+          }
+        }
+      }
+      if (getModule()->features.hasSignExt()) {
+        // i64.extend_i32_s(i32.wrap_i64(x))  =>  i64.extend32_s(x)
+        Unary* inner;
+        if (matches(curr,
+                    unary(ExtendSInt32, unary(&inner, WrapInt64, any())))) {
+          inner->op = ExtendS32Int64;
+          inner->type = Type::i64;
+          return replaceCurrent(inner);
+        }
+      }
+    }
+
+    if (curr->op == ExtendUInt32 || curr->op == ExtendSInt32) {
+      if (auto* load = curr->value->dynCast<Load>()) {
+        // i64.extend_i32_s(i32.load(_8|_16)(_u|_s)(x))  =>
+        //    i64.load(_8|_16|_32)(_u|_s)(x)
+        //
+        // i64.extend_i32_u(i32.load(_8|_16)(_u|_s)(x))  =>
+        //    i64.load(_8|_16|_32)(_u|_s)(x)
+        //
+        // but we can't do this in following cases:
+        //
+        //    i64.extend_i32_u(i32.load8_s(x))
+        //    i64.extend_i32_u(i32.load16_s(x))
+        //
+        // this mixed sign/zero extensions can't represent in single
+        // signed or unsigned 64-bit load operation. For example if `load8_s(x)`
+        // return i8(-1) (0xFF) than sign extended result will be
+        // i32(-1) (0xFFFFFFFF) and with zero extension to i64 we got
+        // finally 0x00000000FFFFFFFF. However with `i64.load8_s` in this
+        // situation we got `i64(-1)` (all ones) and with `i64.load8_u` it
+        // will be 0x00000000000000FF.
+        //
+        // Another limitation is atomics which only have unsigned loads.
+        // So we also avoid this only case:
+        //
+        //   i64.extend_i32_s(i32.atomic.load(x))
+
+        // Special case for i32.load. In this case signedness depends on
+        // extend operation.
+        bool willBeSigned = curr->op == ExtendSInt32 && load->bytes == 4;
+        if (!(curr->op == ExtendUInt32 && load->bytes <= 2 && load->signed_) &&
+            !(willBeSigned && load->isAtomic)) {
+          if (willBeSigned) {
+            load->signed_ = true;
+          }
+          load->type = Type::i64;
+          return replaceCurrent(load);
+        }
+      }
+    }
+
+    if (Abstract::hasAnyReinterpret(curr->op)) {
+      // i32.reinterpret_f32(f32.reinterpret_i32(x))  =>  x
+      // i64.reinterpret_f64(f64.reinterpret_i64(x))  =>  x
+      // f32.reinterpret_i32(i32.reinterpret_f32(x))  =>  x
+      // f64.reinterpret_i64(i64.reinterpret_f64(x))  =>  x
+      if (auto* inner = curr->value->dynCast<Unary>()) {
+        if (Abstract::hasAnyReinterpret(inner->op)) {
+          if (inner->value->type == curr->type) {
+            return replaceCurrent(inner->value);
+          }
+        }
+      }
+      // f32.reinterpret_i32(i32.load(x))  =>  f32.load(x)
+      // f64.reinterpret_i64(i64.load(x))  =>  f64.load(x)
+      // i32.reinterpret_f32(f32.load(x))  =>  i32.load(x)
+      // i64.reinterpret_f64(f64.load(x))  =>  i64.load(x)
+      if (auto* load = curr->value->dynCast<Load>()) {
+        if (!load->isAtomic && load->bytes == curr->type.getByteSize()) {
+          load->type = curr->type;
+          return replaceCurrent(load);
+        }
+      }
+    }
+
+    if (curr->op == EqZInt32) {
+      if (auto* inner = curr->value->dynCast<Binary>()) {
+        // Try to invert a relational operation using De Morgan's law
+        auto op = invertBinaryOp(inner->op);
+        if (op != InvalidBinary) {
+          inner->op = op;
+          return replaceCurrent(inner);
+        }
+      }
+      // eqz of a sign extension can be of zero-extension
+      if (auto* ext = Properties::getSignExtValue(curr->value)) {
+        // we are comparing a sign extend to a constant, which means we can
+        // use a cheaper zext
+        auto bits = Properties::getSignExtBits(curr->value);
+        curr->value = makeZeroExt(ext, bits);
+        return replaceCurrent(curr);
+      }
+    } else if (curr->op == AbsFloat32 || curr->op == AbsFloat64) {
+      // abs(-x)   ==>   abs(x)
+      if (auto* unaryInner = curr->value->dynCast<Unary>()) {
+        if (unaryInner->op ==
+            Abstract::getUnary(unaryInner->type, Abstract::Neg)) {
+          curr->value = unaryInner->value;
+          return replaceCurrent(curr);
+        }
+      }
+      // abs(x * x)   ==>   x * x
+      // abs(x / x)   ==>   x / x
+      if (auto* binary = curr->value->dynCast<Binary>()) {
+        if ((binary->op == Abstract::getBinary(binary->type, Abstract::Mul) ||
+             binary->op == Abstract::getBinary(binary->type, Abstract::DivS)) &&
+            areConsecutiveInputsEqual(binary->left, binary->right)) {
+          return replaceCurrent(binary);
+        }
+        // abs(0 - x)   ==>   abs(x),
+        // only for fast math
+        if (fastMath &&
+            binary->op == Abstract::getBinary(binary->type, Abstract::Sub)) {
+          if (auto* c = binary->left->dynCast<Const>()) {
+            if (c->value.isZero()) {
+              curr->value = binary->right;
+              return replaceCurrent(curr);
+            }
+          }
+        }
+      }
+    }
+
+    if (auto* ret = deduplicateUnary(curr)) {
+      return replaceCurrent(ret);
+    }
+
+    if (auto* ret = simplifyRoundingsAndConversions(curr)) {
+      return replaceCurrent(ret);
+    }
+  }
+
+  void visitSelect(Select* curr) {
+    if (curr->type == Type::unreachable) {
+      return;
+    }
+    if (auto* ret = optimizeSelect(curr)) {
+      return replaceCurrent(ret);
+    }
+    optimizeTernary(curr);
+  }
+
+  void visitGlobalSet(GlobalSet* curr) {
+    if (curr->type == Type::unreachable) {
+      return;
+    }
+    // optimize out a set of a get
+    auto* get = curr->value->dynCast<GlobalGet>();
+    if (get && get->name == curr->name) {
+      ExpressionManipulator::nop(curr);
+      return replaceCurrent(curr);
+    }
+  }
+
+  void visitBlock(Block* curr) {
+    if (getModule()->features.hasGC()) {
+      optimizeHeapStores(curr->list);
+    }
+  }
+
+  void visitIf(If* curr) {
+    curr->condition = optimizeBoolean(curr->condition);
+    if (curr->ifFalse) {
+      if (auto* unary = curr->condition->dynCast<Unary>()) {
+        if (unary->op == EqZInt32) {
+          // flip if-else arms to get rid of an eqz
+          curr->condition = unary->value;
+          std::swap(curr->ifTrue, curr->ifFalse);
+        }
+      }
+      if (curr->condition->type != Type::unreachable &&
+          ExpressionAnalyzer::equal(curr->ifTrue, curr->ifFalse)) {
+        // The sides are identical, so fold. If we can replace the If with one
+        // arm and there are no side effects in the condition, replace it. But
+        // make sure not to change a concrete expression to an unreachable
+        // expression because we want to avoid having to refinalize.
+        bool needCondition = effects(curr->condition).hasSideEffects();
+        bool wouldBecomeUnreachable =
+          curr->type.isConcrete() && curr->ifTrue->type == Type::unreachable;
+        Builder builder(*getModule());
+        if (!wouldBecomeUnreachable && !needCondition) {
+          return replaceCurrent(curr->ifTrue);
+        } else if (!wouldBecomeUnreachable) {
+          return replaceCurrent(builder.makeSequence(
+            builder.makeDrop(curr->condition), curr->ifTrue));
+        } else {
+          // Emit a block with the original concrete type.
+          auto* ret = builder.makeBlock();
+          if (needCondition) {
+            ret->list.push_back(builder.makeDrop(curr->condition));
+          }
+          ret->list.push_back(curr->ifTrue);
+          ret->finalize(curr->type);
+          return replaceCurrent(ret);
+        }
+      }
+      optimizeTernary(curr);
+    }
+  }
+
+  void visitLocalSet(LocalSet* curr) {
+    // Interactions between local.set/tee and ref.as_non_null can be optimized
+    // in some cases, by removing or moving the ref.as_non_null operation. In
+    // all cases, we only do this when we do *not* allow non-nullable locals. If
+    // we do allow such locals, then (1) this local might be non-nullable, so we
+    // can't remove or move a ref.as_non_null flowing into a local.set/tee, and
+    // (2) even if the local were nullable, if we change things we might prevent
+    // the LocalSubtyping pass from turning it into a non-nullable local later.
+    // Note that we must also check if this local is nullable regardless, as a
+    // parameter might be non-nullable even if nullable locals are disallowed
+    // (as that just affects vars, and not params).
+    if (auto* as = curr->value->dynCast<RefAs>()) {
+      if (as->op == RefAsNonNull && !getModule()->features.hasGCNNLocals() &&
+          getFunction()->getLocalType(curr->index).isNullable()) {
+        //   (local.tee (ref.as_non_null ..))
+        // =>
+        //   (ref.as_non_null (local.tee ..))
+        //
+        // The reordering allows the ref.as to be potentially optimized further
+        // based on where the value flows to.
+        if (curr->isTee()) {
+          curr->value = as->value;
+          curr->finalize();
+          as->value = curr;
+          as->finalize();
+          replaceCurrent(as);
+          return;
+        }
+
+        // Otherwise, if this is not a tee, then no value falls through. The
+        // ref.as_non_null acts as a null check here, basically. If we are
+        // ignoring such traps, we can remove it.
+        auto& passOptions = getPassOptions();
+        if (passOptions.ignoreImplicitTraps || passOptions.trapsNeverHappen) {
+          curr->value = as->value;
+        }
+      }
+    }
+  }
+
+  void visitBreak(Break* curr) {
+    if (curr->condition) {
+      curr->condition = optimizeBoolean(curr->condition);
+    }
+  }
+
+  void visitLoad(Load* curr) {
+    if (curr->type == Type::unreachable) {
+      return;
+    }
+    optimizeMemoryAccess(curr->ptr, curr->offset, curr->memory);
+  }
+
+  void vis
