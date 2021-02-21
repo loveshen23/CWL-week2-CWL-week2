@@ -595,4 +595,288 @@ struct OptimizeInstructions
           // same size. For example, for an effective 8-bit value:
           //  (x << 24) >> 24 ==/!= C    =>    x & 255 ==/!= C
           //
-          // The 
+          // The key thing to track here are the upper bits plus the sign bit;
+          // call those the "relevant bits". This is crucial because x is
+          // sign-extended, that is, its effective sign bit is spread to all
+          // the upper bits, which means that the relevant bits on the left
+          // side are either all 0, or all 1.
+          auto bits = Properties::getSignExtBits(curr->left);
+          uint32_t right = c->value.geti32();
+          uint32_t numRelevantBits = 32 - bits + 1;
+          uint32_t setRelevantBits =
+            Bits::popCount(right >> uint32_t(bits - 1));
+          // If all the relevant bits on C are zero
+          // then we can mask off the high bits instead of sign-extending x.
+          // This is valid because if x is negative, then the comparison was
+          // false before (negative vs positive), and will still be false
+          // as the sign bit will remain to cause a difference. And if x is
+          // positive then the upper bits would be zero anyhow.
+          if (setRelevantBits == 0) {
+            curr->left = makeZeroExt(ext, bits);
+            return replaceCurrent(curr);
+          } else if (setRelevantBits == numRelevantBits) {
+            // If all those bits are one, then we can do something similar if
+            // we also zero-extend on the right as well. This is valid
+            // because, as in the previous case, the sign bit differentiates
+            // the two sides when they are different, and if the sign bit is
+            // identical, then the upper bits don't matter, so masking them
+            // off both sides is fine.
+            curr->left = makeZeroExt(ext, bits);
+            c->value = c->value.and_(Literal(Bits::lowBitMask(bits)));
+            return replaceCurrent(curr);
+          } else {
+            // Otherwise, C's relevant bits are mixed, and then the two sides
+            // can never be equal, as the left side's bits cannot be mixed.
+            Builder builder(*getModule());
+            // The result is either always true, or always false.
+            c->value = Literal::makeFromInt32(curr->op == NeInt32, c->type);
+            return replaceCurrent(
+              builder.makeSequence(builder.makeDrop(ext), c));
+          }
+        }
+      } else if (auto* left = Properties::getSignExtValue(curr->left)) {
+        if (auto* right = Properties::getSignExtValue(curr->right)) {
+          auto bits = Properties::getSignExtBits(curr->left);
+          if (Properties::getSignExtBits(curr->right) == bits) {
+            // we are comparing two sign-exts with the same bits, so we may as
+            // well replace both with cheaper zexts
+            curr->left = makeZeroExt(left, bits);
+            curr->right = makeZeroExt(right, bits);
+            return replaceCurrent(curr);
+          }
+        } else if (auto* load = curr->right->dynCast<Load>()) {
+          // we are comparing a load to a sign-ext, we may be able to switch
+          // to zext
+          auto leftBits = Properties::getSignExtBits(curr->left);
+          if (load->signed_ && leftBits == load->bytes * 8) {
+            load->signed_ = false;
+            curr->left = makeZeroExt(left, leftBits);
+            return replaceCurrent(curr);
+          }
+        }
+      } else if (auto* load = curr->left->dynCast<Load>()) {
+        if (auto* right = Properties::getSignExtValue(curr->right)) {
+          // we are comparing a load to a sign-ext, we may be able to switch
+          // to zext
+          auto rightBits = Properties::getSignExtBits(curr->right);
+          if (load->signed_ && rightBits == load->bytes * 8) {
+            load->signed_ = false;
+            curr->right = makeZeroExt(right, rightBits);
+            return replaceCurrent(curr);
+          }
+        }
+      }
+      // note that both left and right may be consts, but then we let
+      // precompute compute the constant result
+    } else if (curr->op == AddInt32 || curr->op == AddInt64 ||
+               curr->op == SubInt32 || curr->op == SubInt64) {
+      if (auto* ret = optimizeAddedConstants(curr)) {
+        return replaceCurrent(ret);
+      }
+    } else if (curr->op == MulFloat32 || curr->op == MulFloat64 ||
+               curr->op == DivFloat32 || curr->op == DivFloat64) {
+      if (curr->left->type == curr->right->type) {
+        if (auto* leftUnary = curr->left->dynCast<Unary>()) {
+          if (leftUnary->op == Abstract::getUnary(curr->type, Abstract::Abs)) {
+            if (auto* rightUnary = curr->right->dynCast<Unary>()) {
+              if (leftUnary->op == rightUnary->op) { // both are abs ops
+                // abs(x) * abs(y)   ==>   abs(x * y)
+                // abs(x) / abs(y)   ==>   abs(x / y)
+                curr->left = leftUnary->value;
+                curr->right = rightUnary->value;
+                leftUnary->value = curr;
+                return replaceCurrent(leftUnary);
+              }
+            }
+          }
+        }
+      }
+    }
+    // a bunch of operations on a constant right side can be simplified
+    if (auto* right = curr->right->dynCast<Const>()) {
+      if (curr->op == AndInt32) {
+        auto mask = right->value.geti32();
+        // and with -1 does nothing (common in asm.js output)
+        if (mask == -1) {
+          return replaceCurrent(curr->left);
+        }
+        // small loads do not need to be masked, the load itself masks
+        if (auto* load = curr->left->dynCast<Load>()) {
+          if ((load->bytes == 1 && mask == 0xff) ||
+              (load->bytes == 2 && mask == 0xffff)) {
+            load->signed_ = false;
+            return replaceCurrent(curr->left);
+          }
+        } else if (auto maskedBits = Bits::getMaskedBits(mask)) {
+          if (Bits::getMaxBits(curr->left, this) <= maskedBits) {
+            // a mask of lower bits is not needed if we are already smaller
+            return replaceCurrent(curr->left);
+          }
+        }
+      }
+      // some math operations have trivial results
+      if (auto* ret = optimizeWithConstantOnRight(curr)) {
+        return replaceCurrent(ret);
+      }
+      if (auto* ret = optimizeDoubletonWithConstantOnRight(curr)) {
+        return replaceCurrent(ret);
+      }
+      if (right->type == Type::i32) {
+        BinaryOp op;
+        int32_t c = right->value.geti32();
+        // First, try to lower signed operations to unsigned if that is
+        // possible. Some unsigned operations like div_u or rem_u are usually
+        // faster on VMs. Also this opens more possibilities for further
+        // simplifications afterwards.
+        if (c >= 0 && (op = makeUnsignedBinaryOp(curr->op)) != InvalidBinary &&
+            Bits::getMaxBits(curr->left, this) <= 31) {
+          curr->op = op;
+        }
+        if (c < 0 && c > std::numeric_limits<int32_t>::min() &&
+            curr->op == DivUInt32) {
+          // u32(x) / C   ==>   u32(x) >= C  iff C > 2^31
+          // We avoid applying this for C == 2^31 due to conflict
+          // with other rule which transform to more prefereble
+          // right shift operation.
+          curr->op = c == -1 ? EqInt32 : GeUInt32;
+          return replaceCurrent(curr);
+        }
+        if (Bits::isPowerOf2((uint32_t)c)) {
+          switch (curr->op) {
+            case MulInt32:
+              return replaceCurrent(optimizePowerOf2Mul(curr, (uint32_t)c));
+            case RemUInt32:
+              return replaceCurrent(optimizePowerOf2URem(curr, (uint32_t)c));
+            case DivUInt32:
+              return replaceCurrent(optimizePowerOf2UDiv(curr, (uint32_t)c));
+            default:
+              break;
+          }
+        }
+      }
+      if (right->type == Type::i64) {
+        BinaryOp op;
+        int64_t c = right->value.geti64();
+        // See description above for Type::i32
+        if (c >= 0 && (op = makeUnsignedBinaryOp(curr->op)) != InvalidBinary &&
+            Bits::getMaxBits(curr->left, this) <= 63) {
+          curr->op = op;
+        }
+        if (getPassOptions().shrinkLevel == 0 && c < 0 &&
+            c > std::numeric_limits<int64_t>::min() && curr->op == DivUInt64) {
+          // u64(x) / C   ==>   u64(u64(x) >= C)  iff C > 2^63
+          // We avoid applying this for C == 2^31 due to conflict
+          // with other rule which transform to more prefereble
+          // right shift operation.
+          // And apply this only for shrinkLevel == 0 due to it
+          // increasing size by one byte.
+          curr->op = c == -1LL ? EqInt64 : GeUInt64;
+          curr->type = Type::i32;
+          return replaceCurrent(
+            Builder(*getModule()).makeUnary(ExtendUInt32, curr));
+        }
+        if (Bits::isPowerOf2((uint64_t)c)) {
+          switch (curr->op) {
+            case MulInt64:
+              return replaceCurrent(optimizePowerOf2Mul(curr, (uint64_t)c));
+            case RemUInt64:
+              return replaceCurrent(optimizePowerOf2URem(curr, (uint64_t)c));
+            case DivUInt64:
+              return replaceCurrent(optimizePowerOf2UDiv(curr, (uint64_t)c));
+            default:
+              break;
+          }
+        }
+      }
+      if (curr->op == DivFloat32) {
+        float c = right->value.getf32();
+        if (Bits::isPowerOf2InvertibleFloat(c)) {
+          return replaceCurrent(optimizePowerOf2FDiv(curr, c));
+        }
+      }
+      if (curr->op == DivFloat64) {
+        double c = right->value.getf64();
+        if (Bits::isPowerOf2InvertibleFloat(c)) {
+          return replaceCurrent(optimizePowerOf2FDiv(curr, c));
+        }
+      }
+    }
+    // a bunch of operations on a constant left side can be simplified
+    if (curr->left->is<Const>()) {
+      if (auto* ret = optimizeWithConstantOnLeft(curr)) {
+        return replaceCurrent(ret);
+      }
+    }
+    if (curr->op == AndInt32 || curr->op == OrInt32) {
+      if (curr->op == AndInt32) {
+        if (auto* ret = combineAnd(curr)) {
+          return replaceCurrent(ret);
+        }
+      }
+      // for or, we can potentially combine
+      if (curr->op == OrInt32) {
+        if (auto* ret = combineOr(curr)) {
+          return replaceCurrent(ret);
+        }
+      }
+      // bitwise operations
+      // for and and or, we can potentially conditionalize
+      if (auto* ret = conditionalizeExpensiveOnBitwise(curr)) {
+        return replaceCurrent(ret);
+      }
+    }
+    // relation/comparisons allow for math optimizations
+    if (curr->isRelational()) {
+      if (auto* ret = optimizeRelational(curr)) {
+        return replaceCurrent(ret);
+      }
+    }
+    // finally, try more expensive operations on the curr in
+    // the case that they have no side effects
+    if (!effects(curr->left).hasSideEffects()) {
+      if (ExpressionAnalyzer::equal(curr->left, curr->right)) {
+        if (auto* ret = optimizeBinaryWithEqualEffectlessChildren(curr)) {
+          return replaceCurrent(ret);
+        }
+      }
+    }
+
+    if (auto* ret = deduplicateBinary(curr)) {
+      return replaceCurrent(ret);
+    }
+  }
+
+  void visitUnary(Unary* curr) {
+    if (curr->type == Type::unreachable) {
+      return;
+    }
+
+    {
+      using namespace Match;
+      using namespace Abstract;
+      Builder builder(*getModule());
+      {
+        // eqz(x - y)  =>  x == y
+        Binary* inner;
+        if (matches(curr, unary(EqZ, binary(&inner, Sub, any(), any())))) {
+          inner->op = Abstract::getBinary(inner->left->type, Eq);
+          inner->type = Type::i32;
+          return replaceCurrent(inner);
+        }
+      }
+      {
+        // eqz(x + C)  =>  x == -C
+        Const* c;
+        Binary* inner;
+        if (matches(curr, unary(EqZ, binary(&inner, Add, any(), ival(&c))))) {
+          c->value = c->value.neg();
+          inner->op = Abstract::getBinary(c->type, Eq);
+          inner->type = Type::i32;
+          return replaceCurrent(inner);
+        }
+      }
+      {
+        // eqz((signed)x % C_pot)  =>  eqz(x & (abs(C_pot) - 1))
+        Const* c;
+        Binary* inner;
+        if (matches(curr, unary(EqZ, binary(&inner, RemS, any(), ival(&c)))) &
