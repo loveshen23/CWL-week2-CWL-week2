@@ -178,4 +178,52 @@ struct FindingApplier : public PostWalker<FindingApplier> {
     }
 
     // This expression was the best cast for some gets. Add a new local to
-    // store this value,
+    // store this value, then use it for the gets.
+    auto var = Builder::addVar(getFunction(), curr->type);
+    auto& gets = iter->second;
+    for (auto* get : gets) {
+      get->index = var;
+      get->type = curr->type;
+    }
+
+    // Replace ourselves with a tee.
+    replaceCurrent(Builder(*getModule()).makeLocalTee(var, curr, curr->type));
+  }
+};
+
+} // anonymous namespace
+
+struct OptimizeCasts : public WalkerPass<PostWalker<OptimizeCasts>> {
+  bool isFunctionParallel() override { return true; }
+
+  std::unique_ptr<Pass> create() override {
+    return std::make_unique<OptimizeCasts>();
+  }
+
+  void doWalkFunction(Function* func) {
+    if (!getModule()->features.hasGC()) {
+      return;
+    }
+
+    // First, find the best casts that we want to use.
+    BestCastFinder finder;
+    finder.options = getPassOptions();
+    finder.walkFunctionInModule(func, getModule());
+
+    if (finder.lessCastedGets.empty()) {
+      // Nothing to do.
+      return;
+    }
+
+    // Apply the requests: use the best casts.
+    FindingApplier applier(finder);
+    applier.walkFunctionInModule(func, getModule());
+
+    // LocalGet type changes must be propagated.
+    ReFinalize().walkFunctionInModule(func, getModule());
+  }
+};
+
+Pass* createOptimizeCastsPass() { return new OptimizeCasts(); }
+
+} // namespace wasm
