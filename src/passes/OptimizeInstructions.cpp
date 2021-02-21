@@ -275,4 +275,324 @@ struct OptimizeInstructions
       changed = true;
       return;
     }
-    // L
+    // Loop on further changes.
+    inReplaceCurrent = true;
+    do {
+      changed = false;
+      visit(getCurrent());
+    } while (changed);
+    inReplaceCurrent = false;
+  }
+
+  EffectAnalyzer effects(Expression* expr) {
+    return EffectAnalyzer(getPassOptions(), *getModule(), expr);
+  }
+
+  decltype(auto) pure(Expression** binder) {
+    using namespace Match::Internal;
+    return Matcher<PureMatcherKind<OptimizeInstructions>>(binder, this);
+  }
+
+  bool canReorder(Expression* a, Expression* b) {
+    return EffectAnalyzer::canReorder(getPassOptions(), *getModule(), a, b);
+  }
+
+  void visitBinary(Binary* curr) {
+    // If this contains dead code, don't bother trying to optimize it, the type
+    // might change (if might not be unreachable if just one arm is, for
+    // example). This optimization pass focuses on actually executing code.
+    if (curr->type == Type::unreachable) {
+      return;
+    }
+
+    if (shouldCanonicalize(curr)) {
+      canonicalize(curr);
+    }
+
+    {
+      // TODO: It is an ongoing project to port more transformations to the
+      // match API. Once most of the transformations have been ported, the
+      // `using namespace Match` can be hoisted to function scope and this extra
+      // block scope can be removed.
+      using namespace Match;
+      using namespace Abstract;
+      Builder builder(*getModule());
+      {
+        // try to get rid of (0 - ..), that is, a zero only used to negate an
+        // int. an add of a subtract can be flipped in order to remove it:
+        //   (ival.add
+        //     (ival.sub
+        //       (ival.const 0)
+        //       X
+        //     )
+        //     Y
+        //   )
+        // =>
+        //   (ival.sub
+        //     Y
+        //     X
+        //   )
+        // Note that this reorders X and Y, so we need to be careful about that.
+        Expression *x, *y;
+        Binary* sub;
+        if (matches(
+              curr,
+              binary(Add, binary(&sub, Sub, ival(0), any(&x)), any(&y))) &&
+            canReorder(x, y)) {
+          sub->left = y;
+          sub->right = x;
+          return replaceCurrent(sub);
+        }
+      }
+      {
+        // The flip case is even easier, as no reordering occurs:
+        //   (ival.add
+        //     Y
+        //     (ival.sub
+        //       (ival.const 0)
+        //       X
+        //     )
+        //   )
+        // =>
+        //   (ival.sub
+        //     Y
+        //     X
+        //   )
+        Expression* y;
+        Binary* sub;
+        if (matches(curr,
+                    binary(Add, any(&y), binary(&sub, Sub, ival(0), any())))) {
+          sub->left = y;
+          return replaceCurrent(sub);
+        }
+      }
+      {
+        // try de-morgan's AND law,
+        //  (eqz X) and (eqz Y) === eqz (X or Y)
+        // Note that the OR and XOR laws do not work here, as these
+        // are not booleans (we could check if they are, but a boolean
+        // would already optimize with the eqz anyhow, unless propagating).
+        // But for AND, the left is true iff X and Y are each all zero bits,
+        // and the right is true if the union of their bits is zero; same.
+        Unary* un;
+        Binary* bin;
+        Expression *x, *y;
+        if (matches(curr,
+                    binary(&bin,
+                           AndInt32,
+                           unary(&un, EqZInt32, any(&x)),
+                           unary(EqZInt32, any(&y))))) {
+          bin->op = OrInt32;
+          bin->left = x;
+          bin->right = y;
+          un->value = bin;
+          return replaceCurrent(un);
+        }
+      }
+      {
+        // x <<>> (C & (31 | 63))   ==>   x <<>> C'
+        // x <<>> (y & (31 | 63))   ==>   x <<>> y
+        // x <<>> (y & (32 | 64))   ==>   x
+        // where '<<>>':
+        //   '<<', '>>', '>>>'. 'rotl' or 'rotr'
+        BinaryOp op;
+        Const* c;
+        Expression *x, *y;
+
+        // x <<>> C
+        if (matches(curr, binary(&op, any(&x), ival(&c))) &&
+            Abstract::hasAnyShift(op)) {
+          // truncate RHS constant to effective size as:
+          // i32(x) <<>> const(C & 31))
+          // i64(x) <<>> const(C & 63))
+          c->value = c->value.and_(
+            Literal::makeFromInt32(c->type.getByteSize() * 8 - 1, c->type));
+          // x <<>> 0   ==>   x
+          if (c->value.isZero()) {
+            return replaceCurrent(x);
+          }
+        }
+        if (matches(curr,
+                    binary(&op, any(&x), binary(And, any(&y), ival(&c)))) &&
+            Abstract::hasAnyShift(op)) {
+          // i32(x) <<>> (y & 31)   ==>   x <<>> y
+          // i64(x) <<>> (y & 63)   ==>   x <<>> y
+          if ((c->type == Type::i32 && (c->value.geti32() & 31) == 31) ||
+              (c->type == Type::i64 && (c->value.geti64() & 63LL) == 63LL)) {
+            curr->cast<Binary>()->right = y;
+            return replaceCurrent(curr);
+          }
+          // i32(x) <<>> (y & C)   ==>   x,  where (C & 31) == 0
+          // i64(x) <<>> (y & C)   ==>   x,  where (C & 63) == 0
+          if (((c->type == Type::i32 && (c->value.geti32() & 31) == 0) ||
+               (c->type == Type::i64 && (c->value.geti64() & 63LL) == 0LL)) &&
+              !effects(y).hasSideEffects()) {
+            return replaceCurrent(x);
+          }
+        }
+      }
+      {
+        // -x + y   ==>   y - x
+        //   where  x, y  are floating points
+        Expression *x, *y;
+        if (matches(curr, binary(Add, unary(Neg, any(&x)), any(&y))) &&
+            canReorder(x, y)) {
+          curr->op = Abstract::getBinary(curr->type, Sub);
+          curr->left = x;
+          std::swap(curr->left, curr->right);
+          return replaceCurrent(curr);
+        }
+      }
+      {
+        // x + (-y)   ==>   x - y
+        // x - (-y)   ==>   x + y
+        //   where  x, y  are floating points
+        Expression* y;
+        if (matches(curr, binary(Add, any(), unary(Neg, any(&y)))) ||
+            matches(curr, binary(Sub, any(), unary(Neg, any(&y))))) {
+          curr->op = Abstract::getBinary(
+            curr->type,
+            curr->op == Abstract::getBinary(curr->type, Add) ? Sub : Add);
+          curr->right = y;
+          return replaceCurrent(curr);
+        }
+      }
+      {
+        // -x * -y   ==>   x * y
+        //   where  x, y  are integers
+        Binary* bin;
+        Expression *x, *y;
+        if (matches(curr,
+                    binary(&bin,
+                           Mul,
+                           binary(Sub, ival(0), any(&x)),
+                           binary(Sub, ival(0), any(&y))))) {
+          bin->left = x;
+          bin->right = y;
+          return replaceCurrent(curr);
+        }
+      }
+      {
+        // -x * y   ==>   -(x * y)
+        // x * -y   ==>   -(x * y)
+        //   where  x, y  are integers
+        Expression *x, *y;
+        if ((matches(curr,
+                     binary(Mul, binary(Sub, ival(0), any(&x)), any(&y))) ||
+             matches(curr,
+                     binary(Mul, any(&x), binary(Sub, ival(0), any(&y))))) &&
+            !x->is<Const>() && !y->is<Const>()) {
+          Builder builder(*getModule());
+          return replaceCurrent(
+            builder.makeBinary(Abstract::getBinary(curr->type, Sub),
+                               builder.makeConst(Literal::makeZero(curr->type)),
+                               builder.makeBinary(curr->op, x, y)));
+        }
+      }
+      {
+        if (getModule()->features.hasSignExt()) {
+          Const *c1, *c2;
+          Expression* x;
+          // i64(x) << 56 >> 56   ==>   i64.extend8_s(x)
+          // i64(x) << 48 >> 48   ==>   i64.extend16_s(x)
+          // i64(x) << 32 >> 32   ==>   i64.extend32_s(x)
+          if (matches(curr,
+                      binary(ShrSInt64,
+                             binary(ShlInt64, any(&x), i64(&c1)),
+                             i64(&c2))) &&
+              Bits::getEffectiveShifts(c1) == Bits::getEffectiveShifts(c2)) {
+            switch (64 - Bits::getEffectiveShifts(c1)) {
+              case 8:
+                return replaceCurrent(builder.makeUnary(ExtendS8Int64, x));
+              case 16:
+                return replaceCurrent(builder.makeUnary(ExtendS16Int64, x));
+              case 32:
+                return replaceCurrent(builder.makeUnary(ExtendS32Int64, x));
+              default:
+                break;
+            }
+          }
+          // i32(x) << 24 >> 24   ==>   i32.extend8_s(x)
+          // i32(x) << 16 >> 16   ==>   i32.extend16_s(x)
+          if (matches(curr,
+                      binary(ShrSInt32,
+                             binary(ShlInt32, any(&x), i32(&c1)),
+                             i32(&c2))) &&
+              Bits::getEffectiveShifts(c1) == Bits::getEffectiveShifts(c2)) {
+            switch (32 - Bits::getEffectiveShifts(c1)) {
+              case 8:
+                return replaceCurrent(builder.makeUnary(ExtendS8Int32, x));
+              case 16:
+                return replaceCurrent(builder.makeUnary(ExtendS16Int32, x));
+              default:
+                break;
+            }
+          }
+        }
+      }
+      {
+        // unsigned(x) >= 0   =>   i32(1)
+        // TODO: Use getDroppedChildrenAndAppend() here, so we can optimize even
+        //       if pure.
+        Const* c;
+        Expression* x;
+        if (matches(curr, binary(GeU, pure(&x), ival(&c))) &&
+            c->value.isZero()) {
+          c->value = Literal::makeOne(Type::i32);
+          c->type = Type::i32;
+          return replaceCurrent(c);
+        }
+        // unsigned(x) < 0   =>   i32(0)
+        if (matches(curr, binary(LtU, pure(&x), ival(&c))) &&
+            c->value.isZero()) {
+          c->value = Literal::makeZero(Type::i32);
+          c->type = Type::i32;
+          return replaceCurrent(c);
+        }
+      }
+    }
+    if (auto* ext = Properties::getAlmostSignExt(curr)) {
+      Index extraLeftShifts;
+      auto bits = Properties::getAlmostSignExtBits(curr, extraLeftShifts);
+      if (extraLeftShifts == 0) {
+        if (auto* load =
+              Properties::getFallthrough(ext, getPassOptions(), *getModule())
+                ->dynCast<Load>()) {
+          // pattern match a load of 8 bits and a sign extend using a shl of
+          // 24 then shr_s of 24 as well, etc.
+          if (LoadUtils::canBeSigned(load) &&
+              ((load->bytes == 1 && bits == 8) ||
+               (load->bytes == 2 && bits == 16))) {
+            // if the value falls through, we can't alter the load, as it
+            // might be captured in a tee
+            if (load->signed_ == true || load == ext) {
+              load->signed_ = true;
+              return replaceCurrent(ext);
+            }
+          }
+        }
+      }
+      // We can in some cases remove part of a sign extend, that is,
+      //   (x << A) >> B   =>   x << (A - B)
+      // If the sign-extend input cannot have a sign bit, we don't need it.
+      if (Bits::getMaxBits(ext, this) + extraLeftShifts < bits) {
+        return replaceCurrent(removeAlmostSignExt(curr));
+      }
+      // We also don't need it if it already has an identical-sized sign
+      // extend applied to it. That is, if it is already a sign-extended
+      // value, then another sign extend will do nothing. We do need to be
+      // careful of the extra shifts, though.
+      if (isSignExted(ext, bits) && extraLeftShifts == 0) {
+        return replaceCurrent(removeAlmostSignExt(curr));
+      }
+    } else if (curr->op == EqInt32 || curr->op == NeInt32) {
+      if (auto* c = curr->right->dynCast<Const>()) {
+        if (auto* ext = Properties::getSignExtValue(curr->left)) {
+          // We are comparing a sign extend to a constant, which means we can
+          // use a cheaper zero-extend in some cases. That is,
+          //  (x << S) >> S ==/!= C    =>    x & T ==/!= C
+          // where S and T are the matching values for sign/zero extend of the
+          // same size. For example, for an effective 8-bit value:
+          //  (x << 24) >> 24 ==/!= C    =>    x & 255 ==/!= C
+          //
+          // The 
