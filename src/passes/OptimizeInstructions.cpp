@@ -1201,4 +1201,299 @@ struct OptimizeInstructions
     optimizeMemoryAccess(curr->ptr, curr->offset, curr->memory);
   }
 
-  void vis
+  void visitStore(Store* curr) {
+    if (curr->type == Type::unreachable) {
+      return;
+    }
+    optimizeMemoryAccess(curr->ptr, curr->offset, curr->memory);
+    optimizeStoredValue(curr->value, curr->bytes);
+    if (auto* unary = curr->value->dynCast<Unary>()) {
+      if (unary->op == WrapInt64) {
+        // instead of wrapping to 32, just store some of the bits in the i64
+        curr->valueType = Type::i64;
+        curr->value = unary->value;
+      } else if (!curr->isAtomic && Abstract::hasAnyReinterpret(unary->op) &&
+                 curr->bytes == curr->valueType.getByteSize()) {
+        // f32.store(y, f32.reinterpret_i32(x))  =>  i32.store(y, x)
+        // f64.store(y, f64.reinterpret_i64(x))  =>  i64.store(y, x)
+        // i32.store(y, i32.reinterpret_f32(x))  =>  f32.store(y, x)
+        // i64.store(y, i64.reinterpret_f64(x))  =>  f64.store(y, x)
+        curr->valueType = unary->value->type;
+        curr->value = unary->value;
+      }
+    }
+  }
+
+  void optimizeStoredValue(Expression*& value, Index bytes) {
+    if (!value->type.isInteger()) {
+      return;
+    }
+    // truncates constant values during stores
+    // (i32|i64).store(8|16|32)(p, C)   ==>
+    //    (i32|i64).store(8|16|32)(p, C & mask)
+    if (auto* c = value->dynCast<Const>()) {
+      if (value->type == Type::i64 && bytes == 4) {
+        c->value = c->value.and_(Literal(uint64_t(0xffffffff)));
+      } else {
+        c->value = c->value.and_(
+          Literal::makeFromInt32(Bits::lowBitMask(bytes * 8), value->type));
+      }
+    }
+    // stores of fewer bits truncates anyhow
+    if (auto* binary = value->dynCast<Binary>()) {
+      if (binary->op == AndInt32) {
+        if (auto* right = binary->right->dynCast<Const>()) {
+          if (right->type == Type::i32) {
+            auto mask = right->value.geti32();
+            if ((bytes == 1 && mask == 0xff) ||
+                (bytes == 2 && mask == 0xffff)) {
+              value = binary->left;
+            }
+          }
+        }
+      } else if (auto* ext = Properties::getSignExtValue(binary)) {
+        // if sign extending the exact bit size we store, we can skip the
+        // extension if extending something bigger, then we just alter bits we
+        // don't save anyhow
+        if (Properties::getSignExtBits(binary) >= Index(bytes) * 8) {
+          value = ext;
+        }
+      }
+    }
+  }
+
+  void visitMemoryCopy(MemoryCopy* curr) {
+    if (curr->type == Type::unreachable) {
+      return;
+    }
+    assert(getModule()->features.hasBulkMemory());
+    if (auto* ret = optimizeMemoryCopy(curr)) {
+      return replaceCurrent(ret);
+    }
+  }
+
+  void visitMemoryFill(MemoryFill* curr) {
+    if (curr->type == Type::unreachable) {
+      return;
+    }
+    assert(getModule()->features.hasBulkMemory());
+    if (auto* ret = optimizeMemoryFill(curr)) {
+      return replaceCurrent(ret);
+    }
+  }
+
+  void visitCallRef(CallRef* curr) {
+    skipNonNullCast(curr->target, curr);
+    if (trapOnNull(curr, curr->target)) {
+      return;
+    }
+    if (curr->target->type == Type::unreachable) {
+      // The call_ref is not reached; leave this for DCE.
+      return;
+    }
+
+    if (auto* ref = curr->target->dynCast<RefFunc>()) {
+      // We know the target!
+      replaceCurrent(
+        Builder(*getModule())
+          .makeCall(ref->func, curr->operands, curr->type, curr->isReturn));
+      return;
+    }
+
+    if (auto* get = curr->target->dynCast<TableGet>()) {
+      // (call_ref ..args.. (table.get $table (index))
+      //   =>
+      // (call_indirect $table ..args.. (index))
+      replaceCurrent(Builder(*getModule())
+                       .makeCallIndirect(get->table,
+                                         get->index,
+                                         curr->operands,
+                                         get->type.getHeapType(),
+                                         curr->isReturn));
+      return;
+    }
+
+    auto features = getModule()->features;
+
+    // It is possible the target is not a function reference, but we can infer
+    // the fallthrough value there. It takes more work to optimize this case,
+    // but it is pretty important to allow a call_ref to become a fast direct
+    // call, so make the effort.
+    if (auto* ref = Properties::getFallthrough(
+                      curr->target, getPassOptions(), *getModule())
+                      ->dynCast<RefFunc>()) {
+      // Check if the fallthrough make sense. We may have cast it to a different
+      // type, which would be a problem - we'd be replacing a call_ref to one
+      // type with a direct call to a function of another type. That would trap
+      // at runtime; be careful not to emit invalid IR here.
+      if (curr->target->type.getHeapType() != ref->type.getHeapType()) {
+        return;
+      }
+      Builder builder(*getModule());
+      if (curr->operands.empty()) {
+        // No operands, so this is simple and there is nothing to reorder: just
+        // emit:
+        //
+        // (block
+        //  (drop curr->target)
+        //  (call ref.func-from-curr->target)
+        // )
+        replaceCurrent(builder.makeSequence(
+          builder.makeDrop(curr->target),
+          builder.makeCall(ref->func, {}, curr->type, curr->isReturn)));
+        return;
+      }
+
+      // In the presence of operands, we must execute the code in curr->target
+      // after the last operand and before the call happens. Interpose at the
+      // last operand:
+      //
+      // (call ref.func-from-curr->target)
+      //  (operand1)
+      //  (..)
+      //  (operandN-1)
+      //  (block
+      //   (local.set $temp (operandN))
+      //   (drop curr->target)
+      //   (local.get $temp)
+      //  )
+      // )
+      auto* lastOperand = curr->operands.back();
+      auto lastOperandType = lastOperand->type;
+      if (lastOperandType == Type::unreachable) {
+        // The call_ref is not reached; leave this for DCE.
+        return;
+      }
+      if (!TypeUpdating::canHandleAsLocal(lastOperandType)) {
+        // We cannot create a local, so we must give up.
+        return;
+      }
+      Index tempLocal = builder.addVar(
+        getFunction(),
+        TypeUpdating::getValidLocalType(lastOperandType, features));
+      auto* set = builder.makeLocalSet(tempLocal, lastOperand);
+      auto* drop = builder.makeDrop(curr->target);
+      auto* get = TypeUpdating::fixLocalGet(
+        builder.makeLocalGet(tempLocal, lastOperandType), *getModule());
+      curr->operands.back() = builder.makeBlock({set, drop, get});
+      replaceCurrent(builder.makeCall(
+        ref->func, curr->operands, curr->type, curr->isReturn));
+      return;
+    }
+
+    // If the target is a select of two different constants, we can emit an if
+    // over two direct calls.
+    if (auto* calls = CallUtils::convertToDirectCalls(
+          curr,
+          [](Expression* target) -> CallUtils::IndirectCallInfo {
+            if (auto* refFunc = target->dynCast<RefFunc>()) {
+              return CallUtils::Known{refFunc->func};
+            }
+            return CallUtils::Unknown{};
+          },
+          *getFunction(),
+          *getModule())) {
+      replaceCurrent(calls);
+    }
+  }
+
+  // Note on removing casts (which the following utilities, skipNonNullCast and
+  // skipCast do): removing a cast is potentially dangerous, as it removes
+  // information from the IR. For example:
+  //
+  //  (ref.is_func
+  //    (ref.as_func
+  //      (local.get $anyref)))
+  //
+  // The local has no useful type info here (it is anyref). The cast forces it
+  // to be a function, so we know that if we do not trap then the ref.is will
+  // definitely be 1. But if we removed the ref.as first (which we can do in
+  // traps-never-happen mode) then we'd not have the type info we need to
+  // optimize that way.
+  //
+  // To avoid such risks we should keep in mind the following:
+  //
+  //  * Before removing a cast we should use its type information in the best
+  //    way we can. Only after doing so should a cast be removed. In the exmaple
+  //    above, that means first seeing that the ref.is must return 1, and only
+  //    then possibly removing the ref.as.
+  //  * Do not remove a cast if removing it might remove useful information for
+  //    others. For example,
+  //
+  //      (ref.cast $A
+  //        (ref.as_non_null ..))
+  //
+  //    If we remove the inner cast then the outer cast becomes nullable. That
+  //    means we'd be throwing away useful information, which we should not do,
+  //    even in traps-never-happen mode and even if the wasm would validate
+  //    without the cast. Only if we saw that the parents of the outer cast
+  //    cannot benefit from non-nullability should we remove it.
+  //    Another example:
+  //
+  //      (struct.get $A 0
+  //        (ref.cast $B ..))
+  //
+  //    The cast only changes the type of the reference, which is consumed in
+  //    this expression and so we don't have more parents to consider. But it is
+  //    risky to remove this cast, since e.g. GUFA benefits from such info:
+  //    it tells GUFA that we are reading from a $B here, and not the supertype
+  //    $A. If $B may contain fewer values in field 0 than $A, then GUFA might
+  //    be able to optimize better with this cast. Now, in traps-never-happen
+  //    mode we can assume that only $B can arrive here, which means GUFA might
+  //    be able to infer that even without the cast - but it might not, if we
+  //    hit a limitation of GUFA. Some code patterns simply cannot be expected
+  //    to be always inferred, say if a data structure has a tagged variant:
+  //
+  //      {
+  //        tag: i32,
+  //        ref: anyref
+  //      }
+  //
+  //    Imagine that if tag == 0 then the reference always contains struct $A,
+  //    and if tag == 1 then it always contains a struct $B, and so forth. We
+  //    can't expect GUFA to figure out such invariants in general. But by
+  //    having casts in the right places we can help GUFA optimize:
+  //
+  //      (if
+  //        (tag == 1)
+  //        (struct.get $A 0
+  //          (ref.cast $B ..))
+  //
+  //    We know it must be a $B due to the tag. By keeping the cast there we can
+  //    make sure that optimizations can benefit from that.
+  //
+  //    Given the large amount of potential benefit we can get from a successful
+  //    optimization in GUFA, any reduction there may be a bad idea, so we
+  //    should be very careful and probably *not* remove such casts.
+
+  // If an instruction traps on a null input, there is no need for a
+  // ref.as_non_null on that input: we will trap either way (and the binaryen
+  // optimizer does not differentiate traps).
+  //
+  // See "notes on removing casts", above. However, in most cases removing a
+  // non-null cast is obviously safe to do, since we only remove one if another
+  // check will happen later.
+  //
+  // We also pass in the parent, because we need to be careful about ordering:
+  // if the parent has other children than |input| then we may not be able to
+  // remove the trap. For example,
+  //
+  //  (struct.set
+  //   (ref.as_non_null X)
+  //   (call $foo)
+  //  )
+  //
+  // If X is null we'd trap before the call to $foo. If we remove the
+  // ref.as_non_null then the struct.set will still trap, of course, but that
+  // will only happen *after* the call, which is wrong.
+  void skipNonNullCast(Expression*& input, Expression* parent) {
+    // Check the other children for the ordering problem only if we find a
+    // possible optimization, to avoid wasted work.
+    bool checkedSiblings = false;
+    auto& options = getPassOptions();
+    while (1) {
+      if (auto* as = input->dynCast<RefAs>()) {
+        if (as->op == RefAsNonNull) {
+          // The problem with effect ordering that is described above is not an
+          // issue if traps are assumed to never happen anyhow.
+          if (!chec
