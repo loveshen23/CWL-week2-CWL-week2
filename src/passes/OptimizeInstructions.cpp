@@ -1496,4 +1496,311 @@ struct OptimizeInstructions
         if (as->op == RefAsNonNull) {
           // The problem with effect ordering that is described above is not an
           // issue if traps are assumed to never happen anyhow.
-          if (!chec
+          if (!checkedSiblings && !options.trapsNeverHappen) {
+            // We need to see if a child with side effects exists after |input|.
+            // If there is such a child, it is a problem as mentioned above (it
+            // is fine for such a child to appear *before* |input|, as then we
+            // wouldn't be reordering effects). Thus, all we need to do is
+            // accumulate the effects in children after |input|, as we want to
+            // move the trap across those.
+            bool seenInput = false;
+            EffectAnalyzer crossedEffects(options, *getModule());
+            for (auto* child : ChildIterator(parent)) {
+              if (child == input) {
+                seenInput = true;
+              } else if (seenInput) {
+                crossedEffects.walk(child);
+              }
+            }
+
+            // Check if the effects we cross interfere with the effects of the
+            // trap we want to move. (We use a shallow effect analyzer since we
+            // will only move the ref.as_non_null itself.)
+            ShallowEffectAnalyzer movingEffects(options, *getModule(), input);
+            if (crossedEffects.invalidates(movingEffects)) {
+              return;
+            }
+
+            // If we got here, we've checked the siblings and found no problem.
+            checkedSiblings = true;
+          }
+          input = as->value;
+          continue;
+        }
+      }
+      break;
+    }
+  }
+
+  // As skipNonNullCast, but skips all casts if we can do so. This is useful in
+  // cases where we don't actually care about the type but just the value, that
+  // is, if casts of the type do not affect our behavior (which is the case in
+  // ref.eq for example).
+  //
+  // |requiredType| is the required supertype of the final output. We will not
+  // remove a cast that would leave something that would break that. If
+  // |requiredType| is not provided we will accept any type there.
+  //
+  // See "notes on removing casts", above, for when this is safe to do.
+  void skipCast(Expression*& input, Type requiredType = Type::none) {
+    // Traps-never-happen mode is a requirement for us to optimize here.
+    if (!getPassOptions().trapsNeverHappen) {
+      return;
+    }
+    while (1) {
+      if (auto* as = input->dynCast<RefAs>()) {
+        if (requiredType == Type::none ||
+            Type::isSubType(as->value->type, requiredType)) {
+          input = as->value;
+          continue;
+        }
+      } else if (auto* cast = input->dynCast<RefCast>()) {
+        if (requiredType == Type::none ||
+            Type::isSubType(cast->ref->type, requiredType)) {
+          input = cast->ref;
+          continue;
+        }
+      }
+      break;
+    }
+  }
+
+  // Appends a result after the dropped children, if we need them.
+  Expression* getDroppedChildrenAndAppend(Expression* curr,
+                                          Expression* result) {
+    return wasm::getDroppedChildrenAndAppend(
+      curr, *getModule(), getPassOptions(), result);
+  }
+
+  Expression* getDroppedChildrenAndAppend(Expression* curr, Literal value) {
+    auto* result = Builder(*getModule()).makeConst(value);
+    return getDroppedChildrenAndAppend(curr, result);
+  }
+
+  Expression* getResultOfFirst(Expression* first, Expression* second) {
+    return wasm::getResultOfFirst(
+      first, second, getFunction(), getModule(), getPassOptions());
+  }
+
+  // Optimize an instruction and the reference it operates on, under the
+  // assumption that if the reference is a null then we will trap. Returns true
+  // if we replaced the expression with something simpler. Returns false if we
+  // found nothing to optimize, or if we just modified or replaced the ref (but
+  // not the expression itself).
+  bool trapOnNull(Expression* curr, Expression*& ref) {
+    Builder builder(*getModule());
+
+    if (getPassOptions().trapsNeverHappen) {
+      // We can ignore the possibility of the reference being an input, so
+      //
+      //    (if
+      //      (condition)
+      //      (null)
+      //      (other))
+      // =>
+      //    (drop
+      //      (condition))
+      //    (other)
+      //
+      // That is, we will by assumption not read from the null, so remove that
+      // arm.
+      //
+      // TODO We could recurse here.
+      // TODO We could do similar things for casts (rule out an impossible arm).
+      // TODO Worth thinking about an 'assume' instrinsic of some form that
+      //      annotates knowledge about a value, or another mechanism to allow
+      //      that information to be passed around.
+      if (auto* iff = ref->dynCast<If>()) {
+        if (iff->ifFalse) {
+          if (iff->ifTrue->type.isNull()) {
+            if (ref->type != iff->ifFalse->type) {
+              refinalize = true;
+            }
+            ref = builder.makeSequence(builder.makeDrop(iff->condition),
+                                       iff->ifFalse);
+            return false;
+          }
+          if (iff->ifFalse->type.isNull()) {
+            if (ref->type != iff->ifTrue->type) {
+              refinalize = true;
+            }
+            ref = builder.makeSequence(builder.makeDrop(iff->condition),
+                                       iff->ifTrue);
+            return false;
+          }
+        }
+      }
+
+      if (auto* select = ref->dynCast<Select>()) {
+        if (select->ifTrue->type.isNull()) {
+          ref = builder.makeSequence(
+            builder.makeDrop(select->ifTrue),
+            getResultOfFirst(select->ifFalse,
+                             builder.makeDrop(select->condition)));
+          return false;
+        }
+        if (select->ifFalse->type.isNull()) {
+          ref = getResultOfFirst(
+            select->ifTrue,
+            builder.makeSequence(builder.makeDrop(select->ifFalse),
+                                 builder.makeDrop(select->condition)));
+          return false;
+        }
+      }
+    }
+
+    // A nullable cast can be turned into a non-nullable one:
+    //
+    //    (struct.get ;; or something else that traps on a null ref
+    //      (ref.cast null
+    // =>
+    //    (struct.get
+    //      (ref.cast      ;; now non-nullable
+    //
+    // Either way we trap here, but refining the type may have benefits later.
+    if (ref->type.isNullable()) {
+      if (auto* cast = ref->dynCast<RefCast>()) {
+        // Note that we must be the last child of the parent, otherwise effects
+        // in the middle may need to remain:
+        //
+        //    (struct.set
+        //      (ref.cast null
+        //      (call ..
+        //
+        // The call here must execute before the trap in the struct.set. To
+        // avoid that problem, inspect all children after us. If there are no
+        // such children, then there is no problem; if there are, see below.
+        auto canOptimize = true;
+        auto seenRef = false;
+        for (auto* child : ChildIterator(curr)) {
+          if (child == ref) {
+            seenRef = true;
+          } else if (seenRef) {
+            // This is a child after the reference. Check it for effects. For
+            // simplicity, focus on the case of traps-never-happens: if we can
+            // assume no trap occurs in the parent, then there must not be a
+            // trap in the child either, unless control flow transfers and we
+            // might not reach the parent.
+            // TODO: handle more cases.
+            if (!getPassOptions().trapsNeverHappen ||
+                effects(child).transfersControlFlow()) {
+              canOptimize = false;
+              break;
+            }
+          }
+        }
+        if (canOptimize) {
+          cast->type = Type(cast->type.getHeapType(), NonNullable);
+        }
+      }
+    }
+
+    auto fallthrough =
+      Properties::getFallthrough(ref, getPassOptions(), *getModule());
+
+    if (fallthrough->type.isNull()) {
+      replaceCurrent(
+        getDroppedChildrenAndAppend(curr, builder.makeUnreachable()));
+      // Propagate the unreachability.
+      refinalize = true;
+      return true;
+    }
+    return false;
+  }
+
+  void visitRefEq(RefEq* curr) {
+    // The types may prove that the same reference cannot appear on both sides.
+    auto leftType = curr->left->type;
+    auto rightType = curr->right->type;
+    if (leftType == Type::unreachable || rightType == Type::unreachable) {
+      // Leave this for DCE.
+      return;
+    }
+    auto leftHeapType = leftType.getHeapType();
+    auto rightHeapType = rightType.getHeapType();
+    auto leftIsHeapSubtype = HeapType::isSubType(leftHeapType, rightHeapType);
+    auto rightIsHeapSubtype = HeapType::isSubType(rightHeapType, leftHeapType);
+    if (!leftIsHeapSubtype && !rightIsHeapSubtype &&
+        (leftType.isNonNullable() || rightType.isNonNullable())) {
+      // The heap types have no intersection, so the only thing that can
+      // possibly appear on both sides is null, but one of the two is non-
+      // nullable, which rules that out. So there is no way that the same
+      // reference can appear on both sides.
+      replaceCurrent(
+        getDroppedChildrenAndAppend(curr, Literal::makeZero(Type::i32)));
+      return;
+    }
+
+    // Equality does not depend on the type, so casts may be removable.
+    //
+    // This is safe to do first because nothing farther down cares about the
+    // type, and we consume the two input references, so removing a cast could
+    // not help our parents (see "notes on removing casts").
+    Type nullableEq = Type(HeapType::eq, Nullable);
+    skipCast(curr->left, nullableEq);
+    skipCast(curr->right, nullableEq);
+
+    // Identical references compare equal.
+    // (Technically we do not need to check if the inputs are also foldable into
+    // a single one, but we do not have utility code to handle non-foldable
+    // cases yet; the foldable case we do handle is the common one of the first
+    // child being a tee and the second a get of that tee. TODO)
+    if (areConsecutiveInputsEqualAndFoldable(curr->left, curr->right)) {
+      replaceCurrent(
+        getDroppedChildrenAndAppend(curr, Literal::makeOne(Type::i32)));
+      return;
+    }
+
+    // Canonicalize to the pattern of a null on the right-hand side, if there is
+    // one. This makes pattern matching simpler.
+    if (curr->left->is<RefNull>()) {
+      std::swap(curr->left, curr->right);
+    }
+
+    // RefEq of a value to Null can be replaced with RefIsNull.
+    if (curr->right->is<RefNull>()) {
+      replaceCurrent(Builder(*getModule()).makeRefIsNull(curr->left));
+    }
+  }
+
+  void visitStructGet(StructGet* curr) {
+    skipNonNullCast(curr->ref, curr);
+    trapOnNull(curr, curr->ref);
+  }
+
+  void visitStructSet(StructSet* curr) {
+    skipNonNullCast(curr->ref, curr);
+    if (trapOnNull(curr, curr->ref)) {
+      return;
+    }
+
+    if (curr->ref->type != Type::unreachable && curr->value->type.isInteger()) {
+      // We must avoid the case of a null type.
+      auto heapType = curr->ref->type.getHeapType();
+      if (heapType.isStruct()) {
+        const auto& fields = heapType.getStruct().fields;
+        optimizeStoredValue(curr->value, fields[curr->index].getByteSize());
+      }
+    }
+
+    // If our reference is a tee of a struct.new, we may be able to fold the
+    // stored value into the new itself:
+    //
+    //  (struct.set (local.tee $x (struct.new X Y Z)) X')
+    // =>
+    //  (local.set $x (struct.new X' Y Z))
+    //
+    if (auto* tee = curr->ref->dynCast<LocalSet>()) {
+      if (auto* new_ = tee->value->dynCast<StructNew>()) {
+        if (optimizeSubsequentStructSet(new_, curr, tee->index)) {
+          // Success, so we do not need the struct.set any more, and the tee
+          // can just be a set instead of us.
+          tee->makeSet();
+          replaceCurrent(tee);
+        }
+      }
+    }
+  }
+
+  // Similar to the above with struct.set whose reference is a tee of a new, we
+  // can do the same for subse
