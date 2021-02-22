@@ -1803,4 +1803,317 @@ struct OptimizeInstructions
   }
 
   // Similar to the above with struct.set whose reference is a tee of a new, we
-  // can do the same for subse
+  // can do the same for subsequent sets in a list:
+  //
+  //  (local.set $x (struct.new X Y Z))
+  //  (struct.set (local.get $x) X')
+  // =>
+  //  (local.set $x (struct.new X' Y Z))
+  //
+  // We also handle other struct.sets immediately after this one, but we only
+  // handle the case where they are all in sequence and right after the
+  // local.set (anything in the middle of this pattern will stop us from
+  // optimizing later struct.sets, which might be improved later but would
+  // require an analysis of effects TODO).
+  void optimizeHeapStores(ExpressionList& list) {
+    for (Index i = 0; i < list.size(); i++) {
+      auto* localSet = list[i]->dynCast<LocalSet>();
+      if (!localSet) {
+        continue;
+      }
+      auto* new_ = localSet->value->dynCast<StructNew>();
+      if (!new_) {
+        continue;
+      }
+
+      // This local.set of a struct.new looks good. Find struct.sets after it
+      // to optimize.
+      for (Index j = i + 1; j < list.size(); j++) {
+        auto* structSet = list[j]->dynCast<StructSet>();
+        if (!structSet) {
+          // Any time the pattern no longer matches, stop optimizing possible
+          // struct.sets for this struct.new.
+          break;
+        }
+        auto* localGet = structSet->ref->dynCast<LocalGet>();
+        if (!localGet || localGet->index != localSet->index) {
+          break;
+        }
+        if (!optimizeSubsequentStructSet(new_, structSet, localGet->index)) {
+          break;
+        } else {
+          // Success. Replace the set with a nop, and continue to
+          // perhaps optimize more.
+          ExpressionManipulator::nop(structSet);
+        }
+      }
+    }
+  }
+
+  // Given a struct.new and a struct.set that occurs right after it, and that
+  // applies to the same data, try to apply the set during the new. This can be
+  // either with a nested tee:
+  //
+  //  (struct.set
+  //    (local.tee $x (struct.new X Y Z))
+  //    X'
+  //  )
+  // =>
+  //  (local.set $x (struct.new X' Y Z))
+  //
+  // or without:
+  //
+  //  (local.set $x (struct.new X Y Z))
+  //  (struct.set (local.get $x) X')
+  // =>
+  //  (local.set $x (struct.new X' Y Z))
+  //
+  // Returns true if we succeeded.
+  bool optimizeSubsequentStructSet(StructNew* new_,
+                                   StructSet* set,
+                                   Index refLocalIndex) {
+    // Leave unreachable code for DCE, to avoid updating types here.
+    if (new_->type == Type::unreachable || set->type == Type::unreachable) {
+      return false;
+    }
+
+    if (new_->isWithDefault()) {
+      // Ignore a new_default for now. If the fields are defaultable then we
+      // could add them, in principle, but that might increase code size.
+      return false;
+    }
+
+    auto index = set->index;
+    auto& operands = new_->operands;
+
+    // Check for effects that prevent us moving the struct.set's value (X' in
+    // the function comment) into its new position in the struct.new. First, it
+    // must be ok to move it past the local.set (otherwise, it might read from
+    // memory using that local, and depend on the struct.new having already
+    // occurred; or, if it writes to that local, then it would cross another
+    // write).
+    auto setValueEffects = effects(set->value);
+    if (setValueEffects.localsRead.count(refLocalIndex) ||
+        setValueEffects.localsWritten.count(refLocalIndex)) {
+      return false;
+    }
+
+    // We must move the set's value past indexes greater than it (Y and Z in
+    // the example in the comment on this function).
+    // TODO When this function is called repeatedly in a sequence this can
+    //      become quadratic - perhaps we should memoize (though, struct sizes
+    //      tend to not be ridiculously large).
+    for (Index i = index + 1; i < operands.size(); i++) {
+      auto operandEffects = effects(operands[i]);
+      if (operandEffects.invalidates(setValueEffects)) {
+        // TODO: we could use locals to reorder everything
+        return false;
+      }
+    }
+
+    Builder builder(*getModule());
+
+    // See if we need to keep the old value.
+    if (effects(operands[index]).hasUnremovableSideEffects()) {
+      operands[index] =
+        builder.makeSequence(builder.makeDrop(operands[index]), set->value);
+    } else {
+      operands[index] = set->value;
+    }
+
+    return true;
+  }
+
+  void visitArrayGet(ArrayGet* curr) {
+    skipNonNullCast(curr->ref, curr);
+    trapOnNull(curr, curr->ref);
+  }
+
+  void visitArraySet(ArraySet* curr) {
+    skipNonNullCast(curr->ref, curr);
+    if (trapOnNull(curr, curr->ref)) {
+      return;
+    }
+
+    if (curr->ref->type != Type::unreachable && curr->value->type.isInteger()) {
+      auto element = curr->ref->type.getHeapType().getArray().element;
+      optimizeStoredValue(curr->value, element.getByteSize());
+    }
+  }
+
+  void visitArrayLen(ArrayLen* curr) {
+    skipNonNullCast(curr->ref, curr);
+    trapOnNull(curr, curr->ref);
+  }
+
+  void visitArrayCopy(ArrayCopy* curr) {
+    skipNonNullCast(curr->destRef, curr);
+    skipNonNullCast(curr->srcRef, curr);
+    trapOnNull(curr, curr->destRef) || trapOnNull(curr, curr->srcRef);
+  }
+
+  void visitRefCast(RefCast* curr) {
+    // Note we must check the ref's type here and not our own, since we only
+    // refinalize at the end, which means our type may not have been updated yet
+    // after a change in the child.
+    // TODO: we could update unreachability up the stack perhaps, or just move
+    //       all patterns that can add unreachability to a pass that does so
+    //       already like vacuum or dce.
+    if (curr->ref->type == Type::unreachable) {
+      return;
+    }
+
+    if (curr->type.isNonNullable() && trapOnNull(curr, curr->ref)) {
+      return;
+    }
+
+    // Check whether the cast will definitely fail (or succeed). Look not just
+    // at the fallthrough but all intermediatary fallthrough values as well, as
+    // if any of them has a type that cannot be cast to us, then we will trap,
+    // e.g.
+    //
+    //   (ref.cast $struct-A
+    //     (ref.cast $struct-B
+    //       (ref.cast $array
+    //         (local.get $x)
+    //
+    // The fallthrough is the local.get, but the array cast in the middle
+    // proves a trap must happen.
+    Builder builder(*getModule());
+    auto nullType = curr->type.getHeapType().getBottom();
+    {
+      auto** refp = &curr->ref;
+      while (1) {
+        auto* ref = *refp;
+
+        auto result = GCTypeUtils::evaluateCastCheck(ref->type, curr->type);
+
+        if (result == GCTypeUtils::Success) {
+          // The cast will succeed. This can only happen if the ref is a subtype
+          // of the cast instruction, which means we can replace the cast with
+          // the ref.
+          assert(Type::isSubType(ref->type, curr->type));
+          if (curr->type != ref->type) {
+            refinalize = true;
+          }
+          // If there were no intermediate expressions, we can just skip the
+          // cast.
+          if (ref == curr->ref) {
+            replaceCurrent(ref);
+            return;
+          }
+          // Otherwise we can't just remove the cast and replace it with `ref`
+          // because the intermediate expressions might have had side effects.
+          // We can replace the cast with a drop followed by a direct return of
+          // the value, though.
+          if (ref->type.isNull()) {
+            // We can materialize the resulting null value directly.
+            replaceCurrent(builder.makeSequence(builder.makeDrop(curr->ref),
+                                                builder.makeRefNull(nullType)));
+            return;
+          }
+          // We need to use a tee to return the value since we can't materialize
+          // it directly.
+          auto scratch = builder.addVar(getFunction(), ref->type);
+          *refp = builder.makeLocalTee(scratch, ref, ref->type);
+          replaceCurrent(
+            builder.makeSequence(builder.makeDrop(curr->ref),
+                                 builder.makeLocalGet(scratch, ref->type)));
+          return;
+        } else if (result == GCTypeUtils::Failure) {
+          // This cast cannot succeed, so it will trap.
+          // Make sure to emit a block with the same type as us; leave updating
+          // types for other passes.
+          replaceCurrent(builder.makeBlock(
+            {builder.makeDrop(curr->ref), builder.makeUnreachable()},
+            curr->type));
+          return;
+        } else if (result == GCTypeUtils::SuccessOnlyIfNull) {
+          // If either cast or ref types were non-nullable then the cast could
+          // never succeed, and we'd have reached |Failure|, above.
+          assert(curr->type.isNullable() && curr->ref->type.isNullable());
+
+          // The cast either returns null, or traps. In trapsNeverHappen mode
+          // we know the result, since it by assumption will not trap.
+          if (getPassOptions().trapsNeverHappen) {
+            replaceCurrent(builder.makeBlock(
+              {builder.makeDrop(curr->ref), builder.makeRefNull(nullType)},
+              curr->type));
+            return;
+          }
+
+          // Without trapsNeverHappen we can at least sharpen the type here, if
+          // it is not already a null type.
+          auto newType = Type(nullType, Nullable);
+          if (curr->type != newType) {
+            curr->type = newType;
+            // Call replaceCurrent() to make us re-optimize this node, as we
+            // may have just unlocked further opportunities. (We could just
+            // continue down to the rest, but we'd need to do more work to
+            // make sure all the local state in this function is in sync
+            // which this change; it's easier to just do another clean pass
+            // on this node.)
+            replaceCurrent(curr);
+            return;
+          }
+        }
+
+        auto** last = refp;
+        refp = Properties::getImmediateFallthroughPtr(
+          refp, getPassOptions(), *getModule());
+        if (refp == last) {
+          break;
+        }
+      }
+    }
+
+    // See what we know about the cast result.
+    //
+    // Note that we could look at the fallthrough for the ref, but that would
+    // require additional work to make sure we emit something that validates
+    // properly. TODO
+    auto result = GCTypeUtils::evaluateCastCheck(curr->ref->type, curr->type);
+
+    if (result == GCTypeUtils::Success) {
+      replaceCurrent(curr->ref);
+
+      // We must refinalize here, as we may be returning a more specific
+      // type, which can alter the parent. For example:
+      //
+      //  (struct.get $parent 0
+      //   (ref.cast_static $parent
+      //    (local.get $child)
+      //   )
+      //  )
+      //
+      // Try to cast a $child to its parent, $parent. That always works,
+      // so the cast can be removed.
+      // Then once the cast is removed, the outer struct.get
+      // will have a reference with a different type, making it a
+      // (struct.get $child ..) instead of $parent.
+      // But if $parent and $child have different types on field 0 (the
+      // child may have a more refined one) then the struct.get must be
+      // refinalized so the IR node has the expected type.
+      refinalize = true;
+      return;
+    } else if (result == GCTypeUtils::SuccessOnlyIfNonNull) {
+      // All we need to do is check for a null here.
+      //
+      // As above, we must refinalize as we may now be emitting a more refined
+      // type (specifically a more refined heap type).
+      replaceCurrent(builder.makeRefAs(RefAsNonNull, curr->ref));
+      refinalize = true;
+      return;
+    }
+
+    if (auto* child = curr->ref->dynCast<RefCast>()) {
+      // Repeated casts can be removed, leaving just the most demanding of
+      // them. Note that earlier we already checked for the cast of the ref's
+      // type being more refined, so all we need to handle is the opposite, that
+      // is, something like this:
+      //
+      //   (ref.cast $B
+      //     (ref.cast $A
+      //
+      // where $B is a subtype of $A. We don't need to cast to $A here; we can
+      // just cast al
