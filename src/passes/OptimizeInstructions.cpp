@@ -2116,4 +2116,312 @@ struct OptimizeInstructions
       //     (ref.cast $A
       //
       // where $B is a subtype of $A. We don't need to cast to $A here; we can
-      // just cast al
+      // just cast all the way to $B immediately. To check this, see if the
+      // parent's type would succeed if cast by the child's; if it must then the
+      // child's is redundant.
+      auto result = GCTypeUtils::evaluateCastCheck(curr->type, child->type);
+      if (result == GCTypeUtils::Success) {
+        curr->ref = child->ref;
+        return;
+      } else if (result == GCTypeUtils::SuccessOnlyIfNonNull) {
+        // Similar to above, but we must also trap on null.
+        curr->ref = child->ref;
+        curr->type = Type(curr->type.getHeapType(), NonNullable);
+        return;
+      }
+    }
+
+    // ref.cast can be combined with ref.as_non_null,
+    //
+    //   (ref.cast null (ref.as_non_null ..))
+    // =>
+    //   (ref.cast ..)
+    //
+    if (auto* as = curr->ref->dynCast<RefAs>()) {
+      if (as->op == RefAsNonNull) {
+        curr->ref = as->value;
+        curr->type = Type(curr->type.getHeapType(), NonNullable);
+      }
+    }
+  }
+
+  void visitRefTest(RefTest* curr) {
+    if (curr->type == Type::unreachable) {
+      return;
+    }
+
+    Builder builder(*getModule());
+
+    if (curr->ref->type.isNull()) {
+      // The input is null, so we know whether this will succeed or fail.
+      int32_t result = curr->castType.isNullable() ? 1 : 0;
+      replaceCurrent(builder.makeBlock(
+        {builder.makeDrop(curr->ref), builder.makeConst(int32_t(result))}));
+      return;
+    }
+
+    // Parallel to the code in visitRefCast
+    switch (GCTypeUtils::evaluateCastCheck(curr->ref->type, curr->castType)) {
+      case GCTypeUtils::Unknown:
+        break;
+      case GCTypeUtils::Success:
+        replaceCurrent(builder.makeBlock(
+          {builder.makeDrop(curr->ref), builder.makeConst(int32_t(1))}));
+        break;
+      case GCTypeUtils::Failure:
+        replaceCurrent(builder.makeSequence(builder.makeDrop(curr->ref),
+                                            builder.makeConst(int32_t(0))));
+        break;
+      case GCTypeUtils::SuccessOnlyIfNull:
+        replaceCurrent(builder.makeRefIsNull(curr->ref));
+        break;
+      case GCTypeUtils::SuccessOnlyIfNonNull:
+        // This adds an EqZ, but code size does not regress since ref.test also
+        // encodes a type, and ref.is_null does not. The EqZ may also add some
+        // work, but a cast is likely more expensive than a null check + a fast
+        // int operation.
+        replaceCurrent(
+          builder.makeUnary(EqZInt32, builder.makeRefIsNull(curr->ref)));
+        break;
+    }
+  }
+
+  void visitRefIsNull(RefIsNull* curr) {
+    if (curr->type == Type::unreachable) {
+      return;
+    }
+
+    // Optimizing RefIsNull is not that obvious, since even if we know the
+    // result evaluates to 0 or 1 then the replacement may not actually save
+    // code size, since RefIsNull is a single byte while adding a Const of 0
+    // would be two bytes. Other factors are that we can remove the input and
+    // the added drop on it if it has no side effects, and that replacing with a
+    // constant may allow further optimizations later. For now, replace with a
+    // constant, but this warrants more investigation. TODO
+
+    Builder builder(*getModule());
+    if (curr->value->type.isNonNullable()) {
+      replaceCurrent(
+        builder.makeSequence(builder.makeDrop(curr->value),
+                             builder.makeConst(Literal::makeZero(Type::i32))));
+    } else {
+      skipCast(curr->value);
+    }
+  }
+
+  void visitRefAs(RefAs* curr) {
+    if (curr->type == Type::unreachable) {
+      return;
+    }
+
+    if (curr->op == ExternExternalize || curr->op == ExternInternalize) {
+      // We can't optimize these. Even removing a non-null cast is not valid as
+      // they allow nulls to filter through, unlike other RefAs*.
+      return;
+    }
+
+    assert(curr->op == RefAsNonNull);
+    skipNonNullCast(curr->value, curr);
+    if (!curr->value->type.isNullable()) {
+      replaceCurrent(curr->value);
+      return;
+    }
+
+    // As we do in visitRefCast, ref.cast can be combined with ref.as_non_null.
+    // This code handles the case where the ref.as is on the outside:
+    //
+    //   (ref.as_non_null (ref.cast null ..))
+    // =>
+    //   (ref.cast ..)
+    //
+    if (auto* cast = curr->value->dynCast<RefCast>()) {
+      // The cast cannot be non-nullable, or we would have handled this right
+      // above by just removing the ref.as, since it would not be needed.
+      assert(!cast->type.isNonNullable());
+      cast->type = Type(cast->type.getHeapType(), NonNullable);
+      replaceCurrent(cast);
+    }
+  }
+
+  Index getMaxBitsForLocal(LocalGet* get) {
+    // check what we know about the local
+    return localInfo[get->index].maxBits;
+  }
+
+private:
+  // Information about our locals
+  std::vector<LocalInfo> localInfo;
+
+  // Check if two consecutive inputs to an instruction are equal. As they are
+  // consecutive, no code can execeute in between them, which simplies the
+  // problem here (and which is the case we care about in this pass, which does
+  // simple peephole optimizations - all we care about is a single instruction
+  // at a time, and its inputs).
+  //
+  // This also checks that the inputs are removable (but we do not assume the
+  // caller will always remove them).
+  bool areConsecutiveInputsEqualAndRemovable(Expression* left,
+                                             Expression* right) {
+    // First, check for side effects. If there are any, then we can't even
+    // assume things like local.get's of the same index being identical. (It is
+    // also ok to have removable side effects here, see the function
+    // description.)
+    auto& passOptions = getPassOptions();
+    if (EffectAnalyzer(passOptions, *getModule(), left)
+          .hasUnremovableSideEffects() ||
+        EffectAnalyzer(passOptions, *getModule(), right)
+          .hasUnremovableSideEffects()) {
+      return false;
+    }
+
+    // Ignore extraneous things and compare them structurally.
+    left = Properties::getFallthrough(left, passOptions, *getModule());
+    right = Properties::getFallthrough(right, passOptions, *getModule());
+    if (!ExpressionAnalyzer::equal(left, right)) {
+      return false;
+    }
+    // To be equal, they must also be known to return the same result
+    // deterministically.
+    if (Properties::isGenerative(left, getModule()->features)) {
+      return false;
+    }
+    return true;
+  }
+
+  // Check if two consecutive inputs to an instruction are equal and can also be
+  // folded into the first of the two (but we do not assume the caller will
+  // always fold them). This is similar to areConsecutiveInputsEqualAndRemovable
+  // but also identifies reads from the same local variable when the first of
+  // them is a "tee" operation and the second is a get (in which case, it is
+  // fine to remove the get, but not the tee).
+  //
+  // The inputs here must be consecutive, but it is also ok to have code with no
+  // side effects at all in the middle. For example, a Const in between is ok.
+  bool areConsecutiveInputsEqualAndFoldable(Expression* left,
+                                            Expression* right) {
+    if (auto* set = left->dynCast<LocalSet>()) {
+      if (auto* get = right->dynCast<LocalGet>()) {
+        if (set->isTee() && get->index == set->index) {
+          return true;
+        }
+      }
+    }
+    // stronger property than we need - we can not only fold
+    // them but remove them entirely.
+    return areConsecutiveInputsEqualAndRemovable(left, right);
+  }
+
+  // Similar to areConsecutiveInputsEqualAndFoldable, but only checks that they
+  // are equal (and not that they are foldable).
+  bool areConsecutiveInputsEqual(Expression* left, Expression* right) {
+    // TODO: optimize cases that must be equal but are *not* foldable.
+    return areConsecutiveInputsEqualAndFoldable(left, right);
+  }
+
+  // Canonicalizing the order of a symmetric binary helps us
+  // write more concise pattern matching code elsewhere.
+  void canonicalize(Binary* binary) {
+    assert(shouldCanonicalize(binary));
+    auto swap = [&]() {
+      assert(canReorder(binary->left, binary->right));
+      if (binary->isRelational()) {
+        binary->op = reverseRelationalOp(binary->op);
+      }
+      std::swap(binary->left, binary->right);
+    };
+    auto maybeSwap = [&]() {
+      if (canReorder(binary->left, binary->right)) {
+        swap();
+      }
+    };
+    // Prefer a const on the right.
+    if (binary->left->is<Const>() && !binary->right->is<Const>()) {
+      swap();
+    }
+    if (auto* c = binary->right->dynCast<Const>()) {
+      // x - C   ==>   x + (-C)
+      // Prefer use addition if there is a constant on the right.
+      if (binary->op == Abstract::getBinary(c->type, Abstract::Sub)) {
+        c->value = c->value.neg();
+        binary->op = Abstract::getBinary(c->type, Abstract::Add);
+        return;
+      }
+      // Prefer to compare to 0 instead of to -1 or 1.
+      // (signed)x > -1   ==>   x >= 0
+      if (binary->op == Abstract::getBinary(c->type, Abstract::GtS) &&
+          c->value.getInteger() == -1LL) {
+        binary->op = Abstract::getBinary(c->type, Abstract::GeS);
+        c->value = Literal::makeZero(c->type);
+        return;
+      }
+      // (signed)x <= -1   ==>   x < 0
+      if (binary->op == Abstract::getBinary(c->type, Abstract::LeS) &&
+          c->value.getInteger() == -1LL) {
+        binary->op = Abstract::getBinary(c->type, Abstract::LtS);
+        c->value = Literal::makeZero(c->type);
+        return;
+      }
+      // (signed)x < 1   ==>   x <= 0
+      if (binary->op == Abstract::getBinary(c->type, Abstract::LtS) &&
+          c->value.getInteger() == 1LL) {
+        binary->op = Abstract::getBinary(c->type, Abstract::LeS);
+        c->value = Literal::makeZero(c->type);
+        return;
+      }
+      // (signed)x >= 1   ==>   x > 0
+      if (binary->op == Abstract::getBinary(c->type, Abstract::GeS) &&
+          c->value.getInteger() == 1LL) {
+        binary->op = Abstract::getBinary(c->type, Abstract::GtS);
+        c->value = Literal::makeZero(c->type);
+        return;
+      }
+      // (unsigned)x < 1   ==>   x == 0
+      if (binary->op == Abstract::getBinary(c->type, Abstract::LtU) &&
+          c->value.getInteger() == 1LL) {
+        binary->op = Abstract::getBinary(c->type, Abstract::Eq);
+        c->value = Literal::makeZero(c->type);
+        return;
+      }
+      // (unsigned)x >= 1   ==>   x != 0
+      if (binary->op == Abstract::getBinary(c->type, Abstract::GeU) &&
+          c->value.getInteger() == 1LL) {
+        binary->op = Abstract::getBinary(c->type, Abstract::Ne);
+        c->value = Literal::makeZero(c->type);
+        return;
+      }
+      // Prefer compare to signed min (s_min) instead of s_min + 1.
+      // (signed)x < s_min + 1   ==>   x == s_min
+      if (binary->op == LtSInt32 && c->value.geti32() == INT32_MIN + 1) {
+        binary->op = EqInt32;
+        c->value = Literal::makeSignedMin(Type::i32);
+        return;
+      }
+      if (binary->op == LtSInt64 && c->value.geti64() == INT64_MIN + 1) {
+        binary->op = EqInt64;
+        c->value = Literal::makeSignedMin(Type::i64);
+        return;
+      }
+      // (signed)x >= s_min + 1   ==>   x != s_min
+      if (binary->op == GeSInt32 && c->value.geti32() == INT32_MIN + 1) {
+        binary->op = NeInt32;
+        c->value = Literal::makeSignedMin(Type::i32);
+        return;
+      }
+      if (binary->op == GeSInt64 && c->value.geti64() == INT64_MIN + 1) {
+        binary->op = NeInt64;
+        c->value = Literal::makeSignedMin(Type::i64);
+        return;
+      }
+      // Prefer compare to signed max (s_max) instead of s_max - 1.
+      // (signed)x > s_max - 1   ==>   x == s_max
+      if (binary->op == GtSInt32 && c->value.geti32() == INT32_MAX - 1) {
+        binary->op = EqInt32;
+        c->value = Literal::makeSignedMax(Type::i32);
+        return;
+      }
+      if (binary->op == GtSInt64 && c->value.geti64() == INT64_MAX - 1) {
+        binary->op = EqInt64;
+        c->value = Literal::makeSignedMax(Type::i64);
+        return;
+      }
+ 
