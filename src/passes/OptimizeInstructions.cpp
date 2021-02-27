@@ -2424,4 +2424,316 @@ private:
         c->value = Literal::makeSignedMax(Type::i64);
         return;
       }
- 
+      // (signed)x <= s_max - 1   ==>   x != s_max
+      if (binary->op == LeSInt32 && c->value.geti32() == INT32_MAX - 1) {
+        binary->op = NeInt32;
+        c->value = Literal::makeSignedMax(Type::i32);
+        return;
+      }
+      if (binary->op == LeSInt64 && c->value.geti64() == INT64_MAX - 1) {
+        binary->op = NeInt64;
+        c->value = Literal::makeSignedMax(Type::i64);
+        return;
+      }
+      // Prefer compare to unsigned max (u_max) instead of u_max - 1.
+      // (unsigned)x <= u_max - 1   ==>   x != u_max
+      if (binary->op == Abstract::getBinary(c->type, Abstract::LeU) &&
+          c->value.getInteger() == (int64_t)(UINT64_MAX - 1)) {
+        binary->op = Abstract::getBinary(c->type, Abstract::Ne);
+        c->value = Literal::makeUnsignedMax(c->type);
+        return;
+      }
+      // (unsigned)x > u_max - 1   ==>   x == u_max
+      if (binary->op == Abstract::getBinary(c->type, Abstract::GtU) &&
+          c->value.getInteger() == (int64_t)(UINT64_MAX - 1)) {
+        binary->op = Abstract::getBinary(c->type, Abstract::Eq);
+        c->value = Literal::makeUnsignedMax(c->type);
+        return;
+      }
+      return;
+    }
+    // Prefer a get on the right.
+    if (binary->left->is<LocalGet>() && !binary->right->is<LocalGet>()) {
+      return maybeSwap();
+    }
+    // Sort by the node id type, if different.
+    if (binary->left->_id != binary->right->_id) {
+      if (binary->left->_id > binary->right->_id) {
+        return maybeSwap();
+      }
+      return;
+    }
+    // If the children have the same node id, we have to go deeper.
+    if (auto* left = binary->left->dynCast<Unary>()) {
+      auto* right = binary->right->cast<Unary>();
+      if (left->op > right->op) {
+        return maybeSwap();
+      }
+    }
+    if (auto* left = binary->left->dynCast<Binary>()) {
+      auto* right = binary->right->cast<Binary>();
+      if (left->op > right->op) {
+        return maybeSwap();
+      }
+    }
+    if (auto* left = binary->left->dynCast<LocalGet>()) {
+      auto* right = binary->right->cast<LocalGet>();
+      if (left->index > right->index) {
+        return maybeSwap();
+      }
+    }
+  }
+
+  // Optimize given that the expression is flowing into a boolean context
+  Expression* optimizeBoolean(Expression* boolean) {
+    // TODO use a general getFallthroughs
+    if (auto* unary = boolean->dynCast<Unary>()) {
+      if (unary) {
+        if (unary->op == EqZInt32) {
+          auto* unary2 = unary->value->dynCast<Unary>();
+          if (unary2 && unary2->op == EqZInt32) {
+            // double eqz
+            return unary2->value;
+          }
+          if (auto* binary = unary->value->dynCast<Binary>()) {
+            // !(x <=> y)   ==>   x <!=> y
+            auto op = invertBinaryOp(binary->op);
+            if (op != InvalidBinary) {
+              binary->op = op;
+              return binary;
+            }
+          }
+        }
+      }
+    } else if (auto* binary = boolean->dynCast<Binary>()) {
+      if (binary->op == SubInt32) {
+        if (auto* c = binary->left->dynCast<Const>()) {
+          if (c->value.geti32() == 0) {
+            // bool(0 - x)   ==>   bool(x)
+            return binary->right;
+          }
+        }
+      } else if (binary->op == OrInt32) {
+        // an or flowing into a boolean context can consider each input as
+        // boolean
+        binary->left = optimizeBoolean(binary->left);
+        binary->right = optimizeBoolean(binary->right);
+      } else if (binary->op == NeInt32) {
+        if (auto* c = binary->right->dynCast<Const>()) {
+          // x != 0 is just x if it's used as a bool
+          if (c->value.geti32() == 0) {
+            return binary->left;
+          }
+          // TODO: Perhaps use it for separate final pass???
+          // x != -1   ==>    x ^ -1
+          // if (num->value.geti32() == -1) {
+          //   binary->op = XorInt32;
+          //   return binary;
+          // }
+        }
+      } else if (binary->op == RemSInt32) {
+        // bool(i32(x) % C_pot)  ==>  bool(x & (C_pot - 1))
+        // bool(i32(x) % min_s)  ==>  bool(x & max_s)
+        if (auto* c = binary->right->dynCast<Const>()) {
+          if (c->value.isSignedMin() ||
+              Bits::isPowerOf2(c->value.abs().geti32())) {
+            binary->op = AndInt32;
+            if (c->value.isSignedMin()) {
+              c->value = Literal::makeSignedMax(Type::i32);
+            } else {
+              c->value = c->value.abs().sub(Literal::makeOne(Type::i32));
+            }
+            return binary;
+          }
+        }
+      }
+      if (auto* ext = Properties::getSignExtValue(binary)) {
+        // use a cheaper zero-extent, we just care about the boolean value
+        // anyhow
+        return makeZeroExt(ext, Properties::getSignExtBits(binary));
+      }
+    } else if (auto* block = boolean->dynCast<Block>()) {
+      if (block->type == Type::i32 && block->list.size() > 0) {
+        block->list.back() = optimizeBoolean(block->list.back());
+      }
+    } else if (auto* iff = boolean->dynCast<If>()) {
+      if (iff->type == Type::i32) {
+        iff->ifTrue = optimizeBoolean(iff->ifTrue);
+        iff->ifFalse = optimizeBoolean(iff->ifFalse);
+      }
+    } else if (auto* select = boolean->dynCast<Select>()) {
+      select->ifTrue = optimizeBoolean(select->ifTrue);
+      select->ifFalse = optimizeBoolean(select->ifFalse);
+    } else if (auto* tryy = boolean->dynCast<Try>()) {
+      if (tryy->type == Type::i32) {
+        tryy->body = optimizeBoolean(tryy->body);
+        for (Index i = 0; i < tryy->catchBodies.size(); i++) {
+          tryy->catchBodies[i] = optimizeBoolean(tryy->catchBodies[i]);
+        }
+      }
+    }
+    // TODO: recurse into br values?
+    return boolean;
+  }
+
+  Expression* optimizeSelect(Select* curr) {
+    using namespace Match;
+    using namespace Abstract;
+    Builder builder(*getModule());
+    curr->condition = optimizeBoolean(curr->condition);
+    {
+      // Constant condition, we can just pick the correct side (barring side
+      // effects)
+      Expression *ifTrue, *ifFalse;
+      if (matches(curr, select(pure(&ifTrue), any(&ifFalse), i32(0)))) {
+        return ifFalse;
+      }
+      if (matches(curr, select(any(&ifTrue), any(&ifFalse), i32(0)))) {
+        return builder.makeSequence(builder.makeDrop(ifTrue), ifFalse);
+      }
+      int32_t cond;
+      if (matches(curr, select(any(&ifTrue), pure(&ifFalse), i32(&cond)))) {
+        // The condition must be non-zero because a zero would have matched one
+        // of the previous patterns.
+        assert(cond != 0);
+        return ifTrue;
+      }
+      // Don't bother when `ifFalse` isn't pure - we would need to reverse the
+      // order using a temp local, which would be bad
+    }
+    {
+      // TODO: Remove this after landing SCCP pass. See: #4161
+
+      // i32(x) ? i32(x) : 0  ==>  x
+      Expression *x, *y;
+      if (matches(curr, select(any(&x), i32(0), any(&y))) &&
+          areConsecutiveInputsEqualAndFoldable(x, y)) {
+        return curr->ifTrue;
+      }
+      // i32(x) ? 0 : i32(x)  ==>  { x, 0 }
+      if (matches(curr, select(i32(0), any(&x), any(&y))) &&
+          areConsecutiveInputsEqualAndFoldable(x, y)) {
+        return builder.makeSequence(builder.makeDrop(x), curr->ifTrue);
+      }
+
+      // i64(x) == 0 ? 0 : i64(x)  ==>  x
+      // i64(x) != 0 ? i64(x) : 0  ==>  x
+      if ((matches(curr, select(i64(0), any(&x), unary(EqZInt64, any(&y)))) ||
+           matches(
+             curr,
+             select(any(&x), i64(0), binary(NeInt64, any(&y), i64(0))))) &&
+          areConsecutiveInputsEqualAndFoldable(x, y)) {
+        return curr->condition->is<Unary>() ? curr->ifFalse : curr->ifTrue;
+      }
+
+      // i64(x) == 0 ? i64(x) : 0  ==>  { x, 0 }
+      // i64(x) != 0 ? 0 : i64(x)  ==>  { x, 0 }
+      if ((matches(curr, select(any(&x), i64(0), unary(EqZInt64, any(&y)))) ||
+           matches(
+             curr,
+             select(i64(0), any(&x), binary(NeInt64, any(&y), i64(0))))) &&
+          areConsecutiveInputsEqualAndFoldable(x, y)) {
+        return builder.makeSequence(
+          builder.makeDrop(x),
+          curr->condition->is<Unary>() ? curr->ifFalse : curr->ifTrue);
+      }
+    }
+    {
+      // Simplify selects between 0 and 1
+      Expression* c;
+      bool reversed = matches(curr, select(ival(0), ival(1), any(&c)));
+      if (reversed || matches(curr, select(ival(1), ival(0), any(&c)))) {
+        if (reversed) {
+          c = optimizeBoolean(builder.makeUnary(EqZInt32, c));
+        }
+        if (!Properties::emitsBoolean(c)) {
+          // cond ? 1 : 0 ==> !!cond
+          c = builder.makeUnary(EqZInt32, builder.makeUnary(EqZInt32, c));
+        }
+        return curr->type == Type::i64 ? builder.makeUnary(ExtendUInt32, c) : c;
+      }
+    }
+    // Flip the arms if doing so might help later optimizations here.
+    if (auto* binary = curr->condition->dynCast<Binary>()) {
+      auto inv = invertBinaryOp(binary->op);
+      if (inv != InvalidBinary) {
+        // For invertible binary operations, we prefer to have non-zero values
+        // in the ifTrue, and zero values in the ifFalse, due to the
+        // optimization right after us. Even if this does not help there, it is
+        // a nice canonicalization. (To ensure convergence - that we don't keep
+        // doing work each time we get here - do nothing if both are zero, or
+        // if both are nonzero.)
+        Const* c;
+        if ((matches(curr->ifTrue, ival(0)) &&
+             !matches(curr->ifFalse, ival(0))) ||
+            (!matches(curr->ifTrue, ival()) &&
+             matches(curr->ifFalse, ival(&c)) && !c->value.isZero())) {
+          binary->op = inv;
+          std::swap(curr->ifTrue, curr->ifFalse);
+        }
+      }
+    }
+    if (curr->type == Type::i32 &&
+        Bits::getMaxBits(curr->condition, this) <= 1 &&
+        Bits::getMaxBits(curr->ifTrue, this) <= 1 &&
+        Bits::getMaxBits(curr->ifFalse, this) <= 1) {
+      // The condition and both arms are i32 booleans, which allows us to do
+      // boolean optimizations.
+      Expression* x;
+      Expression* y;
+
+      // x ? y : 0   ==>   x & y
+      if (matches(curr, select(any(&y), ival(0), any(&x)))) {
+        return builder.makeBinary(AndInt32, y, x);
+      }
+
+      // x ? 1 : y   ==>   x | y
+      if (matches(curr, select(ival(1), any(&y), any(&x)))) {
+        return builder.makeBinary(OrInt32, y, x);
+      }
+    }
+    {
+      // Simplify x < 0 ? -1 : 1 or x >= 0 ? 1 : -1 to
+      // i32(x) >> 31 | 1
+      // i64(x) >> 63 | 1
+      Binary* bin;
+      if (matches(
+            curr,
+            select(ival(-1), ival(1), binary(&bin, LtS, any(), ival(0)))) ||
+          matches(
+            curr,
+            select(ival(1), ival(-1), binary(&bin, GeS, any(), ival(0))))) {
+        auto c = bin->right->cast<Const>();
+        auto type = curr->ifTrue->type;
+        if (type == c->type) {
+          bin->type = type;
+          bin->op = Abstract::getBinary(type, ShrS);
+          c->value = Literal::makeFromInt32(type.getByteSize() * 8 - 1, type);
+          curr->ifTrue->cast<Const>()->value = Literal::makeOne(type);
+          return builder.makeBinary(
+            Abstract::getBinary(type, Or), bin, curr->ifTrue);
+        }
+      }
+    }
+    {
+      // Flip select to remove eqz if we can reorder
+      Select* s;
+      Expression *ifTrue, *ifFalse, *c;
+      if (matches(
+            curr,
+            select(
+              &s, any(&ifTrue), any(&ifFalse), unary(EqZInt32, any(&c)))) &&
+          canReorder(ifTrue, ifFalse)) {
+        s->ifTrue = ifFalse;
+        s->ifFalse = ifTrue;
+        s->condition = c;
+        return s;
+      }
+    }
+    {
+      // Sides are identical, fold
+      Expression *ifTrue, *ifFalse, *c;
+      if (matches(curr, select(any(&ifTrue), any(&ifFalse), any(&c))) &&
+          ExpressionAnalyzer::equal(ifTrue, ifFalse)) {
+        auto value = effects(ifTrue);
+        if (value.hasSideEff
