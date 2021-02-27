@@ -3413,4 +3413,321 @@ private:
                     std::is_same<T, uint64_t>::value,
                   "type mismatch");
     auto shifts = Bits::countTrailingZeroes(c);
-    binary->op
+    binary->op = std::is_same<T, uint32_t>::value ? ShrUInt32 : ShrUInt64;
+    binary->right->cast<Const>()->value = Literal(static_cast<T>(shifts));
+    return binary;
+  }
+
+  template<typename T> Expression* optimizePowerOf2FDiv(Binary* binary, T c) {
+    //
+    // x / C_pot    =>   x * (C_pot ^ -1)
+    //
+    // Explanation:
+    // Floating point numbers are represented as:
+    //    ((-1) ^ sign) * (2 ^ (exp - bias)) * (1 + significand)
+    //
+    // If we have power of two numbers, then the mantissa (significand)
+    // is all zeros. Let's focus on the exponent, ignoring the sign part:
+    //    (2 ^ (exp - bias))
+    //
+    // and for inverted power of two floating point:
+    //     1.0 / (2 ^ (exp - bias))   ->   2 ^ -(exp - bias)
+    //
+    // So inversion of C_pot is valid because it changes only the sign
+    // of the exponent part and doesn't touch the significand part,
+    // which remains the same (zeros).
+    static_assert(std::is_same<T, float>::value ||
+                    std::is_same<T, double>::value,
+                  "type mismatch");
+    double invDivisor = 1.0 / (double)c;
+    binary->op = std::is_same<T, float>::value ? MulFloat32 : MulFloat64;
+    binary->right->cast<Const>()->value = Literal(static_cast<T>(invDivisor));
+    return binary;
+  }
+
+  Expression* makeZeroExt(Expression* curr, int32_t bits) {
+    Builder builder(*getModule());
+    return builder.makeBinary(
+      AndInt32, curr, builder.makeConst(Literal(Bits::lowBitMask(bits))));
+  }
+
+  // given an "almost" sign extend - either a proper one, or it
+  // has too many shifts left - we remove the sign extend. If there are
+  // too many shifts, we split the shifts first, so this removes the
+  // two sign extend shifts and adds one (smaller one)
+  Expression* removeAlmostSignExt(Binary* outer) {
+    auto* inner = outer->left->cast<Binary>();
+    auto* outerConst = outer->right->cast<Const>();
+    auto* innerConst = inner->right->cast<Const>();
+    auto* value = inner->left;
+    if (outerConst->value == innerConst->value) {
+      return value;
+    }
+    // add a shift, by reusing the existing node
+    innerConst->value = innerConst->value.sub(outerConst->value);
+    return inner;
+  }
+
+  // check if an expression is already sign-extended
+  bool isSignExted(Expression* curr, Index bits) {
+    if (Properties::getSignExtValue(curr)) {
+      return Properties::getSignExtBits(curr) == bits;
+    }
+    if (auto* get = curr->dynCast<LocalGet>()) {
+      // check what we know about the local
+      return localInfo[get->index].signExtedBits == bits;
+    }
+    return false;
+  }
+
+  // optimize trivial math operations, given that the right side of a binary
+  // is a constant
+  Expression* optimizeWithConstantOnRight(Binary* curr) {
+    using namespace Match;
+    using namespace Abstract;
+    Builder builder(*getModule());
+    Expression* left;
+    auto* right = curr->right->cast<Const>();
+    auto type = curr->right->type;
+
+    // Operations on zero
+    if (matches(curr, binary(Shl, any(&left), ival(0))) ||
+        matches(curr, binary(ShrU, any(&left), ival(0))) ||
+        matches(curr, binary(ShrS, any(&left), ival(0))) ||
+        matches(curr, binary(Or, any(&left), ival(0))) ||
+        matches(curr, binary(Xor, any(&left), ival(0)))) {
+      return left;
+    }
+    if (matches(curr, binary(Mul, pure(&left), ival(0))) ||
+        matches(curr, binary(And, pure(&left), ival(0)))) {
+      return right;
+    }
+    // -x * C   ==>    x * -C,   if  shrinkLevel != 0  or  C != C_pot
+    // -x * C   ==>   -(x * C),  otherwise
+    //    where  x, C  are integers
+    Binary* inner;
+    if (matches(
+          curr,
+          binary(Mul, binary(&inner, Sub, ival(0), any(&left)), ival()))) {
+      if (getPassOptions().shrinkLevel != 0 ||
+          !Bits::isPowerOf2(right->value.getInteger())) {
+        right->value = right->value.neg();
+        curr->left = left;
+        return curr;
+      } else {
+        curr->left = left;
+        Const* zero = inner->left->cast<Const>();
+        return builder.makeBinary(inner->op, zero, curr);
+      }
+    }
+    // x == 0   ==>   eqz x
+    if (matches(curr, binary(Eq, any(&left), ival(0)))) {
+      return builder.makeUnary(Abstract::getUnary(type, EqZ), left);
+    }
+    // Operations on one
+    // (signed)x % 1   ==>   0
+    if (matches(curr, binary(RemS, pure(&left), ival(1)))) {
+      right->value = Literal::makeZero(type);
+      return right;
+    }
+    // (signed)x % C_pot != 0   ==>  (x & (abs(C_pot) - 1)) != 0
+    {
+      Const* c;
+      Binary* inner;
+      if (matches(curr,
+                  binary(Ne, binary(&inner, RemS, any(), ival(&c)), ival(0))) &&
+          (c->value.isSignedMin() ||
+           Bits::isPowerOf2(c->value.abs().getInteger()))) {
+        inner->op = Abstract::getBinary(c->type, And);
+        if (c->value.isSignedMin()) {
+          c->value = Literal::makeSignedMax(c->type);
+        } else {
+          c->value = c->value.abs().sub(Literal::makeOne(c->type));
+        }
+        return curr;
+      }
+    }
+    // i32(bool(x)) == 1  ==>  i32(bool(x))
+    // i32(bool(x)) != 0  ==>  i32(bool(x))
+    // i32(bool(x)) & 1   ==>  i32(bool(x))
+    // i64(bool(x)) & 1   ==>  i64(bool(x))
+    if ((matches(curr, binary(EqInt32, any(&left), i32(1))) ||
+         matches(curr, binary(NeInt32, any(&left), i32(0))) ||
+         matches(curr, binary(And, any(&left), ival(1)))) &&
+        Bits::getMaxBits(left, this) == 1) {
+      return left;
+    }
+    // i64(bool(x)) == 1  ==>  i32(bool(x))
+    // i64(bool(x)) != 0  ==>  i32(bool(x))
+    if ((matches(curr, binary(EqInt64, any(&left), i64(1))) ||
+         matches(curr, binary(NeInt64, any(&left), i64(0)))) &&
+        Bits::getMaxBits(left, this) == 1) {
+      return builder.makeUnary(WrapInt64, left);
+    }
+    // bool(x) != 1  ==>  !bool(x)
+    if (matches(curr, binary(Ne, any(&left), ival(1))) &&
+        Bits::getMaxBits(left, this) == 1) {
+      return builder.makeUnary(Abstract::getUnary(type, EqZ), left);
+    }
+    // bool(x)  ^ 1  ==>  !bool(x)
+    if (matches(curr, binary(Xor, any(&left), ival(1))) &&
+        Bits::getMaxBits(left, this) == 1) {
+      auto* result = builder.makeUnary(Abstract::getUnary(type, EqZ), left);
+      if (left->type == Type::i64) {
+        // Xor's result is also an i64 in this case, but EqZ returns i32, so we
+        // must expand it so that we keep returning the same value as before.
+        // This means we replace a xor and a const with a xor and an extend,
+        // which is still smaller (the const is 2 bytes, the extend just 1), and
+        // also the extend may be removed by further work.
+        result = builder.makeUnary(ExtendUInt32, result);
+      }
+      return result;
+    }
+    // bool(x) | 1  ==>  1
+    if (matches(curr, binary(Or, pure(&left), ival(1))) &&
+        Bits::getMaxBits(left, this) == 1) {
+      return right;
+    }
+
+    // Operations on all 1s
+    // x & -1   ==>   x
+    if (matches(curr, binary(And, any(&left), ival(-1)))) {
+      return left;
+    }
+    // x | -1   ==>   -1
+    if (matches(curr, binary(Or, pure(&left), ival(-1)))) {
+      return right;
+    }
+    // (signed)x % -1   ==>   0
+    if (matches(curr, binary(RemS, pure(&left), ival(-1)))) {
+      right->value = Literal::makeZero(type);
+      return right;
+    }
+    // i32(x) / i32.min_s   ==>   x == i32.min_s
+    if (matches(
+          curr,
+          binary(DivSInt32, any(), i32(std::numeric_limits<int32_t>::min())))) {
+      curr->op = EqInt32;
+      return curr;
+    }
+    // i64(x) / i64.min_s   ==>   i64(x == i64.min_s)
+    // only for zero shrink level
+    if (getPassOptions().shrinkLevel == 0 &&
+        matches(
+          curr,
+          binary(DivSInt64, any(), i64(std::numeric_limits<int64_t>::min())))) {
+      curr->op = EqInt64;
+      curr->type = Type::i32;
+      return builder.makeUnary(ExtendUInt32, curr);
+    }
+    // (unsigned)x < 0   ==>   i32(0)
+    if (matches(curr, binary(LtU, pure(&left), ival(0)))) {
+      right->value = Literal::makeZero(Type::i32);
+      right->type = Type::i32;
+      return right;
+    }
+    // (unsigned)x <= -1  ==>   i32(1)
+    if (matches(curr, binary(LeU, pure(&left), ival(-1)))) {
+      right->value = Literal::makeOne(Type::i32);
+      right->type = Type::i32;
+      return right;
+    }
+    // (unsigned)x > -1   ==>   i32(0)
+    if (matches(curr, binary(GtU, pure(&left), ival(-1)))) {
+      right->value = Literal::makeZero(Type::i32);
+      right->type = Type::i32;
+      return right;
+    }
+    // (unsigned)x >= 0   ==>   i32(1)
+    if (matches(curr, binary(GeU, pure(&left), ival(0)))) {
+      right->value = Literal::makeOne(Type::i32);
+      right->type = Type::i32;
+      return right;
+    }
+    // (unsigned)x < -1   ==>   x != -1
+    // Friendlier to JS emitting as we don't need to write an unsigned -1 value
+    // which is large.
+    if (matches(curr, binary(LtU, any(), ival(-1)))) {
+      curr->op = Abstract::getBinary(type, Ne);
+      return curr;
+    }
+    // (unsigned)x <= 0   ==>   x == 0
+    if (matches(curr, binary(LeU, any(), ival(0)))) {
+      curr->op = Abstract::getBinary(type, Eq);
+      return curr;
+    }
+    // (unsigned)x > 0   ==>   x != 0
+    if (matches(curr, binary(GtU, any(), ival(0)))) {
+      curr->op = Abstract::getBinary(type, Ne);
+      return curr;
+    }
+    // (unsigned)x >= -1  ==>   x == -1
+    if (matches(curr, binary(GeU, any(), ival(-1)))) {
+      curr->op = Abstract::getBinary(type, Eq);
+      return curr;
+    }
+    {
+      Const* c;
+      // (signed)x < (i32|i64).min_s   ==>   i32(0)
+      if (matches(curr, binary(LtS, pure(&left), ival(&c))) &&
+          c->value.isSignedMin()) {
+        right->value = Literal::makeZero(Type::i32);
+        right->type = Type::i32;
+        return right;
+      }
+      // (signed)x <= (i32|i64).max_s   ==>   i32(1)
+      if (matches(curr, binary(LeS, pure(&left), ival(&c))) &&
+          c->value.isSignedMax()) {
+        right->value = Literal::makeOne(Type::i32);
+        right->type = Type::i32;
+        return right;
+      }
+      // (signed)x > (i32|i64).max_s   ==>   i32(0)
+      if (matches(curr, binary(GtS, pure(&left), ival(&c))) &&
+          c->value.isSignedMax()) {
+        right->value = Literal::makeZero(Type::i32);
+        right->type = Type::i32;
+        return right;
+      }
+      // (signed)x >= (i32|i64).min_s   ==>   i32(1)
+      if (matches(curr, binary(GeS, pure(&left), ival(&c))) &&
+          c->value.isSignedMin()) {
+        right->value = Literal::makeOne(Type::i32);
+        right->type = Type::i32;
+        return right;
+      }
+      // (signed)x < (i32|i64).max_s   ==>   x != (i32|i64).max_s
+      if (matches(curr, binary(LtS, any(), ival(&c))) &&
+          c->value.isSignedMax()) {
+        curr->op = Abstract::getBinary(type, Ne);
+        return curr;
+      }
+      // (signed)x <= (i32|i64).min_s   ==>   x == (i32|i64).min_s
+      if (matches(curr, binary(LeS, any(), ival(&c))) &&
+          c->value.isSignedMin()) {
+        curr->op = Abstract::getBinary(type, Eq);
+        return curr;
+      }
+      // (signed)x > (i32|i64).min_s   ==>   x != (i32|i64).min_s
+      if (matches(curr, binary(GtS, any(), ival(&c))) &&
+          c->value.isSignedMin()) {
+        curr->op = Abstract::getBinary(type, Ne);
+        return curr;
+      }
+      // (signed)x >= (i32|i64).max_s   ==>   x == (i32|i64).max_s
+      if (matches(curr, binary(GeS, any(), ival(&c))) &&
+          c->value.isSignedMax()) {
+        curr->op = Abstract::getBinary(type, Eq);
+        return curr;
+      }
+    }
+    // x * -1   ==>   0 - x
+    if (matches(curr, binary(Mul, any(&left), ival(-1)))) {
+      right->value = Literal::makeZero(type);
+      curr->op = Abstract::getBinary(type, Sub);
+      curr->left = right;
+      curr->right = left;
+      return curr;
+    }
+    {
+      // ~(1 << x) aka (1 << x) ^ -1  ==>  rotl(-2, x)
