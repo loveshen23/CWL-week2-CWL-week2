@@ -3058,4 +3058,359 @@ private:
     }
     // canonicalize with side effects, if any, happening on the left
     if (rightHasSideEffects) {
-      if (CostAnalyzer(left).cos
+      if (CostAnalyzer(left).cost < MIN_COST) {
+        return nullptr; // avoidable code is too cheap
+      }
+      if (leftEffects.invalidates(rightEffects)) {
+        return nullptr; // cannot reorder
+      }
+      std::swap(left, right);
+    } else if (leftHasSideEffects) {
+      if (CostAnalyzer(right).cost < MIN_COST) {
+        return nullptr; // avoidable code is too cheap
+      }
+    } else {
+      // no side effects, reorder based on cost estimation
+      auto leftCost = CostAnalyzer(left).cost;
+      auto rightCost = CostAnalyzer(right).cost;
+      if (std::max(leftCost, rightCost) < MIN_COST) {
+        return nullptr; // avoidable code is too cheap
+      }
+      // canonicalize with expensive code on the right
+      if (leftCost > rightCost) {
+        std::swap(left, right);
+      }
+    }
+    // worth it! perform conditionalization
+    Builder builder(*getModule());
+    if (binary->op == OrInt32) {
+      return builder.makeIf(
+        left, builder.makeConst(Literal(int32_t(1))), right);
+    } else { // &
+      return builder.makeIf(
+        left, right, builder.makeConst(Literal(int32_t(0))));
+    }
+  }
+
+  // We can combine `and` operations, e.g.
+  //   (x == 0) & (y == 0)   ==>    (x | y) == 0
+  Expression* combineAnd(Binary* curr) {
+    assert(curr->op == AndInt32);
+
+    using namespace Abstract;
+    using namespace Match;
+
+    {
+      // (i32(x) == 0) & (i32(y) == 0)   ==>   i32(x | y) == 0
+      // (i64(x) == 0) & (i64(y) == 0)   ==>   i64(x | y) == 0
+      Expression *x, *y;
+      if (matches(curr->left, unary(EqZ, any(&x))) &&
+          matches(curr->right, unary(EqZ, any(&y))) && x->type == y->type) {
+        auto* inner = curr->left->cast<Unary>();
+        inner->value =
+          Builder(*getModule()).makeBinary(getBinary(x->type, Or), x, y);
+        return inner;
+      }
+    }
+    {
+      // Binary operations that inverse a bitwise AND can be
+      // reordered. If F(x) = binary(x, c), and F(x) preserves AND,
+      // that is,
+      //
+      //   F(x) & F(y) == F(x | y)
+      //
+      // Then also
+      //
+      //   binary(x, c) & binary(y, c)  =>  binary(x | y, c)
+      Binary *bx, *by;
+      Expression *x, *y;
+      Const *cx, *cy;
+      if (matches(curr->left, binary(&bx, any(&x), ival(&cx))) &&
+          matches(curr->right, binary(&by, any(&y), ival(&cy))) &&
+          bx->op == by->op && x->type == y->type && cx->value == cy->value &&
+          inversesAnd(bx)) {
+        by->op = getBinary(x->type, Or);
+        by->type = x->type;
+        by->left = x;
+        by->right = y;
+        bx->left = by;
+        return bx;
+      }
+    }
+    {
+      // Binary operations that preserve a bitwise AND can be
+      // reordered. If F(x) = binary(x, c), and F(x) preserves AND,
+      // that is,
+      //
+      //   F(x) & F(y) == F(x & y)
+      //
+      // Then also
+      //
+      //   binary(x, c) & binary(y, c)  =>  binary(x & y, c)
+      Binary *bx, *by;
+      Expression *x, *y;
+      Const *cx, *cy;
+      if (matches(curr->left, binary(&bx, any(&x), ival(&cx))) &&
+          matches(curr->right, binary(&by, any(&y), ival(&cy))) &&
+          bx->op == by->op && x->type == y->type && cx->value == cy->value &&
+          preserveAnd(bx)) {
+        by->op = getBinary(x->type, And);
+        by->type = x->type;
+        by->left = x;
+        by->right = y;
+        bx->left = by;
+        return bx;
+      }
+    }
+    return nullptr;
+  }
+
+  // We can combine `or` operations, e.g.
+  //   (x > y)  | (x == y)    ==>    x >= y
+  //   (x != 0) | (y != 0)    ==>    (x | y) != 0
+  Expression* combineOr(Binary* curr) {
+    assert(curr->op == OrInt32);
+
+    using namespace Abstract;
+    using namespace Match;
+
+    if (auto* left = curr->left->dynCast<Binary>()) {
+      if (auto* right = curr->right->dynCast<Binary>()) {
+        if (left->op != right->op &&
+            ExpressionAnalyzer::equal(left->left, right->left) &&
+            ExpressionAnalyzer::equal(left->right, right->right) &&
+            !effects(left->left).hasSideEffects() &&
+            !effects(left->right).hasSideEffects()) {
+          switch (left->op) {
+            //   (x > y) | (x == y)    ==>    x >= y
+            case EqInt32: {
+              if (right->op == GtSInt32) {
+                left->op = GeSInt32;
+                return left;
+              }
+              break;
+            }
+            default: {
+            }
+          }
+        }
+      }
+    }
+    {
+      // Binary operations that inverses a bitwise OR to AND.
+      // If F(x) = binary(x, c), and F(x) inverses OR,
+      // that is,
+      //
+      //   F(x) | F(y) == F(x & y)
+      //
+      // Then also
+      //
+      //   binary(x, c) | binary(y, c)  =>  binary(x & y, c)
+      Binary *bx, *by;
+      Expression *x, *y;
+      Const *cx, *cy;
+      if (matches(curr->left, binary(&bx, any(&x), ival(&cx))) &&
+          matches(curr->right, binary(&by, any(&y), ival(&cy))) &&
+          bx->op == by->op && x->type == y->type && cx->value == cy->value &&
+          inversesOr(bx)) {
+        by->op = getBinary(x->type, And);
+        by->type = x->type;
+        by->left = x;
+        by->right = y;
+        bx->left = by;
+        return bx;
+      }
+    }
+    {
+      // Binary operations that preserve a bitwise OR can be
+      // reordered. If F(x) = binary(x, c), and F(x) preserves OR,
+      // that is,
+      //
+      //   F(x) | F(y) == F(x | y)
+      //
+      // Then also
+      //
+      //   binary(x, c) | binary(y, c)  =>  binary(x | y, c)
+      Binary *bx, *by;
+      Expression *x, *y;
+      Const *cx, *cy;
+      if (matches(curr->left, binary(&bx, any(&x), ival(&cx))) &&
+          matches(curr->right, binary(&by, any(&y), ival(&cy))) &&
+          bx->op == by->op && x->type == y->type && cx->value == cy->value &&
+          preserveOr(bx)) {
+        by->op = getBinary(x->type, Or);
+        by->type = x->type;
+        by->left = x;
+        by->right = y;
+        bx->left = by;
+        return bx;
+      }
+    }
+    return nullptr;
+  }
+
+  // Check whether an operation preserves the Or operation through it, that is,
+  //
+  //   F(x | y) = F(x) | F(y)
+  //
+  // Mathematically that means F is homomorphic with respect to the | operation.
+  //
+  // F(x) is seen as taking a single parameter of its first child. That is, the
+  // first child is |x|, and the rest is constant. For example, if we are given
+  // a binary with operation != and the right child is a constant 0, then
+  // F(x) = (x != 0).
+  bool preserveOr(Binary* curr) {
+    using namespace Abstract;
+    using namespace Match;
+
+    // (x != 0) | (y != 0)    ==>    (x | y) != 0
+    // This effectively checks if any bits are set in x or y.
+    if (matches(curr, binary(Ne, any(), ival(0)))) {
+      return true;
+    }
+    // (x < 0) | (y < 0)    ==>    (x | y) < 0
+    // This effectively checks if x or y have the sign bit set.
+    if (matches(curr, binary(LtS, any(), ival(0)))) {
+      return true;
+    }
+    return false;
+  }
+
+  // Check whether an operation inverses the Or operation to And, that is,
+  //
+  //   F(x | y) = F(x) & F(y)
+  //
+  // Mathematically that means F is homomorphic with respect to the | operation.
+  //
+  // F(x) is seen as taking a single parameter of its first child. That is, the
+  // first child is |x|, and the rest is constant. For example, if we are given
+  // a binary with operation != and the right child is a constant 0, then
+  // F(x) = (x != 0).
+  bool inversesOr(Binary* curr) {
+    using namespace Abstract;
+    using namespace Match;
+
+    // (x >= 0) | (y >= 0)   ==>   (x & y) >= 0
+    if (matches(curr, binary(GeS, any(), ival(0)))) {
+      return true;
+    }
+
+    // (x !=-1) | (y !=-1)   ==>   (x & y) !=-1
+    if (matches(curr, binary(Ne, any(), ival(-1)))) {
+      return true;
+    }
+
+    return false;
+  }
+
+  // Check whether an operation preserves the And operation through it, that is,
+  //
+  //   F(x & y) = F(x) & F(y)
+  //
+  // Mathematically that means F is homomorphic with respect to the & operation.
+  //
+  // F(x) is seen as taking a single parameter of its first child. That is, the
+  // first child is |x|, and the rest is constant. For example, if we are given
+  // a binary with operation != and the right child is a constant 0, then
+  // F(x) = (x != 0).
+  bool preserveAnd(Binary* curr) {
+    using namespace Abstract;
+    using namespace Match;
+
+    // (x < 0) & (y < 0)   ==>   (x & y) < 0
+    if (matches(curr, binary(LtS, any(), ival(0)))) {
+      return true;
+    }
+
+    // (x == -1) & (y == -1)   ==>   (x & y) == -1
+    if (matches(curr, binary(Eq, any(), ival(-1)))) {
+      return true;
+    }
+
+    return false;
+  }
+
+  // Check whether an operation inverses the And operation to Or, that is,
+  //
+  //   F(x & y) = F(x) | F(y)
+  //
+  // Mathematically that means F is homomorphic with respect to the & operation.
+  //
+  // F(x) is seen as taking a single parameter of its first child. That is, the
+  // first child is |x|, and the rest is constant. For example, if we are given
+  // a binary with operation != and the right child is a constant 0, then
+  // F(x) = (x != 0).
+  bool inversesAnd(Binary* curr) {
+    using namespace Abstract;
+    using namespace Match;
+
+    // (x >= 0) & (y >= 0)   ==>   (x | y) >= 0
+    if (matches(curr, binary(GeS, any(), ival(0)))) {
+      return true;
+    }
+
+    return false;
+  }
+
+  // fold constant factors into the offset
+  void optimizeMemoryAccess(Expression*& ptr, Address& offset, Name memory) {
+    // ptr may be a const, but it isn't worth folding that in (we still have a
+    // const); in fact, it's better to do the opposite for gzip purposes as well
+    // as for readability.
+    auto* last = ptr->dynCast<Const>();
+    if (last) {
+      uint64_t value64 = last->value.getInteger();
+      uint64_t offset64 = offset;
+      auto mem = getModule()->getMemory(memory);
+      if (mem->is64()) {
+        last->value = Literal(int64_t(value64 + offset64));
+        offset = 0;
+      } else {
+        // don't do this if it would wrap the pointer
+        if (value64 <= uint64_t(std::numeric_limits<int32_t>::max()) &&
+            offset64 <= uint64_t(std::numeric_limits<int32_t>::max()) &&
+            value64 + offset64 <=
+              uint64_t(std::numeric_limits<int32_t>::max())) {
+          last->value = Literal(int32_t(value64 + offset64));
+          offset = 0;
+        }
+      }
+    }
+  }
+
+  // Optimize a multiply by a power of two on the right, which
+  // can be a shift.
+  // This doesn't shrink code size, and VMs likely optimize it anyhow,
+  // but it's still worth doing since
+  //  * Often shifts are more common than muls.
+  //  * The constant is smaller.
+  template<typename T> Expression* optimizePowerOf2Mul(Binary* binary, T c) {
+    static_assert(std::is_same<T, uint32_t>::value ||
+                    std::is_same<T, uint64_t>::value,
+                  "type mismatch");
+    auto shifts = Bits::countTrailingZeroes(c);
+    binary->op = std::is_same<T, uint32_t>::value ? ShlInt32 : ShlInt64;
+    binary->right->cast<Const>()->value = Literal(static_cast<T>(shifts));
+    return binary;
+  }
+
+  // Optimize an unsigned divide / remainder by a power of two on the right
+  // This doesn't shrink code size, and VMs likely optimize it anyhow,
+  // but it's still worth doing since
+  //  * Usually ands are more common than urems.
+  //  * The constant is slightly smaller.
+  template<typename T> Expression* optimizePowerOf2URem(Binary* binary, T c) {
+    static_assert(std::is_same<T, uint32_t>::value ||
+                    std::is_same<T, uint64_t>::value,
+                  "type mismatch");
+    binary->op = std::is_same<T, uint32_t>::value ? AndInt32 : AndInt64;
+    binary->right->cast<Const>()->value = Literal(c - 1);
+    return binary;
+  }
+
+  template<typename T> Expression* optimizePowerOf2UDiv(Binary* binary, T c) {
+    static_assert(std::is_same<T, uint32_t>::value ||
+                    std::is_same<T, uint64_t>::value,
+                  "type mismatch");
+    auto shifts = Bits::countTrailingZeroes(c);
+    binary->op
