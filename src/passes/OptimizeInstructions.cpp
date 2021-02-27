@@ -2736,4 +2736,326 @@ private:
       if (matches(curr, select(any(&ifTrue), any(&ifFalse), any(&c))) &&
           ExpressionAnalyzer::equal(ifTrue, ifFalse)) {
         auto value = effects(ifTrue);
-        if (value.hasSideEff
+        if (value.hasSideEffects()) {
+          // At best we don't need the condition, but need to execute the
+          // value twice. a block is larger than a select by 2 bytes, and we
+          // must drop one value, so 3, while we save the condition, so it's
+          // not clear this is worth it, TODO
+        } else {
+          // value has no side effects
+          auto condition = effects(c);
+          if (!condition.hasSideEffects()) {
+            return ifTrue;
+          } else {
+            // The condition is last, so we need a new local, and it may be a
+            // bad idea to use a block like we do for an if. Do it only if we
+            // can reorder
+            if (!condition.invalidates(value)) {
+              return builder.makeSequence(builder.makeDrop(c), ifTrue);
+            }
+          }
+        }
+      }
+    }
+    return nullptr;
+  }
+
+  // find added constants in an expression tree, including multiplied/shifted,
+  // and combine them note that we ignore division/shift-right, as rounding
+  // makes this nonlinear, so not a valid opt
+  Expression* optimizeAddedConstants(Binary* binary) {
+    assert(binary->type.isInteger());
+
+    uint64_t constant = 0;
+    std::vector<Const*> constants;
+
+    struct SeekState {
+      Expression* curr;
+      uint64_t mul;
+      SeekState(Expression* curr, uint64_t mul) : curr(curr), mul(mul) {}
+    };
+    std::vector<SeekState> seekStack;
+    seekStack.emplace_back(binary, 1);
+    while (!seekStack.empty()) {
+      auto state = seekStack.back();
+      seekStack.pop_back();
+      auto curr = state.curr;
+      auto mul = state.mul;
+      if (auto* c = curr->dynCast<Const>()) {
+        uint64_t value = c->value.getInteger();
+        if (value != 0ULL) {
+          constant += value * mul;
+          constants.push_back(c);
+        }
+        continue;
+      } else if (auto* binary = curr->dynCast<Binary>()) {
+        if (binary->op == Abstract::getBinary(binary->type, Abstract::Add)) {
+          seekStack.emplace_back(binary->right, mul);
+          seekStack.emplace_back(binary->left, mul);
+          continue;
+        } else if (binary->op ==
+                   Abstract::getBinary(binary->type, Abstract::Sub)) {
+          // if the left is a zero, ignore it, it's how we negate ints
+          auto* left = binary->left->dynCast<Const>();
+          seekStack.emplace_back(binary->right, -mul);
+          if (!left || !left->value.isZero()) {
+            seekStack.emplace_back(binary->left, mul);
+          }
+          continue;
+        } else if (binary->op ==
+                   Abstract::getBinary(binary->type, Abstract::Shl)) {
+          if (auto* c = binary->right->dynCast<Const>()) {
+            seekStack.emplace_back(binary->left,
+                                   mul << Bits::getEffectiveShifts(c));
+            continue;
+          }
+        } else if (binary->op ==
+                   Abstract::getBinary(binary->type, Abstract::Mul)) {
+          if (auto* c = binary->left->dynCast<Const>()) {
+            seekStack.emplace_back(binary->right,
+                                   mul * (uint64_t)c->value.getInteger());
+            continue;
+          } else if (auto* c = binary->right->dynCast<Const>()) {
+            seekStack.emplace_back(binary->left,
+                                   mul * (uint64_t)c->value.getInteger());
+            continue;
+          }
+        }
+      }
+    };
+    // find all factors
+    if (constants.size() <= 1) {
+      // nothing much to do, except for the trivial case of adding/subbing a
+      // zero
+      if (auto* c = binary->right->dynCast<Const>()) {
+        if (c->value.isZero()) {
+          return binary->left;
+        }
+      }
+      return nullptr;
+    }
+    // wipe out all constants, we'll replace with a single added one
+    for (auto* c : constants) {
+      c->value = Literal::makeZero(c->type);
+    }
+    // remove added/subbed zeros
+    struct ZeroRemover : public PostWalker<ZeroRemover> {
+      // TODO: we could save the binarys and costs we drop, and reuse them later
+
+      PassOptions& passOptions;
+
+      ZeroRemover(PassOptions& passOptions) : passOptions(passOptions) {}
+
+      void visitBinary(Binary* curr) {
+        if (!curr->type.isInteger()) {
+          return;
+        }
+        auto type = curr->type;
+        auto* left = curr->left->dynCast<Const>();
+        auto* right = curr->right->dynCast<Const>();
+        // Canonicalization prefers an add instead of a subtract wherever
+        // possible. That prevents a subtracted constant on the right,
+        // as it would be added. And for a zero on the left, it can't be
+        // removed (it is how we negate ints).
+        if (curr->op == Abstract::getBinary(type, Abstract::Add)) {
+          if (left && left->value.isZero()) {
+            replaceCurrent(curr->right);
+            return;
+          }
+          if (right && right->value.isZero()) {
+            replaceCurrent(curr->left);
+            return;
+          }
+        } else if (curr->op == Abstract::getBinary(type, Abstract::Shl)) {
+          // shifting a 0 is a 0, or anything by 0 has no effect, all unless the
+          // shift has side effects
+          if (((left && left->value.isZero()) ||
+               (right && Bits::getEffectiveShifts(right) == 0)) &&
+              !EffectAnalyzer(passOptions, *getModule(), curr->right)
+                 .hasSideEffects()) {
+            replaceCurrent(curr->left);
+            return;
+          }
+        } else if (curr->op == Abstract::getBinary(type, Abstract::Mul)) {
+          // multiplying by zero is a zero, unless the other side has side
+          // effects
+          if (left && left->value.isZero() &&
+              !EffectAnalyzer(passOptions, *getModule(), curr->right)
+                 .hasSideEffects()) {
+            replaceCurrent(left);
+            return;
+          }
+          if (right && right->value.isZero() &&
+              !EffectAnalyzer(passOptions, *getModule(), curr->left)
+                 .hasSideEffects()) {
+            replaceCurrent(right);
+            return;
+          }
+        }
+      }
+    };
+    Expression* walked = binary;
+    ZeroRemover remover(getPassOptions());
+    remover.setModule(getModule());
+    remover.walk(walked);
+    if (constant == 0ULL) {
+      return walked; // nothing more to do
+    }
+    if (auto* c = walked->dynCast<Const>()) {
+      assert(c->value.isZero());
+      // Accumulated 64-bit constant value in 32-bit context will be wrapped
+      // during downcasting. So it's valid unification for 32-bit and 64-bit
+      // values.
+      c->value = Literal::makeFromInt64(constant, c->type);
+      return c;
+    }
+    Builder builder(*getModule());
+    return builder.makeBinary(
+      Abstract::getBinary(walked->type, Abstract::Add),
+      walked,
+      builder.makeConst(Literal::makeFromInt64(constant, walked->type)));
+  }
+
+  // Given an i64.wrap operation, see if we can remove it. If all the things
+  // being operated on behave the same with or without wrapping, then we don't
+  // need to go to 64 bits at all, e.g.:
+  //
+  //  int32_t(int64_t(x))               => x                 (extend, then wrap)
+  //  int32_t(int64_t(x) + int64_t(10)) => x + int32_t(10)            (also add)
+  //
+  Expression* optimizeWrappedResult(Unary* wrap) {
+    assert(wrap->op == WrapInt64);
+
+    // Core processing logic. This goes through the children, in one of two
+    // modes:
+    //  * Scan: Find if there is anything we can't handle. Sets |canOptimize|
+    //    with what it finds.
+    //  * Optimize: Given we can handle everything, update things.
+    enum Mode { Scan, Optimize };
+    bool canOptimize = true;
+    auto processChildren = [&](Mode mode) {
+      // Use a simple stack as we go through the children. We use ** as we need
+      // to replace children for some optimizations.
+      SmallVector<Expression**, 2> stack;
+      stack.emplace_back(&wrap->value);
+
+      while (!stack.empty() && canOptimize) {
+        auto* currp = stack.back();
+        stack.pop_back();
+        auto* curr = *currp;
+        if (curr->type == Type::unreachable) {
+          // Leave unreachability for other passes.
+          canOptimize = false;
+          return;
+        } else if (auto* c = curr->dynCast<Const>()) {
+          // A i64 const can be handled by just turning it into an i32.
+          if (mode == Optimize) {
+            c->value = Literal(int32_t(c->value.getInteger()));
+            c->type = Type::i32;
+          }
+        } else if (auto* unary = curr->dynCast<Unary>()) {
+          switch (unary->op) {
+            case ExtendSInt32:
+            case ExtendUInt32: {
+              // Note that there is nothing to push to the stack here: the child
+              // is 32-bit already, so we can stop looking. We just need to skip
+              // the extend operation.
+              if (mode == Optimize) {
+                *currp = unary->value;
+              }
+              break;
+            }
+            default: {
+              // TODO: handle more cases here and below,
+              //       https://github.com/WebAssembly/binaryen/issues/5004
+              canOptimize = false;
+              return;
+            }
+          }
+        } else if (auto* binary = curr->dynCast<Binary>()) {
+          // Turn the binary into a 32-bit one, if we can.
+          switch (binary->op) {
+            case AddInt64:
+            case SubInt64:
+            case MulInt64: {
+              // We can optimize these.
+              break;
+            }
+            default: {
+              canOptimize = false;
+              return;
+            }
+          }
+          if (mode == Optimize) {
+            switch (binary->op) {
+              case AddInt64: {
+                binary->op = AddInt32;
+                break;
+              }
+              case SubInt64: {
+                binary->op = SubInt32;
+                break;
+              }
+              case MulInt64: {
+                binary->op = MulInt32;
+                break;
+              }
+              default: {
+                WASM_UNREACHABLE("bad op");
+              }
+            }
+            // All things we can optimize change the type to i32.
+            binary->type = Type::i32;
+          }
+          stack.push_back(&binary->left);
+          stack.push_back(&binary->right);
+        } else {
+          // Anything else makes us give up.
+          canOptimize = false;
+          return;
+        }
+      }
+    };
+
+    processChildren(Scan);
+    if (!canOptimize) {
+      return nullptr;
+    }
+
+    // Optimize, and return the optimized results (in which we no longer need
+    // the wrap operation itself).
+    processChildren(Optimize);
+    return wrap->value;
+  }
+
+  //   expensive1 | expensive2 can be turned into expensive1 ? 1 : expensive2,
+  //   and expensive | cheap     can be turned into cheap     ? 1 : expensive,
+  // so that we can avoid one expensive computation, if it has no side effects.
+  Expression* conditionalizeExpensiveOnBitwise(Binary* binary) {
+    // this operation can increase code size, so don't always do it
+    auto& options = getPassRunner()->options;
+    if (options.optimizeLevel < 2 || options.shrinkLevel > 0) {
+      return nullptr;
+    }
+    const auto MIN_COST = 7;
+    assert(binary->op == AndInt32 || binary->op == OrInt32);
+    if (binary->right->is<Const>()) {
+      return nullptr; // trivial
+    }
+    // bitwise logical operator on two non-numerical values, check if they are
+    // boolean
+    auto* left = binary->left;
+    auto* right = binary->right;
+    if (!Properties::emitsBoolean(left) || !Properties::emitsBoolean(right)) {
+      return nullptr;
+    }
+    auto leftEffects = effects(left);
+    auto rightEffects = effects(right);
+    auto leftHasSideEffects = leftEffects.hasSideEffects();
+    auto rightHasSideEffects = rightEffects.hasSideEffects();
+    if (leftHasSideEffects && rightHasSideEffects) {
+      return nullptr; // both must execute
+    }
+    // canonicalize with side effects, if any, happening on the left
+    if (rightHasSideEffects) {
+      if (CostAnalyzer(left).cos
