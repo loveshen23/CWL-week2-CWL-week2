@@ -3731,3 +3731,334 @@ private:
     }
     {
       // ~(1 << x) aka (1 << x) ^ -1  ==>  rotl(-2, x)
+      Expression* x;
+      // Note that we avoid this in JS mode, as emitting a rotation would
+      // require lowering that rotation for JS in another cycle of work.
+      if (matches(curr, binary(Xor, binary(Shl, ival(1), any(&x)), ival(-1))) &&
+          !getPassOptions().targetJS) {
+        curr->op = Abstract::getBinary(type, RotL);
+        right->value = Literal::makeFromInt32(-2, type);
+        curr->left = right;
+        curr->right = x;
+        return curr;
+      }
+    }
+    {
+      // x * 2.0  ==>  x + x
+      // but we apply this only for simple expressions like
+      // local.get and global.get for avoid using extra local
+      // variable.
+      Expression* x;
+      if (matches(curr, binary(Mul, any(&x), fval(2.0))) &&
+          (x->is<LocalGet>() || x->is<GlobalGet>())) {
+        curr->op = Abstract::getBinary(type, Abstract::Add);
+        curr->right = ExpressionManipulator::copy(x, *getModule());
+        return curr;
+      }
+    }
+    {
+      // x + (-0.0)   ==>   x
+      double value;
+      if (fastMath && matches(curr, binary(Add, any(), fval(&value))) &&
+          value == 0.0 && std::signbit(value)) {
+        return curr->left;
+      }
+    }
+    // -x * fval(C)   ==>   x * -C
+    // -x / fval(C)   ==>   x / -C
+    if (matches(curr, binary(Mul, unary(Neg, any(&left)), fval())) ||
+        matches(curr, binary(DivS, unary(Neg, any(&left)), fval()))) {
+      right->value = right->value.neg();
+      curr->left = left;
+      return curr;
+    }
+    // x * -1.0   ==>
+    //       -x,  if fastMath == true
+    // -0.0 - x,  if fastMath == false
+    if (matches(curr, binary(Mul, any(), fval(-1.0)))) {
+      if (fastMath) {
+        return builder.makeUnary(Abstract::getUnary(type, Neg), left);
+      }
+      // x * -1.0   ==>  -0.0 - x
+      curr->op = Abstract::getBinary(type, Sub);
+      right->value = Literal::makeZero(type).neg();
+      std::swap(curr->left, curr->right);
+      return curr;
+    }
+    if (matches(curr, binary(Mul, any(&left), constant(1))) ||
+        matches(curr, binary(DivS, any(&left), constant(1))) ||
+        matches(curr, binary(DivU, any(&left), constant(1)))) {
+      if (curr->type.isInteger() || fastMath) {
+        return left;
+      }
+    }
+    {
+      //   x !=  NaN   ==>   1
+      //   x <=> NaN   ==>   0
+      //   x op  NaN'  ==>   NaN',  iff `op` != `copysign` and `x` != C
+      Const* c;
+      Binary* bin;
+      Expression* x;
+      if (matches(curr, binary(&bin, pure(&x), fval(&c))) &&
+          std::isnan(c->value.getFloat()) &&
+          bin->op != getBinary(x->type, CopySign)) {
+        if (bin->isRelational()) {
+          // reuse "c" (nan) constant
+          c->type = Type::i32;
+          if (bin->op == getBinary(x->type, Ne)) {
+            // x != NaN  ==>  1
+            c->value = Literal::makeOne(Type::i32);
+          } else {
+            // x == NaN,
+            // x >  NaN,
+            // x <= NaN
+            // x .. NaN  ==>  0
+            c->value = Literal::makeZero(Type::i32);
+          }
+          return c;
+        }
+        // propagate NaN of RHS but canonicalize it
+        c->value = Literal::standardizeNaN(c->value);
+        return c;
+      }
+    }
+    return nullptr;
+  }
+
+  // Returns true if the given binary operation can overflow. If we can't be
+  // sure either way, we return true, assuming the worst.
+  //
+  // We can check for an unsigned overflow (more than the max number of bits) or
+  // a signed one (where even reaching the sign bit is an overflow, as that
+  // would turn us from positive to negative).
+  bool canOverflow(Binary* binary, bool signed_) {
+    using namespace Abstract;
+
+    // If we know nothing about a limit on the amount of bits on either side,
+    // give up.
+    auto typeMaxBits = getBitsForType(binary->type);
+    auto leftMaxBits = Bits::getMaxBits(binary->left, this);
+    auto rightMaxBits = Bits::getMaxBits(binary->right, this);
+    if (std::max(leftMaxBits, rightMaxBits) == typeMaxBits) {
+      return true;
+    }
+
+    if (binary->op == getBinary(binary->type, Add)) {
+      if (!signed_) {
+        // Proof this cannot overflow:
+        //
+        // left + right <  2^leftMaxBits + 2^rightMaxBits          (1)
+        //              <= 2^(typeMaxBits-1) + 2^(typeMaxBits-1)   (2)
+        //              =  2^typeMaxBits                           (3)
+        //
+        // (1) By the definition of the max bits (e.g. an int32 has 32 max bits,
+        //     and its max value is 2^32 - 1, which is < 2^32).
+        // (2) By the above checks and early returns.
+        // (3) 2^x + 2^x === 2*2^x === 2^(x+1)
+        return false;
+      }
+
+      // For a signed comparison, check that the total cannot reach the sign
+      // bit.
+      return leftMaxBits + rightMaxBits >= typeMaxBits;
+    }
+
+    // TODO subtraction etc.
+    return true;
+  }
+
+  // Folding two expressions into one with similar operations and
+  // constants on RHSs
+  Expression* optimizeDoubletonWithConstantOnRight(Binary* curr) {
+    using namespace Match;
+    using namespace Abstract;
+    {
+      Binary* inner;
+      Const *c1, *c2 = curr->right->cast<Const>();
+      if (matches(curr->left, binary(&inner, any(), ival(&c1))) &&
+          inner->op == curr->op) {
+        Type type = inner->type;
+        BinaryOp op = inner->op;
+        // (x & C1) & C2   =>   x & (C1 & C2)
+        if (op == getBinary(type, And)) {
+          c1->value = c1->value.and_(c2->value);
+          return inner;
+        }
+        // (x | C1) | C2   =>   x | (C1 | C2)
+        if (op == getBinary(type, Or)) {
+          c1->value = c1->value.or_(c2->value);
+          return inner;
+        }
+        // (x ^ C1) ^ C2   =>   x ^ (C1 ^ C2)
+        if (op == getBinary(type, Xor)) {
+          c1->value = c1->value.xor_(c2->value);
+          return inner;
+        }
+        // (x * C1) * C2   =>   x * (C1 * C2)
+        if (op == getBinary(type, Mul)) {
+          c1->value = c1->value.mul(c2->value);
+          return inner;
+        }
+        // TODO:
+        // handle signed / unsigned divisions. They are more complex
+
+        // (x <<>> C1) <<>> C2   =>   x <<>> (C1 + C2)
+        if (hasAnyShift(op)) {
+          // shifts only use an effective amount from the constant, so
+          // adding must be done carefully
+          auto total =
+            Bits::getEffectiveShifts(c1) + Bits::getEffectiveShifts(c2);
+          auto effectiveTotal = Bits::getEffectiveShifts(total, c1->type);
+          if (total == effectiveTotal) {
+            // no overflow, we can do this
+            c1->value = Literal::makeFromInt32(total, c1->type);
+            return inner;
+          } else {
+            // overflow. Handle different scenarious
+            if (hasAnyRotateShift(op)) {
+              // overflow always accepted in rotation shifts
+              c1->value = Literal::makeFromInt32(effectiveTotal, c1->type);
+              return inner;
+            }
+            // handle overflows for general shifts
+            //   x << C1 << C2    =>   0 or { drop(x), 0 }
+            //   x >>> C1 >>> C2  =>   0 or { drop(x), 0 }
+            // iff `C1 + C2` -> overflows
+            if ((op == getBinary(type, Shl) || op == getBinary(type, ShrU))) {
+              auto* x = inner->left;
+              c1->value = Literal::makeZero(c1->type);
+              if (!effects(x).hasSideEffects()) {
+                //  =>  0
+                return c1;
+              } else {
+                //  =>  { drop(x), 0 }
+                Builder builder(*getModule());
+                return builder.makeBlock({builder.makeDrop(x), c1});
+              }
+            }
+            //   i32(x) >> C1 >> C2   =>   x >> 31
+            //   i64(x) >> C1 >> C2   =>   x >> 63
+            // iff `C1 + C2` -> overflows
+            if (op == getBinary(type, ShrS)) {
+              c1->value = Literal::makeFromInt32(c1->type.getByteSize() * 8 - 1,
+                                                 c1->type);
+              return inner;
+            }
+          }
+        }
+      }
+    }
+    {
+      // (x << C1) * C2   =>   x * (C2 << C1)
+      Binary* inner;
+      Const *c1, *c2;
+      if (matches(
+            curr,
+            binary(Mul, binary(&inner, Shl, any(), ival(&c1)), ival(&c2)))) {
+        inner->op = getBinary(inner->type, Mul);
+        c1->value = c2->value.shl(c1->value);
+        return inner;
+      }
+    }
+    {
+      // (x * C1) << C2   =>   x * (C1 << C2)
+      Binary* inner;
+      Const *c1, *c2;
+      if (matches(
+            curr,
+            binary(Shl, binary(&inner, Mul, any(), ival(&c1)), ival(&c2)))) {
+        c1->value = c1->value.shl(c2->value);
+        return inner;
+      }
+    }
+    {
+      // TODO: Add cancelation for some large constants when shrinkLevel > 0
+      // in FinalOptimizer.
+
+      // (x >> C)  << C   =>   x & -(1 << C)
+      // (x >>> C) << C   =>   x & -(1 << C)
+      Binary* inner;
+      Const *c1, *c2;
+      if (matches(curr,
+                  binary(Shl, binary(&inner, any(), ival(&c1)), ival(&c2))) &&
+          (inner->op == getBinary(inner->type, ShrS) ||
+           inner->op == getBinary(inner->type, ShrU)) &&
+          Bits::getEffectiveShifts(c1) == Bits::getEffectiveShifts(c2)) {
+        auto type = c1->type;
+        if (type == Type::i32) {
+          c1->value = Literal::makeFromInt32(
+            -(1U << Bits::getEffectiveShifts(c1)), Type::i32);
+        } else {
+          c1->value = Literal::makeFromInt64(
+            -(1ULL << Bits::getEffectiveShifts(c1)), Type::i64);
+        }
+        inner->op = getBinary(type, And);
+        return inner;
+      }
+    }
+    {
+      // TODO: Add cancelation for some large constants when shrinkLevel > 0
+      // in FinalOptimizer.
+
+      // (x << C) >>> C   =>   x & (-1 >>> C)
+      // (x << C) >> C    =>   skip
+      Binary* inner;
+      Const *c1, *c2;
+      if (matches(
+            curr,
+            binary(ShrU, binary(&inner, Shl, any(), ival(&c1)), ival(&c2))) &&
+          Bits::getEffectiveShifts(c1) == Bits::getEffectiveShifts(c2)) {
+        auto type = c1->type;
+        if (type == Type::i32) {
+          c1->value = Literal::makeFromInt32(
+            -1U >> Bits::getEffectiveShifts(c1), Type::i32);
+        } else {
+          c1->value = Literal::makeFromInt64(
+            -1ULL >> Bits::getEffectiveShifts(c1), Type::i64);
+        }
+        inner->op = getBinary(type, And);
+        return inner;
+      }
+    }
+    {
+      // TODO: Add canonicalization rotr to rotl and remove these rules.
+      // rotl(rotr(x, C1), C2)   =>   rotr(x, C1 - C2)
+      // rotr(rotl(x, C1), C2)   =>   rotl(x, C1 - C2)
+      Binary* inner;
+      Const *c1, *c2;
+      if (matches(
+            curr,
+            binary(RotL, binary(&inner, RotR, any(), ival(&c1)), ival(&c2))) ||
+          matches(
+            curr,
+            binary(RotR, binary(&inner, RotL, any(), ival(&c1)), ival(&c2)))) {
+        auto diff = Bits::getEffectiveShifts(c1) - Bits::getEffectiveShifts(c2);
+        c1->value = Literal::makeFromInt32(
+          Bits::getEffectiveShifts(diff, c2->type), c2->type);
+        return inner;
+      }
+    }
+    return nullptr;
+  }
+
+  // optimize trivial math operations, given that the left side of a binary
+  // is a constant. since we canonicalize constants to the right for symmetrical
+  // operations, we only need to handle asymmetrical ones here
+  // TODO: templatize on type?
+  Expression* optimizeWithConstantOnLeft(Binary* curr) {
+    using namespace Match;
+    using namespace Abstract;
+
+    auto type = curr->left->type;
+    auto* left = curr->left->cast<Const>();
+    // 0 <<>> x   ==>   0
+    if (Abstract::hasAnyShift(curr->op) && left->value.isZero() &&
+        !effects(curr->right).hasSideEffects()) {
+      return curr->left;
+    }
+    // (signed)-1 >> x   ==>   -1
+    // rotl(-1, x)       ==>   -1
+    // rotr(-1, x)       ==>   -1
+    if ((curr->op == Abstract::getBinary(type, ShrS) ||
+         curr->op == Abstract::getBinary(type, RotL) ||
+   
