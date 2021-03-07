@@ -4325,4 +4325,307 @@ private:
             // (since x does not have enough bits for the sign bit to be set).
             if (rightIsNegative) {
               //   (signed, non-negative)x >  (negative)y   =>   1
-              //   (signed, non-nega
+              //   (signed, non-negative)x >= (negative)y   =>   1
+              if (curr->op == Abstract::getBinary(type, GtS) ||
+                  curr->op == Abstract::getBinary(type, GeS)) {
+                return getDroppedChildrenAndAppend(curr,
+                                                   Literal::makeOne(Type::i32));
+              }
+              //   (signed, non-negative)x <  (negative)y   =>   0
+              //   (signed, non-negative)x <= (negative)y   =>   0
+              if (curr->op == Abstract::getBinary(type, LtS) ||
+                  curr->op == Abstract::getBinary(type, LeS)) {
+                return getDroppedChildrenAndAppend(
+                  curr, Literal::makeZero(Type::i32));
+              }
+            }
+          }
+        }
+      }
+    }
+    return nullptr;
+  }
+
+  Expression* simplifyRoundingsAndConversions(Unary* curr) {
+    using namespace Abstract;
+    using namespace Match;
+
+    switch (curr->op) {
+      case TruncSFloat64ToInt32:
+      case TruncSatSFloat64ToInt32: {
+        // i32 -> f64 -> i32 rountripping optimization:
+        //   i32.trunc(_sat)_f64_s(f64.convert_i32_s(x))  ==>  x
+        Expression* x;
+        if (matches(curr->value, unary(ConvertSInt32ToFloat64, any(&x)))) {
+          return x;
+        }
+        break;
+      }
+      case TruncUFloat64ToInt32:
+      case TruncSatUFloat64ToInt32: {
+        // u32 -> f64 -> u32 rountripping optimization:
+        //   i32.trunc(_sat)_f64_u(f64.convert_i32_u(x))  ==>  x
+        Expression* x;
+        if (matches(curr->value, unary(ConvertUInt32ToFloat64, any(&x)))) {
+          return x;
+        }
+        break;
+      }
+      case CeilFloat32:
+      case CeilFloat64:
+      case FloorFloat32:
+      case FloorFloat64:
+      case TruncFloat32:
+      case TruncFloat64:
+      case NearestFloat32:
+      case NearestFloat64: {
+        // Rounding after integer to float conversion may be skipped
+        //   ceil(float(int(x)))     ==>  float(int(x))
+        //   floor(float(int(x)))    ==>  float(int(x))
+        //   trunc(float(int(x)))    ==>  float(int(x))
+        //   nearest(float(int(x)))  ==>  float(int(x))
+        Unary* inner;
+        if (matches(curr->value, unary(&inner, any()))) {
+          switch (inner->op) {
+            case ConvertSInt32ToFloat32:
+            case ConvertSInt32ToFloat64:
+            case ConvertUInt32ToFloat32:
+            case ConvertUInt32ToFloat64:
+            case ConvertSInt64ToFloat32:
+            case ConvertSInt64ToFloat64:
+            case ConvertUInt64ToFloat32:
+            case ConvertUInt64ToFloat64: {
+              return inner;
+            }
+            default: {
+            }
+          }
+        }
+        break;
+      }
+      default: {
+      }
+    }
+    return nullptr;
+  }
+
+  Expression* deduplicateUnary(Unary* unaryOuter) {
+    if (auto* unaryInner = unaryOuter->value->dynCast<Unary>()) {
+      if (unaryInner->op == unaryOuter->op) {
+        switch (unaryInner->op) {
+          case NegFloat32:
+          case NegFloat64: {
+            // neg(neg(x))  ==>   x
+            return unaryInner->value;
+          }
+          case AbsFloat32:
+          case CeilFloat32:
+          case FloorFloat32:
+          case TruncFloat32:
+          case NearestFloat32:
+          case AbsFloat64:
+          case CeilFloat64:
+          case FloorFloat64:
+          case TruncFloat64:
+          case NearestFloat64: {
+            // unaryOp(unaryOp(x))  ==>   unaryOp(x)
+            return unaryInner;
+          }
+          case ExtendS8Int32:
+          case ExtendS16Int32: {
+            assert(getModule()->features.hasSignExt());
+            return unaryInner;
+          }
+          case EqZInt32: {
+            // eqz(eqz(bool(x)))  ==>   bool(x)
+            if (Bits::getMaxBits(unaryInner->value, this) == 1) {
+              return unaryInner->value;
+            }
+            break;
+          }
+          default: {
+          }
+        }
+      }
+    }
+    return nullptr;
+  }
+
+  Expression* deduplicateBinary(Binary* outer) {
+    Type type = outer->type;
+    if (type.isInteger()) {
+      if (auto* inner = outer->right->dynCast<Binary>()) {
+        if (outer->op == inner->op) {
+          if (!EffectAnalyzer(getPassOptions(), *getModule(), outer->left)
+                 .hasSideEffects()) {
+            if (ExpressionAnalyzer::equal(inner->left, outer->left)) {
+              // x - (x - y)  ==>   y
+              // x ^ (x ^ y)  ==>   y
+              if (outer->op == Abstract::getBinary(type, Abstract::Sub) ||
+                  outer->op == Abstract::getBinary(type, Abstract::Xor)) {
+                return inner->right;
+              }
+              // x & (x & y)  ==>   x & y
+              // x | (x | y)  ==>   x | y
+              if (outer->op == Abstract::getBinary(type, Abstract::And) ||
+                  outer->op == Abstract::getBinary(type, Abstract::Or)) {
+                return inner;
+              }
+            }
+            if (ExpressionAnalyzer::equal(inner->right, outer->left) &&
+                canReorder(outer->left, inner->left)) {
+              // x ^ (y ^ x)  ==>   y
+              // (note that we need the check for reordering here because if
+              // e.g. y writes to a local that x reads, the second appearance
+              // of x would be different from the first)
+              if (outer->op == Abstract::getBinary(type, Abstract::Xor)) {
+                return inner->left;
+              }
+
+              // x & (y & x)  ==>   y & x
+              // x | (y | x)  ==>   y | x
+              // (here we need the check for reordering for the more obvious
+              // reason that previously x appeared before y, and now y appears
+              // first; or, if we tried to emit x [&|] y here, reversing the
+              // order, we'd be in the same situation as the previous comment)
+              if (outer->op == Abstract::getBinary(type, Abstract::And) ||
+                  outer->op == Abstract::getBinary(type, Abstract::Or)) {
+                return inner;
+              }
+            }
+          }
+        }
+      }
+      if (auto* inner = outer->left->dynCast<Binary>()) {
+        if (outer->op == inner->op) {
+          if (!EffectAnalyzer(getPassOptions(), *getModule(), outer->right)
+                 .hasSideEffects()) {
+            if (ExpressionAnalyzer::equal(inner->right, outer->right)) {
+              // (x ^ y) ^ y  ==>   x
+              if (outer->op == Abstract::getBinary(type, Abstract::Xor)) {
+                return inner->left;
+              }
+              // (x % y) % y  ==>   x % y
+              // (x & y) & y  ==>   x & y
+              // (x | y) | y  ==>   x | y
+              if (outer->op == Abstract::getBinary(type, Abstract::RemS) ||
+                  outer->op == Abstract::getBinary(type, Abstract::RemU) ||
+                  outer->op == Abstract::getBinary(type, Abstract::And) ||
+                  outer->op == Abstract::getBinary(type, Abstract::Or)) {
+                return inner;
+              }
+            }
+            // See comments in the parallel code earlier about ordering here.
+            if (ExpressionAnalyzer::equal(inner->left, outer->right) &&
+                canReorder(inner->left, inner->right)) {
+              // (x ^ y) ^ x  ==>   y
+              if (outer->op == Abstract::getBinary(type, Abstract::Xor)) {
+                return inner->right;
+              }
+              // (x & y) & x  ==>   x & y
+              // (x | y) | x  ==>   x | y
+              if (outer->op == Abstract::getBinary(type, Abstract::And) ||
+                  outer->op == Abstract::getBinary(type, Abstract::Or)) {
+                return inner;
+              }
+            }
+          }
+        }
+      }
+    }
+    return nullptr;
+  }
+
+  // given a relational binary with a const on both sides, combine the constants
+  // left is also a binary, and has a constant; right may be just a constant, in
+  // which case right is nullptr
+  Expression* combineRelationalConstants(Binary* binary,
+                                         Binary* left,
+                                         Const* leftConst,
+                                         Binary* right,
+                                         Const* rightConst) {
+    auto type = binary->right->type;
+    // we fold constants to the right
+    Literal extra = leftConst->value;
+    if (left->op == Abstract::getBinary(type, Abstract::Sub)) {
+      extra = extra.neg();
+    }
+    if (right && right->op == Abstract::getBinary(type, Abstract::Sub)) {
+      extra = extra.neg();
+    }
+    rightConst->value = rightConst->value.sub(extra);
+    binary->left = left->left;
+    return binary;
+  }
+
+  Expression* optimizeMemoryCopy(MemoryCopy* memCopy) {
+    auto& options = getPassOptions();
+
+    if (options.ignoreImplicitTraps || options.trapsNeverHappen) {
+      if (areConsecutiveInputsEqual(memCopy->dest, memCopy->source)) {
+        // memory.copy(x, x, sz)  ==>  {drop(x), drop(x), drop(sz)}
+        Builder builder(*getModule());
+        return builder.makeBlock({builder.makeDrop(memCopy->dest),
+                                  builder.makeDrop(memCopy->source),
+                                  builder.makeDrop(memCopy->size)});
+      }
+    }
+
+    // memory.copy(dst, src, C)  ==>  store(dst, load(src))
+    if (auto* csize = memCopy->size->dynCast<Const>()) {
+      auto bytes = csize->value.getInteger();
+      Builder builder(*getModule());
+
+      switch (bytes) {
+        case 0: {
+          if (options.ignoreImplicitTraps || options.trapsNeverHappen) {
+            // memory.copy(dst, src, 0)  ==>  {drop(dst), drop(src)}
+            return builder.makeBlock({builder.makeDrop(memCopy->dest),
+                                      builder.makeDrop(memCopy->source)});
+          }
+          break;
+        }
+        case 1:
+        case 2:
+        case 4: {
+          return builder.makeStore(bytes, // bytes
+                                   0,     // offset
+                                   1,     // align
+                                   memCopy->dest,
+                                   builder.makeLoad(bytes,
+                                                    false,
+                                                    0,
+                                                    1,
+                                                    memCopy->source,
+                                                    Type::i32,
+                                                    memCopy->sourceMemory),
+                                   Type::i32,
+                                   memCopy->destMemory);
+        }
+        case 8: {
+          return builder.makeStore(bytes, // bytes
+                                   0,     // offset
+                                   1,     // align
+                                   memCopy->dest,
+                                   builder.makeLoad(bytes,
+                                                    false,
+                                                    0,
+                                                    1,
+                                                    memCopy->source,
+                                                    Type::i64,
+                                                    memCopy->sourceMemory),
+                                   Type::i64,
+                                   memCopy->destMemory);
+        }
+        case 16: {
+          if (options.shrinkLevel == 0) {
+            // This adds an extra 2 bytes so apply it only for
+            // minimal shrink level
+            if (getModule()->features.hasSIMD()) {
+              return builder.makeStore(bytes, // bytes
+                                       0,     // offset
+                                       1,     // align
+                                       memCopy->dest,
+                                       builder.makeLoad(bytes,
+                                                        false,
+                              
