@@ -4628,4 +4628,429 @@ private:
                                        memCopy->dest,
                                        builder.makeLoad(bytes,
                                                         false,
-                              
+                                                        0,
+                                                        1,
+                                                        memCopy->source,
+                                                        Type::v128,
+                                                        memCopy->sourceMemory),
+                                       Type::v128,
+                                       memCopy->destMemory);
+            }
+          }
+          break;
+        }
+        default: {
+        }
+      }
+    }
+    return nullptr;
+  }
+
+  Expression* optimizeMemoryFill(MemoryFill* memFill) {
+    if (memFill->type == Type::unreachable) {
+      return nullptr;
+    }
+
+    if (!memFill->size->is<Const>()) {
+      return nullptr;
+    }
+
+    auto& options = getPassOptions();
+    Builder builder(*getModule());
+
+    auto* csize = memFill->size->cast<Const>();
+    auto bytes = csize->value.getInteger();
+
+    if (bytes == 0LL &&
+        (options.ignoreImplicitTraps || options.trapsNeverHappen)) {
+      // memory.fill(d, v, 0)  ==>  { drop(d), drop(v) }
+      return builder.makeBlock(
+        {builder.makeDrop(memFill->dest), builder.makeDrop(memFill->value)});
+    }
+
+    const uint32_t offset = 0, align = 1;
+
+    if (auto* cvalue = memFill->value->dynCast<Const>()) {
+      uint32_t value = cvalue->value.geti32() & 0xFF;
+      // memory.fill(d, C1, C2)  ==>
+      //   store(d, (C1 & 0xFF) * (-1U / max(bytes)))
+      switch (bytes) {
+        case 1: {
+          return builder.makeStore(1, // bytes
+                                   offset,
+                                   align,
+                                   memFill->dest,
+                                   builder.makeConst<uint32_t>(value),
+                                   Type::i32,
+                                   memFill->memory);
+        }
+        case 2: {
+          return builder.makeStore(2,
+                                   offset,
+                                   align,
+                                   memFill->dest,
+                                   builder.makeConst<uint32_t>(value * 0x0101U),
+                                   Type::i32,
+                                   memFill->memory);
+        }
+        case 4: {
+          // transform only when "value" or shrinkLevel equal to zero due to
+          // it could increase size by several bytes
+          if (value == 0 || options.shrinkLevel == 0) {
+            return builder.makeStore(
+              4,
+              offset,
+              align,
+              memFill->dest,
+              builder.makeConst<uint32_t>(value * 0x01010101U),
+              Type::i32,
+              memFill->memory);
+          }
+          break;
+        }
+        case 8: {
+          // transform only when "value" or shrinkLevel equal to zero due to
+          // it could increase size by several bytes
+          if (value == 0 || options.shrinkLevel == 0) {
+            return builder.makeStore(
+              8,
+              offset,
+              align,
+              memFill->dest,
+              builder.makeConst<uint64_t>(value * 0x0101010101010101ULL),
+              Type::i64,
+              memFill->memory);
+          }
+          break;
+        }
+        case 16: {
+          if (options.shrinkLevel == 0) {
+            if (getModule()->features.hasSIMD()) {
+              uint8_t values[16];
+              std::fill_n(values, 16, (uint8_t)value);
+              return builder.makeStore(16,
+                                       offset,
+                                       align,
+                                       memFill->dest,
+                                       builder.makeConst<uint8_t[16]>(values),
+                                       Type::v128,
+                                       memFill->memory);
+            } else {
+              // { i64.store(d, C', 0), i64.store(d, C', 8) }
+              auto destType = memFill->dest->type;
+              Index tempLocal = builder.addVar(getFunction(), destType);
+              return builder.makeBlock({
+                builder.makeStore(
+                  8,
+                  offset,
+                  align,
+                  builder.makeLocalTee(tempLocal, memFill->dest, destType),
+                  builder.makeConst<uint64_t>(value * 0x0101010101010101ULL),
+                  Type::i64,
+                  memFill->memory),
+                builder.makeStore(
+                  8,
+                  offset + 8,
+                  align,
+                  builder.makeLocalGet(tempLocal, destType),
+                  builder.makeConst<uint64_t>(value * 0x0101010101010101ULL),
+                  Type::i64,
+                  memFill->memory),
+              });
+            }
+          }
+          break;
+        }
+        default: {
+        }
+      }
+    }
+    // memory.fill(d, v, 1)  ==>  store8(d, v)
+    if (bytes == 1LL) {
+      return builder.makeStore(1,
+                               offset,
+                               align,
+                               memFill->dest,
+                               memFill->value,
+                               Type::i32,
+                               memFill->memory);
+    }
+
+    return nullptr;
+  }
+
+  // given a binary expression with equal children and no side effects in
+  // either, we can fold various things
+  Expression* optimizeBinaryWithEqualEffectlessChildren(Binary* binary) {
+    // TODO add: perhaps worth doing 2*x if x is quite large?
+    switch (binary->op) {
+      case SubInt32:
+      case XorInt32:
+      case SubInt64:
+      case XorInt64:
+        return LiteralUtils::makeZero(binary->left->type, *getModule());
+      case NeInt32:
+      case LtSInt32:
+      case LtUInt32:
+      case GtSInt32:
+      case GtUInt32:
+      case NeInt64:
+      case LtSInt64:
+      case LtUInt64:
+      case GtSInt64:
+      case GtUInt64:
+        return LiteralUtils::makeZero(Type::i32, *getModule());
+      case AndInt32:
+      case OrInt32:
+      case AndInt64:
+      case OrInt64:
+        return binary->left;
+      case EqInt32:
+      case LeSInt32:
+      case LeUInt32:
+      case GeSInt32:
+      case GeUInt32:
+      case EqInt64:
+      case LeSInt64:
+      case LeUInt64:
+      case GeSInt64:
+      case GeUInt64:
+        return LiteralUtils::makeFromInt32(1, Type::i32, *getModule());
+      default:
+        return nullptr;
+    }
+  }
+
+  // Invert (negate) the opcode, so that it has the exact negative meaning as it
+  // had before.
+  BinaryOp invertBinaryOp(BinaryOp op) {
+    switch (op) {
+      case EqInt32:
+        return NeInt32;
+      case NeInt32:
+        return EqInt32;
+      case LtSInt32:
+        return GeSInt32;
+      case LtUInt32:
+        return GeUInt32;
+      case LeSInt32:
+        return GtSInt32;
+      case LeUInt32:
+        return GtUInt32;
+      case GtSInt32:
+        return LeSInt32;
+      case GtUInt32:
+        return LeUInt32;
+      case GeSInt32:
+        return LtSInt32;
+      case GeUInt32:
+        return LtUInt32;
+
+      case EqInt64:
+        return NeInt64;
+      case NeInt64:
+        return EqInt64;
+      case LtSInt64:
+        return GeSInt64;
+      case LtUInt64:
+        return GeUInt64;
+      case LeSInt64:
+        return GtSInt64;
+      case LeUInt64:
+        return GtUInt64;
+      case GtSInt64:
+        return LeSInt64;
+      case GtUInt64:
+        return LeUInt64;
+      case GeSInt64:
+        return LtSInt64;
+      case GeUInt64:
+        return LtUInt64;
+
+      case EqFloat32:
+        return NeFloat32;
+      case NeFloat32:
+        return EqFloat32;
+
+      case EqFloat64:
+        return NeFloat64;
+      case NeFloat64:
+        return EqFloat64;
+
+      default:
+        return InvalidBinary;
+    }
+  }
+
+  // Change the opcode so it is correct after reversing the operands. That is,
+  // we had  X OP  Y  and we need OP' so that this is equivalent to that:
+  //         Y OP' X
+  BinaryOp reverseRelationalOp(BinaryOp op) {
+    switch (op) {
+      case EqInt32:
+        return EqInt32;
+      case NeInt32:
+        return NeInt32;
+      case LtSInt32:
+        return GtSInt32;
+      case LtUInt32:
+        return GtUInt32;
+      case LeSInt32:
+        return GeSInt32;
+      case LeUInt32:
+        return GeUInt32;
+      case GtSInt32:
+        return LtSInt32;
+      case GtUInt32:
+        return LtUInt32;
+      case GeSInt32:
+        return LeSInt32;
+      case GeUInt32:
+        return LeUInt32;
+
+      case EqInt64:
+        return EqInt64;
+      case NeInt64:
+        return NeInt64;
+      case LtSInt64:
+        return GtSInt64;
+      case LtUInt64:
+        return GtUInt64;
+      case LeSInt64:
+        return GeSInt64;
+      case LeUInt64:
+        return GeUInt64;
+      case GtSInt64:
+        return LtSInt64;
+      case GtUInt64:
+        return LtUInt64;
+      case GeSInt64:
+        return LeSInt64;
+      case GeUInt64:
+        return LeUInt64;
+
+      case EqFloat32:
+        return EqFloat32;
+      case NeFloat32:
+        return NeFloat32;
+      case LtFloat32:
+        return GtFloat32;
+      case LeFloat32:
+        return GeFloat32;
+      case GtFloat32:
+        return LtFloat32;
+      case GeFloat32:
+        return LeFloat32;
+
+      case EqFloat64:
+        return EqFloat64;
+      case NeFloat64:
+        return NeFloat64;
+      case LtFloat64:
+        return GtFloat64;
+      case LeFloat64:
+        return GeFloat64;
+      case GtFloat64:
+        return LtFloat64;
+      case GeFloat64:
+        return LeFloat64;
+
+      default:
+        return InvalidBinary;
+    }
+  }
+
+  BinaryOp makeUnsignedBinaryOp(BinaryOp op) {
+    switch (op) {
+      case DivSInt32:
+        return DivUInt32;
+      case RemSInt32:
+        return RemUInt32;
+      case ShrSInt32:
+        return ShrUInt32;
+      case LtSInt32:
+        return LtUInt32;
+      case LeSInt32:
+        return LeUInt32;
+      case GtSInt32:
+        return GtUInt32;
+      case GeSInt32:
+        return GeUInt32;
+
+      case DivSInt64:
+        return DivUInt64;
+      case RemSInt64:
+        return RemUInt64;
+      case ShrSInt64:
+        return ShrUInt64;
+      case LtSInt64:
+        return LtUInt64;
+      case LeSInt64:
+        return LeUInt64;
+      case GtSInt64:
+        return GtUInt64;
+      case GeSInt64:
+        return GeUInt64;
+
+      default:
+        return InvalidBinary;
+    }
+  }
+
+  bool shouldCanonicalize(Binary* binary) {
+    if ((binary->op == SubInt32 || binary->op == SubInt64) &&
+        binary->right->is<Const>() && !binary->left->is<Const>()) {
+      return true;
+    }
+    if (Properties::isSymmetric(binary) || binary->isRelational()) {
+      return true;
+    }
+    switch (binary->op) {
+      case SubFloat32:
+      case SubFloat64: {
+        // Should apply  x - C  ->  x + (-C)
+        return binary->right->is<Const>();
+      }
+      case AddFloat32:
+      case MulFloat32:
+      case AddFloat64:
+      case MulFloat64: {
+        // If the LHS is known to be non-NaN, the operands can commute.
+        // We don't care about the RHS because right now we only know if
+        // an expression is non-NaN if it is constant, but if the RHS is
+        // constant, then this expression is already canonicalized.
+        if (auto* c = binary->left->dynCast<Const>()) {
+          return !c->value.isNaN();
+        }
+        return false;
+      }
+      default:
+        return false;
+    }
+  }
+
+  // Optimize an if-else or a select, something with a condition and two
+  // arms with outputs.
+  template<typename T> void optimizeTernary(T* curr) {
+    using namespace Abstract;
+    using namespace Match;
+    Builder builder(*getModule());
+
+    // If one arm is an operation and the other is an appropriate constant, we
+    // can move the operation outside (where it may be further optimized), e.g.
+    //
+    //  (select
+    //    (i32.eqz (X))
+    //    (i32.const 0|1)
+    //    (Y)
+    //  )
+    // =>
+    //  (i32.eqz
+    //    (select
+    //      (X)
+    //      (i32.const 1|0)
+    //      (Y)
+    //    )
+    //  )
+    //
+    // Ignore unreachable code here; lea
