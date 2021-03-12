@@ -5053,4 +5053,178 @@ private:
     //    )
     //  )
     //
-    // Ignore unreachable code here; lea
+    // Ignore unreachable code here; leave that for DCE.
+    if (curr->type != Type::unreachable &&
+        curr->ifTrue->type != Type::unreachable &&
+        curr->ifFalse->type != Type::unreachable) {
+      Unary* un;
+      Const* c;
+      auto check = [&](Expression* a, Expression* b) {
+        return matches(b, bval(&c)) && matches(a, unary(&un, EqZ, any()));
+      };
+      if (check(curr->ifTrue, curr->ifFalse) ||
+          check(curr->ifFalse, curr->ifTrue)) {
+        // The new type of curr will be that of the value of the unary, as after
+        // we move the unary out, its value is curr's direct child.
+        auto newType = un->value->type;
+        auto updateArm = [&](Expression* arm) -> Expression* {
+          if (arm == un) {
+            // This is the arm that had the eqz, which we need to remove.
+            return un->value;
+          } else {
+            // This is the arm with the constant, which we need to flip.
+            // Note that we also need to set the type to match the other arm.
+            c->value =
+              Literal::makeFromInt32(1 - c->value.getInteger(), newType);
+            c->type = newType;
+            return c;
+          }
+        };
+        curr->ifTrue = updateArm(curr->ifTrue);
+        curr->ifFalse = updateArm(curr->ifFalse);
+        un->value = curr;
+        curr->finalize(newType);
+        return replaceCurrent(un);
+      }
+    }
+
+    {
+      // Identical code on both arms can be folded out, e.g.
+      //
+      //  (select
+      //    (i32.eqz (X))
+      //    (i32.eqz (Y))
+      //    (Z)
+      //  )
+      // =>
+      //  (i32.eqz
+      //    (select
+      //      (X)
+      //      (Y)
+      //      (Z)
+      //    )
+      //  )
+      //
+      // Continue doing this while we can, noting the chain of moved expressions
+      // as we go, then do a single replaceCurrent() at the end.
+      SmallVector<Expression*, 1> chain;
+      while (1) {
+        // Ignore control flow structures (which are handled in MergeBlocks).
+        if (!Properties::isControlFlowStructure(curr->ifTrue) &&
+            ExpressionAnalyzer::shallowEqual(curr->ifTrue, curr->ifFalse)) {
+          // TODO: consider the case with more than one child.
+          ChildIterator ifTrueChildren(curr->ifTrue);
+          if (ifTrueChildren.children.size() == 1) {
+            // ifTrue and ifFalse's children will become the direct children of
+            // curr, and so they must be compatible to allow for a proper new
+            // type after the transformation.
+            //
+            // At minimum an LUB is required, as shown here:
+            //
+            //  (if
+            //    (condition)
+            //    (drop (i32.const 1))
+            //    (drop (f64.const 2.0))
+            //  )
+            //
+            // However, that may not be enough, as with nominal types we can
+            // have things like this:
+            //
+            //  (if
+            //    (condition)
+            //    (struct.get $A 1 (..))
+            //    (struct.get $B 1 (..))
+            //  )
+            //
+            // It is possible that the LUB of $A and $B does not contain field
+            // "1". With structural types this specific problem is not possible,
+            // and it appears to be the case that with the GC MVP there is no
+            // instruction that poses a problem, but in principle it can happen
+            // there as well, if we add an instruction that returns the number
+            // of fields in a type, for example. For that reason, and to avoid
+            // a difference between structural and nominal typing here, disallow
+            // subtyping in both. (Note: In that example, the problem only
+            // happens because the type is not part of the struct.get - we infer
+            // it from the reference. That is why after hoisting the struct.get
+            // out, and computing a new type for the if that is now the child of
+            // the single struct.get, we get a struct.get of a supertype. So in
+            // principle we could fix this by modifying the IR as well, but the
+            // problem is more general, so avoid that.)
+            ChildIterator ifFalseChildren(curr->ifFalse);
+            auto* ifTrueChild = *ifTrueChildren.begin();
+            auto* ifFalseChild = *ifFalseChildren.begin();
+            bool validTypes = ifTrueChild->type == ifFalseChild->type;
+
+            // In addition, after we move code outside of curr then we need to
+            // not change unreachability - if we did, we'd need to propagate
+            // that further, and we leave such work to DCE and Vacuum anyhow.
+            // This can happen in something like this for example, where the
+            // outer type changes from i32 to unreachable if we move the
+            // returns outside:
+            //
+            //  (if (result i32)
+            //    (local.get $x)
+            //    (return
+            //      (local.get $y)
+            //    )
+            //    (return
+            //      (local.get $z)
+            //    )
+            //  )
+            assert(curr->ifTrue->type == curr->ifFalse->type);
+            auto newOuterType = curr->ifTrue->type;
+            if ((newOuterType == Type::unreachable) !=
+                (curr->type == Type::unreachable)) {
+              validTypes = false;
+            }
+
+            // If the expression we are about to move outside has side effects,
+            // then we cannot do so in general with a select: we'd be reducing
+            // the amount of the effects as well as moving them. For an if,
+            // the side effects execute once, so there is no problem.
+            // TODO: handle certain side effects when possible in select
+            bool validEffects = std::is_same<T, If>::value ||
+                                !ShallowEffectAnalyzer(
+                                   getPassOptions(), *getModule(), curr->ifTrue)
+                                   .hasSideEffects();
+
+            // In addition, check for specific limitations of select.
+            bool validChildren =
+              !std::is_same<T, Select>::value ||
+              Properties::canEmitSelectWithArms(ifTrueChild, ifFalseChild);
+
+            if (validTypes && validEffects && validChildren) {
+              // Replace ifTrue with its child.
+              curr->ifTrue = ifTrueChild;
+              // Relace ifFalse with its child, and reuse that node outside.
+              auto* reuse = curr->ifFalse;
+              curr->ifFalse = ifFalseChild;
+              // curr's type may have changed, if the instructions we moved out
+              // had different input types than output types.
+              curr->finalize();
+              // Point to curr from the code that is now outside of it.
+              *ChildIterator(reuse).begin() = curr;
+              if (!chain.empty()) {
+                // We've already moved things out, so chain them to there. That
+                // is, the end of the chain should now point to reuse (which
+                // in turn already points to curr).
+                *ChildIterator(chain.back()).begin() = reuse;
+              }
+              chain.push_back(reuse);
+              continue;
+            }
+          }
+        }
+        break;
+      }
+      if (!chain.empty()) {
+        // The beginning of the chain is the new top parent.
+        return replaceCurrent(chain[0]);
+      }
+    }
+  }
+};
+
+Pass* createOptimizeInstructionsPass() { return new OptimizeInstructions; }
+
+} // namespace wasm
