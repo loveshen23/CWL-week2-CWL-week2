@@ -487,4 +487,23 @@ class PoppifyPass : public Pass {
           WASM_UNREACHABLE("Unexpected tuple global initializer");
         }
         auto mutability =
-          global.muta
+          global.mutable_ ? Builder::Mutable : Builder::Immutable;
+        newGlobals.emplace_back(
+          builder.makeGlobal(getGlobalElem(module, global.name, i),
+                             global.type[i],
+                             init,
+                             mutability));
+      }
+      module->removeGlobal(global.name);
+    }
+    while (newGlobals.size()) {
+      module->addGlobal(std::move(newGlobals.back()));
+      newGlobals.pop_back();
+    }
+    module->updateMaps();
+  }
+};
+
+Pass* createPoppifyPass() { return new PoppifyPass; }
+
+} // namespace wasm
