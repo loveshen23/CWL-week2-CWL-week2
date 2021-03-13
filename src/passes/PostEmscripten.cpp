@@ -326,4 +326,20 @@ struct PostEmscripten : public Pass {
           }
           if (map[getModule()->getFunction(actualTarget)].canThrow) {
             return;
-      
+          }
+          // This invoke cannot throw! Make it a direct call.
+          curr->target = actualTarget;
+          for (Index i = 0; i < curr->operands.size() - 1; i++) {
+            curr->operands[i] = curr->operands[i + 1];
+          }
+          curr->operands.resize(curr->operands.size() - 1);
+        }
+      }
+    };
+    OptimizeInvokes(analyzer.map, flatTable).run(getPassRunner(), module);
+  }
+};
+
+Pass* createPostEmscriptenPass() { return new PostEmscripten(); }
+
+} // namespace wasm
