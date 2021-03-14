@@ -341,4 +341,292 @@ struct RemoveUnusedBrs : public WalkerPass<PostWalker<RemoveUnusedBrs>> {
                          builder.makeIf(builder.makeBinary(
                                           EqInt32,
                                           builder.makeLocalGet(temp, Type::i32),
-                                         
+                                          builder.makeConst(
+                                            int32_t(curr->targets.size() - 1))),
+                                        builder.makeBreak(curr->targets.back()),
+                                        builder.makeBreak(curr->default_)),
+                         builder.makeBreak(curr->targets.front())));
+      }
+    }
+  }
+
+  void visitIf(If* curr) {
+    if (!curr->ifFalse) {
+      // if without an else. try to reduce
+      //    if (condition) br  =>  br_if (condition)
+      if (Break* br = curr->ifTrue->dynCast<Break>()) {
+        if (canTurnIfIntoBrIf(
+              curr->condition, br->value, getPassOptions(), *getModule())) {
+          if (!br->condition) {
+            br->condition = curr->condition;
+          } else {
+            // In this case we can replace
+            //   if (condition1) br_if (condition2)
+            // =>
+            //   br_if select (condition1) (condition2) (i32.const 0)
+            // In other words, we replace an if (3 bytes) with a select and a
+            // zero (also 3 bytes). The size is unchanged, but the select may
+            // be further optimizable, and if select does not branch we also
+            // avoid one branch.
+            // Multivalue selects are not supported
+            if (br->value && br->value->type.isTuple()) {
+              return;
+            }
+            // If running the br's condition unconditionally is too expensive,
+            // give up.
+            auto* zero = LiteralUtils::makeZero(Type::i32, *getModule());
+            if (tooCostlyToRunUnconditionally(
+                  getPassOptions(), br->condition, zero)) {
+              return;
+            }
+            // Of course we can't do this if the br's condition has side
+            // effects, as we would then execute those unconditionally.
+            if (EffectAnalyzer(getPassOptions(), *getModule(), br->condition)
+                  .hasSideEffects()) {
+              return;
+            }
+            Builder builder(*getModule());
+            // Note that we use the br's condition as the select condition.
+            // That keeps the order of the two conditions as it was originally.
+            br->condition =
+              builder.makeSelect(br->condition, curr->condition, zero);
+          }
+          br->finalize();
+          replaceCurrent(Builder(*getModule()).dropIfConcretelyTyped(br));
+          anotherCycle = true;
+        }
+      }
+
+      // if (condition-A) { if (condition-B) .. }
+      //   =>
+      // if (condition-A ? condition-B : 0) { .. }
+      //
+      // This replaces an if, which is 3 bytes, with a select plus a zero, which
+      // is also 3 bytes. The benefit is that the select may be faster, and also
+      // further optimizations may be possible on the select.
+      if (auto* child = curr->ifTrue->dynCast<If>()) {
+        if (child->ifFalse) {
+          return;
+        }
+        // If running the child's condition unconditionally is too expensive,
+        // give up.
+        if (tooCostlyToRunUnconditionally(getPassOptions(), child->condition)) {
+          return;
+        }
+        // Of course we can't do this if the inner if's condition has side
+        // effects, as we would then execute those unconditionally.
+        if (EffectAnalyzer(getPassOptions(), *getModule(), child->condition)
+              .hasSideEffects()) {
+          return;
+        }
+        Builder builder(*getModule());
+        curr->condition = builder.makeSelect(
+          child->condition, curr->condition, builder.makeConst(int32_t(0)));
+        curr->ifTrue = child->ifTrue;
+      }
+    }
+    // TODO: if-else can be turned into a br_if as well, if one of the sides is
+    //       a dead end we handle the case of a returned value to a local.set
+    //       later down, see visitLocalSet.
+  }
+
+  // override scan to add a pre and a post check task to all nodes
+  static void scan(RemoveUnusedBrs* self, Expression** currp) {
+    self->pushTask(visitAny, currp);
+
+    auto* iff = (*currp)->dynCast<If>();
+
+    if (iff) {
+      if (iff->condition->type == Type::unreachable) {
+        // avoid trying to optimize this, we never reach it anyhow
+        return;
+      }
+      self->pushTask(doVisitIf, currp);
+      if (iff->ifFalse) {
+        // we need to join up if-else control flow, and clear after the
+        // condition
+        self->pushTask(scan, &iff->ifFalse);
+        // safe the ifTrue flow, we'll join it later
+        self->pushTask(saveIfTrue, currp);
+      }
+      self->pushTask(scan, &iff->ifTrue);
+      self->pushTask(clear, currp); // clear all flow after the condition
+      self->pushTask(scan, &iff->condition);
+    } else {
+      super::scan(self, currp);
+    }
+  }
+
+  // optimizes a loop. returns true if we made changes
+  bool optimizeLoop(Loop* loop) {
+    // if a loop ends in
+    // (loop $in
+    //   (block $out
+    //     if (..) br $in; else br $out;
+    //   )
+    // )
+    // then our normal opts can remove the break out since it flows directly out
+    // (and later passes make the if one-armed). however, the simple analysis
+    // fails on patterns like
+    //     if (..) br $out;
+    //     br $in;
+    // which is a common way to do a while (1) loop (end it with a jump to the
+    // top), so we handle that here. Specifically we want to conditionalize
+    // breaks to the loop top, i.e., put them behind a condition, so that other
+    // code can flow directly out and thus brs out can be removed. (even if
+    // the change is to let a break somewhere else flow out, that can still be
+    // helpful, as it shortens the logical loop. it is also good to generate
+    // an if-else instead of an if, as it might allow an eqz to be removed
+    // by flipping arms)
+    if (!loop->name.is()) {
+      return false;
+    }
+    auto* block = loop->body->dynCast<Block>();
+    if (!block) {
+      return false;
+    }
+    // does the last element break to the top of the loop?
+    auto& list = block->list;
+    if (list.size() <= 1) {
+      return false;
+    }
+    auto* last = list.back()->dynCast<Break>();
+    if (!last || !ExpressionAnalyzer::isSimple(last) ||
+        last->name != loop->name) {
+      return false;
+    }
+    // last is a simple break to the top of the loop. if we can conditionalize
+    // it, it won't block things from flowing out and not needing breaks to do
+    // so.
+    Index i = list.size() - 2;
+    Builder builder(*getModule());
+    while (1) {
+      auto* curr = list[i];
+      if (auto* iff = curr->dynCast<If>()) {
+        // let's try to move the code going to the top of the loop into the
+        // if-else
+        if (!iff->ifFalse) {
+          // we need the ifTrue to break, so it cannot reach the code we want to
+          // move
+          if (iff->ifTrue->type == Type::unreachable) {
+            iff->ifFalse = stealSlice(builder, block, i + 1, list.size());
+            iff->finalize();
+            block->finalize();
+            return true;
+          }
+        } else {
+          // this is already an if-else. if one side is a dead end, we can
+          // append to the other, if there is no returned value to concern us
+
+          // can't be, since in the middle of a block
+          assert(!iff->type.isConcrete());
+
+          // ensures the first node is a block, if it isn't already, and merges
+          // in the second, either as a single element or, if a block, by
+          // appending to the first block. this keeps the order of operations in
+          // place, that is, the appended element will be executed after the
+          // first node's elements
+          auto blockifyMerge = [&](Expression* any,
+                                   Expression* append) -> Block* {
+            Block* block = nullptr;
+            if (any) {
+              block = any->dynCast<Block>();
+            }
+            // if the first isn't a block, or it's a block with a name (so we
+            // might branch to the end, and so can't append to it, we might skip
+            // that code!) then make a new block
+            if (!block || block->name.is()) {
+              block = builder.makeBlock(any);
+            } else {
+              assert(!block->type.isConcrete());
+            }
+            auto* other = append->dynCast<Block>();
+            if (!other) {
+              block->list.push_back(append);
+            } else {
+              for (auto* item : other->list) {
+                block->list.push_back(item);
+              }
+            }
+            block->finalize();
+            return block;
+          };
+
+          if (iff->ifTrue->type == Type::unreachable) {
+            iff->ifFalse = blockifyMerge(
+              iff->ifFalse, stealSlice(builder, block, i + 1, list.size()));
+            iff->finalize();
+            block->finalize();
+            return true;
+          } else if (iff->ifFalse->type == Type::unreachable) {
+            iff->ifTrue = blockifyMerge(
+              iff->ifTrue, stealSlice(builder, block, i + 1, list.size()));
+            iff->finalize();
+            block->finalize();
+            return true;
+          }
+        }
+        return false;
+      } else if (auto* brIf = curr->dynCast<Break>()) {
+        // br_if is similar to if.
+        if (brIf->condition && !brIf->value && brIf->name != loop->name) {
+          if (i == list.size() - 2) {
+            // there is the br_if, and then the br to the top, so just flip them
+            // and the condition
+            brIf->condition = builder.makeUnary(EqZInt32, brIf->condition);
+            last->name = brIf->name;
+            brIf->name = loop->name;
+            return true;
+          } else {
+            // there are elements in the middle,
+            //   br_if $somewhere (condition)
+            //   (..more..)
+            //   br $in
+            // we can convert the br_if to an if. this has a cost, though,
+            // so only do it if it looks useful, which it definitely is if
+            //  (a) $somewhere is straight out (so the br out vanishes), and
+            //  (b) this br_if is the only branch to that block (so the block
+            //      will vanish)
+            if (brIf->name == block->name &&
+                BranchUtils::BranchSeeker::count(block, block->name) == 1) {
+              // note that we could drop the last element here, it is a br we
+              // know for sure is removable, but telling stealSlice to steal all
+              // to the end is more efficient, it can just truncate.
+              list[i] =
+                builder.makeIf(brIf->condition,
+                               builder.makeBreak(brIf->name),
+                               stealSlice(builder, block, i + 1, list.size()));
+              block->finalize();
+              return true;
+            }
+          }
+        }
+        return false;
+      }
+      // if there is control flow, we must stop looking
+      if (EffectAnalyzer(getPassOptions(), *getModule(), curr)
+            .transfersControlFlow()) {
+        return false;
+      }
+      if (i == 0) {
+        return false;
+      }
+      i--;
+    }
+  }
+
+  bool sinkBlocks(Function* func) {
+    struct Sinker : public PostWalker<Sinker> {
+      bool worked = false;
+
+      void visitBlock(Block* curr) {
+        // If the block has a single child which is a loop, and the block is
+        // named, then it is the exit for the loop. It's better to move it into
+        // the loop, where it can be better optimized by other passes. Similar
+        // logic for ifs: if the block is an exit for the if, we can move the
+        // block in, consider for example:
+        //    (block $label
+        //     (if (..condition1..)
+        //      (block
+        //       (br_if $label (..condition2..))
+        //    
