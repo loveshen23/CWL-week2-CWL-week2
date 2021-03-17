@@ -944,4 +944,281 @@ struct RemoveUnusedBrs : public WalkerPass<PostWalker<RemoveUnusedBrs>> {
                                 passOptions,
                                 *getModule())) {
             ifFalseBreak->condition =
-              Builder(*getModule()).makeUnary(EqZInt32, iff->condition)
+              Builder(*getModule()).makeUnary(EqZInt32, iff->condition);
+            ifFalseBreak->finalize();
+            list[i] = Builder(*getModule()).dropIfConcretelyTyped(ifFalseBreak);
+            ExpressionManipulator::spliceIntoBlock(curr, i + 1, iff->ifTrue);
+            continue;
+          }
+        }
+        if (list.size() >= 2) {
+          // combine/optimize adjacent br_ifs + a br (maybe _if) right after it
+          for (Index i = 0; i < list.size() - 1; i++) {
+            auto* br1 = list[i]->dynCast<Break>();
+            // avoid unreachable brs, as they are dead code anyhow, and after
+            // merging them the outer scope could need type changes
+            if (!br1 || !br1->condition || br1->type == Type::unreachable) {
+              continue;
+            }
+            assert(!br1->value);
+            auto* br2 = list[i + 1]->dynCast<Break>();
+            if (!br2 || br1->name != br2->name) {
+              continue;
+            }
+            assert(!br2->value); // same target as previous, which has no value
+            // a br_if and then a br[_if] with the same target right after it
+            if (br2->condition) {
+              if (shrink && br2->type != Type::unreachable) {
+                // Join adjacent br_ifs to the same target, making one br_if
+                // with a "selectified" condition that executes both.
+                if (!EffectAnalyzer(passOptions, *getModule(), br2->condition)
+                       .hasSideEffects()) {
+                  // it's ok to execute them both, do it
+                  Builder builder(*getModule());
+                  br1->condition =
+                    builder.makeBinary(OrInt32, br1->condition, br2->condition);
+                  ExpressionManipulator::nop(br2);
+                }
+              }
+            } else {
+              // merge, we go there anyhow
+              Builder builder(*getModule());
+              list[i] = builder.makeDrop(br1->condition);
+            }
+          }
+          // Combine adjacent br_ifs that test the same value into a br_table,
+          // when that makes sense.
+          tablify(curr);
+          // Pattern-patch ifs, recreating them when it makes sense.
+          restructureIf(curr);
+        }
+      }
+
+      void visitSwitch(Switch* curr) {
+        if (BranchUtils::getUniqueTargets(curr).size() == 1) {
+          // This switch has just one target no matter what; replace with a br
+          // if we can (to do so, we must put the condition before a possible
+          // value).
+          if (!curr->value ||
+              EffectAnalyzer::canReorder(
+                passOptions, *getModule(), curr->condition, curr->value)) {
+            Builder builder(*getModule());
+            replaceCurrent(builder.makeSequence(
+              builder.makeDrop(curr->condition), // might have side effects
+              builder.makeBreak(curr->default_, curr->value)));
+          }
+        }
+      }
+
+      // Restructuring of ifs: if we have
+      //   (block $x
+      //     (drop (br_if $x (cond)))
+      //     .., no other references to $x
+      //   )
+      // then we can turn that into (if (!cond) ..).
+      // Code size wise, we turn the block into an if (no change), and
+      // lose the br_if (-2). .. turns into the body of the if in the binary
+      // format. We need to flip the condition, which at worst adds 1.
+      // If the block has a return value, we can do something similar, removing
+      // the drop from the br_if and putting the if on the outside,
+      //   (block $x
+      //     (drop (br_if $x (value) (cond)))
+      //     .., no other references to $x
+      //     ..final element..
+      //   )
+      // =>
+      //   (if
+      //     (cond)
+      //     (value) ;; must not have side effects!
+      //     (block
+      //       .., no other references to $x
+      //       ..final element..
+      //     )
+      //   )
+      // This is beneficial as the block will likely go away in the binary
+      // format (the if arm is an implicit block), and the drop is removed.
+      void restructureIf(Block* curr) {
+        auto& list = curr->list;
+        // We should be called only on potentially-interesting lists.
+        assert(list.size() >= 2);
+        if (curr->name.is()) {
+          Break* br = nullptr;
+          Drop* drop = list[0]->dynCast<Drop>();
+          if (drop) {
+            br = drop->value->dynCast<Break>();
+          } else {
+            br = list[0]->dynCast<Break>();
+          }
+          // Check if the br is conditional and goes to the block. It may or may
+          // not have a value, depending on if it was dropped or not. If the
+          // type is unreachable that means it is not actually reached, which we
+          // can ignore.
+          Builder builder(*getModule());
+          if (br && br->condition && br->name == curr->name &&
+              br->type != Type::unreachable) {
+            if (BranchUtils::BranchSeeker::count(curr, curr->name) == 1) {
+              // no other breaks to that name, so we can do this
+              if (!drop) {
+                assert(!br->value);
+                replaceCurrent(builder.makeIf(
+                  builder.makeUnary(EqZInt32, br->condition), curr));
+                ExpressionManipulator::nop(br);
+                curr->finalize(curr->type);
+              } else {
+                // To use an if, the value must have no side effects, as in the
+                // if it may not execute.
+                if (!EffectAnalyzer(passOptions, *getModule(), br->value)
+                       .hasSideEffects()) {
+                  // We also need to reorder the condition and the value.
+                  if (EffectAnalyzer::canReorder(
+                        passOptions, *getModule(), br->condition, br->value)) {
+                    ExpressionManipulator::nop(list[0]);
+                    replaceCurrent(
+                      builder.makeIf(br->condition, br->value, curr));
+                  }
+                } else {
+                  // The value has side effects, so it must always execute. We
+                  // may still be able to optimize this, however, by using a
+                  // select:
+                  //   (block $x
+                  //     (drop (br_if $x (value) (cond)))
+                  //     ..., no other references to $x
+                  //     ..final element..
+                  //   )
+                  // =>
+                  //   (select
+                  //     (value)
+                  //     (block $x
+                  //       ..., no other references to $x
+                  //       ..final element..
+                  //     )
+                  //     (cond)
+                  //   )
+                  // To do this we must be able to reorder the condition with
+                  // the rest of the block (but not the value), and we must be
+                  // able to make the rest of the block always execute, so it
+                  // must not have side effects.
+                  // TODO: we can do this when there *are* other refs to $x,
+                  //       with a larger refactoring here.
+
+                  // Test for the conditions with a temporary nop instead of the
+                  // br_if.
+                  Expression* old = list[0];
+                  Nop nop;
+                  // After this assignment, curr is what is left in the block
+                  // after ignoring the br_if.
+                  list[0] = &nop;
+                  auto canReorder = EffectAnalyzer::canReorder(
+                    passOptions, *getModule(), br->condition, curr);
+                  auto hasSideEffects =
+                    EffectAnalyzer(passOptions, *getModule(), curr)
+                      .hasSideEffects();
+                  list[0] = old;
+                  if (canReorder && !hasSideEffects &&
+                      Properties::canEmitSelectWithArms(br->value, curr)) {
+                    ExpressionManipulator::nop(list[0]);
+                    replaceCurrent(
+                      builder.makeSelect(br->condition, br->value, curr));
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+      void visitIf(If* curr) {
+        // we may have simplified ifs enough to turn them into selects
+        if (auto* select = selectify(curr)) {
+          replaceCurrent(select);
+        }
+      }
+
+      // Convert an if into a select, if possible and beneficial to do so.
+      Select* selectify(If* iff) {
+        // Only an if-else can be turned into a select.
+        if (!iff->ifFalse) {
+          return nullptr;
+        }
+        if (!Properties::canEmitSelectWithArms(iff->ifTrue, iff->ifFalse)) {
+          return nullptr;
+        }
+        if (iff->condition->type == Type::unreachable) {
+          // An if with an unreachable condition may nonetheless have a type
+          // that is not unreachable,
+          //
+          // (if (result i32) (unreachable) ..)
+          //
+          // Turning such an if into a select would change the type of the
+          // expression, which would require updating types further up. Avoid
+          // that, leaving dead code elimination to that dedicated pass.
+          return nullptr;
+        }
+        // This is always helpful for code size, but can be a tradeoff with
+        // performance as we run both code paths. So when shrinking we always
+        // try to do this, but otherwise must consider more carefully.
+        if (tooCostlyToRunUnconditionally(
+              passOptions, iff->ifTrue, iff->ifFalse)) {
+          return nullptr;
+        }
+        // Check if side effects allow this: we need to execute the two arms
+        // unconditionally, and also to make the condition run last.
+        EffectAnalyzer ifTrue(passOptions, *getModule(), iff->ifTrue);
+        if (ifTrue.hasSideEffects()) {
+          return nullptr;
+        }
+        EffectAnalyzer ifFalse(passOptions, *getModule(), iff->ifFalse);
+        if (ifFalse.hasSideEffects()) {
+          return nullptr;
+        }
+        EffectAnalyzer condition(passOptions, *getModule(), iff->condition);
+        if (condition.invalidates(ifTrue) || condition.invalidates(ifFalse)) {
+          return nullptr;
+        }
+        return Builder(*getModule())
+          .makeSelect(iff->condition, iff->ifTrue, iff->ifFalse, iff->type);
+      }
+
+      void visitLocalSet(LocalSet* curr) {
+        // Sets of an if can be optimized in various ways that remove part of
+        // the if branching, or all of it.
+        // The optimizations we can do here can recurse and call each
+        // other, so pass around a pointer to the output.
+        optimizeSetIf(getCurrentPointer());
+      }
+
+      void optimizeSetIf(Expression** currp) {
+        if (optimizeSetIfWithBrArm(currp)) {
+          return;
+        }
+        if (optimizeSetIfWithCopyArm(currp)) {
+          return;
+        }
+      }
+
+      // If one arm is a br, we prefer a br_if and the set later:
+      //  (local.set $x
+      //    (if (result i32)
+      //      (..condition..)
+      //      (br $somewhere)
+      //      (..result)
+      //    )
+      //  )
+      // =>
+      //  (br_if $somewhere
+      //    (..condition..)
+      //  )
+      //  (local.set $x
+      //    (..result)
+      //  )
+      // TODO: handle a condition in the br? need to watch for side effects
+      bool optimizeSetIfWithBrArm(Expression** currp) {
+        auto* set = (*currp)->cast<LocalSet>();
+        auto* iff = set->value->dynCast<If>();
+        if (!iff || !iff->type.isConcrete() ||
+            !iff->condition->type.isConcrete()) {
+          return false;
+        }
+        auto tryToOptimize =
+          [&](Expression* one, Expression* two, bool flipCondition) {
+            if (
