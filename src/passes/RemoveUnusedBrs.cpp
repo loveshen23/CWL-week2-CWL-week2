@@ -629,4 +629,319 @@ struct RemoveUnusedBrs : public WalkerPass<PostWalker<RemoveUnusedBrs>> {
         //     (if (..condition1..)
         //      (block
         //       (br_if $label (..condition2..))
-        //    
+        //       (..code..)
+        //      )
+        //     )
+        //    )
+        // After also merging the blocks, we have
+        //    (if (..condition1..)
+        //     (block $label
+        //      (br_if $label (..condition2..))
+        //      (..code..)
+        //     )
+        //    )
+        // which can be further optimized later.
+        if (curr->name.is() && curr->list.size() == 1) {
+          if (auto* loop = curr->list[0]->dynCast<Loop>()) {
+            curr->list[0] = loop->body;
+            loop->body = curr;
+            curr->finalize(curr->type);
+            loop->finalize();
+            replaceCurrent(loop);
+            worked = true;
+          } else if (auto* iff = curr->list[0]->dynCast<If>()) {
+            // The label can't be used in the condition.
+            if (BranchUtils::BranchSeeker::count(iff->condition, curr->name) ==
+                0) {
+              // We can move the block into either arm, if there are no uses in
+              // the other.
+              Expression** target = nullptr;
+              if (!iff->ifFalse || BranchUtils::BranchSeeker::count(
+                                     iff->ifFalse, curr->name) == 0) {
+                target = &iff->ifTrue;
+              } else if (BranchUtils::BranchSeeker::count(iff->ifTrue,
+                                                          curr->name) == 0) {
+                target = &iff->ifFalse;
+              }
+              if (target) {
+                curr->list[0] = *target;
+                *target = curr;
+                // The block used to contain the if, and may have changed type
+                // from unreachable to none, for example, if the if has an
+                // unreachable condition but the arm is not unreachable.
+                curr->finalize();
+                iff->finalize();
+                replaceCurrent(iff);
+                worked = true;
+                // Note that the type might change, e.g. if the if condition is
+                // unreachable but the block that was on the outside had a
+                // break.
+              }
+            }
+          }
+        }
+      }
+    } sinker;
+
+    sinker.doWalkFunction(func);
+    if (sinker.worked) {
+      ReFinalize().walkFunctionInModule(func, getModule());
+      return true;
+    }
+    return false;
+  }
+
+  // GC-specific optimizations. These are split out from the main code to keep
+  // things as simple as possible.
+  bool optimizeGC(Function* func) {
+    if (!getModule()->features.hasGC()) {
+      return false;
+    }
+
+    struct Optimizer : public PostWalker<Optimizer> {
+      bool worked = false;
+
+      void visitBrOn(BrOn* curr) {
+        // Ignore unreachable BrOns which we cannot improve anyhow. Note that
+        // we must check the ref field manually, as we may be changing types as
+        // we go here. (Another option would be to use a TypeUpdater here
+        // instead of calling ReFinalize at the very end, but that would be more
+        // complex and slower.)
+        if (curr->type == Type::unreachable ||
+            curr->ref->type == Type::unreachable) {
+          return;
+        }
+
+        // First, check for a possible null which would prevent optimizations on
+        // null checks.
+        // TODO: Look into using BrOnNonNull here, to replace a br_on_func whose
+        // input is (ref null func) with br_on_non_null (as only the null check
+        // would be needed).
+        // TODO: Use the fallthrough to determine in more cases that we
+        // definitely have a null.
+        auto refType = curr->ref->type;
+        if (refType.isNullable() &&
+            (curr->op == BrOnNull || curr->op == BrOnNonNull)) {
+          return;
+        }
+
+        if (curr->op == BrOnNull) {
+          assert(refType.isNonNullable());
+          // This cannot be null, so the br is never taken, and the non-null
+          // value flows through.
+          replaceCurrent(curr->ref);
+          worked = true;
+          return;
+        }
+        if (curr->op == BrOnNonNull) {
+          assert(refType.isNonNullable());
+          // This cannot be null, so the br is always taken.
+          replaceCurrent(
+            Builder(*getModule()).makeBreak(curr->name, curr->ref));
+          worked = true;
+          return;
+        }
+
+        // Check if the type is the kind we are checking for.
+        auto result = GCTypeUtils::evaluateCastCheck(refType, curr->castType);
+        if (curr->op == BrOnCastFail) {
+          result = GCTypeUtils::flipEvaluationResult(result);
+        }
+
+        if (result == GCTypeUtils::Success) {
+          // The cast succeeds, so we can switch from BrOn to a simple br that
+          // is always taken.
+          replaceCurrent(
+            Builder(*getModule()).makeBreak(curr->name, curr->ref));
+          worked = true;
+        } else if (result == GCTypeUtils::Failure) {
+          // The cast fails, so the branch is never taken, and the value just
+          // flows through.
+          replaceCurrent(curr->ref);
+          worked = true;
+        }
+        // TODO: Handle SuccessOnlyIfNull and SuccessOnlyIfNonNull.
+      }
+    } optimizer;
+
+    optimizer.setModule(getModule());
+    optimizer.doWalkFunction(func);
+
+    // If we removed any BrOn instructions, that might affect the reachability
+    // of the things they used to break to, so update types.
+    if (optimizer.worked) {
+      ReFinalize().walkFunctionInModule(func, getModule());
+      return true;
+    }
+    return false;
+  }
+
+  void doWalkFunction(Function* func) {
+    // multiple cycles may be needed
+    do {
+      anotherCycle = false;
+      super::doWalkFunction(func);
+      assert(ifStack.empty());
+      // flows may contain returns, which are flowing out and so can be
+      // optimized
+      for (Index i = 0; i < flows.size(); i++) {
+        auto* flow = (*flows[i])->dynCast<Return>();
+        if (!flow) {
+          continue;
+        }
+        if (!flow->value) {
+          // return => nop
+          ExpressionManipulator::nop(flow);
+        } else {
+          // return with value => value
+          *flows[i] = flow->value;
+        }
+        anotherCycle = true;
+      }
+      flows.clear();
+      // optimize loops (we don't do it while tracking flows, as they can
+      // interfere)
+      for (auto* loop : loops) {
+        anotherCycle |= optimizeLoop(loop);
+      }
+      loops.clear();
+      if (anotherCycle) {
+        ReFinalize().walkFunctionInModule(func, getModule());
+      }
+      if (sinkBlocks(func)) {
+        anotherCycle = true;
+      }
+      if (optimizeGC(func)) {
+        anotherCycle = true;
+      }
+    } while (anotherCycle);
+
+    // thread trivial jumps
+    struct JumpThreader : public ControlFlowWalker<JumpThreader> {
+      // map of all value-less breaks and switches going to a block (and not a
+      // loop)
+      std::map<Block*, std::vector<Expression*>> branchesToBlock;
+
+      bool worked = false;
+
+      void visitBreak(Break* curr) {
+        if (!curr->value) {
+          if (auto* target = findBreakTarget(curr->name)->dynCast<Block>()) {
+            branchesToBlock[target].push_back(curr);
+          }
+        }
+      }
+      void visitSwitch(Switch* curr) {
+        if (!curr->value) {
+          auto names = BranchUtils::getUniqueTargets(curr);
+          for (auto name : names) {
+            if (auto* target = findBreakTarget(name)->dynCast<Block>()) {
+              branchesToBlock[target].push_back(curr);
+            }
+          }
+        }
+      }
+      void visitBlock(Block* curr) {
+        auto& list = curr->list;
+        if (list.size() == 1 && curr->name.is()) {
+          // if this block has just one child, a sub-block, then jumps to the
+          // former are jumps to us, really
+          if (auto* child = list[0]->dynCast<Block>()) {
+            // the two blocks must have the same type for us to update the
+            // branch, as otherwise one block may be unreachable and the other
+            // concrete, so one might lack a value
+            if (child->name.is() && child->name != curr->name &&
+                child->type == curr->type) {
+              redirectBranches(child, curr->name);
+            }
+          }
+        } else if (list.size() == 2) {
+          // if this block has two children, a child-block and a simple jump,
+          // then jumps to child-block can be replaced with jumps to the new
+          // target
+          auto* child = list[0]->dynCast<Block>();
+          auto* jump = list[1]->dynCast<Break>();
+          if (child && child->name.is() && jump &&
+              ExpressionAnalyzer::isSimple(jump)) {
+            redirectBranches(child, jump->name);
+          }
+        }
+      }
+
+      void redirectBranches(Block* from, Name to) {
+        auto& branches = branchesToBlock[from];
+        for (auto* branch : branches) {
+          if (BranchUtils::replacePossibleTarget(branch, from->name, to)) {
+            worked = true;
+          }
+        }
+        // if the jump is to another block then we can update the list, and
+        // maybe push it even more later
+        if (auto* newTarget = findBreakTarget(to)->dynCast<Block>()) {
+          for (auto* branch : branches) {
+            branchesToBlock[newTarget].push_back(branch);
+          }
+        }
+      }
+
+      void finish(Function* func) {
+        if (worked) {
+          // by changing where brs go, we may change block types etc.
+          ReFinalize().walkFunctionInModule(func, getModule());
+        }
+      }
+    };
+    JumpThreader jumpThreader;
+    jumpThreader.setModule(getModule());
+    jumpThreader.walkFunction(func);
+    jumpThreader.finish(func);
+
+    // perform some final optimizations
+    struct FinalOptimizer : public PostWalker<FinalOptimizer> {
+      bool shrink;
+      PassOptions& passOptions;
+
+      bool needUniqify = false;
+
+      FinalOptimizer(PassOptions& passOptions) : passOptions(passOptions) {}
+
+      void visitBlock(Block* curr) {
+        // if a block has an if br else br, we can un-conditionalize the latter,
+        // allowing the if to become a br_if.
+        // * note that if not in a block already, then we need to create a block
+        //   for this, so not useful otherwise
+        // * note that this only happens at the end of a block, as code after
+        //   the if is dead
+        // * note that we do this at the end, because un-conditionalizing can
+        //   interfere with optimizeLoop()ing.
+        auto& list = curr->list;
+        for (Index i = 0; i < list.size(); i++) {
+          auto* iff = list[i]->dynCast<If>();
+          if (!iff || !iff->ifFalse) {
+            // if it lacked an if-false, it would already be a br_if, as that's
+            // the easy case
+            continue;
+          }
+          auto* ifTrueBreak = iff->ifTrue->dynCast<Break>();
+          if (ifTrueBreak && !ifTrueBreak->condition &&
+              canTurnIfIntoBrIf(iff->condition,
+                                ifTrueBreak->value,
+                                passOptions,
+                                *getModule())) {
+            // we are an if-else where the ifTrue is a break without a
+            // condition, so we can do this
+            ifTrueBreak->condition = iff->condition;
+            ifTrueBreak->finalize();
+            list[i] = Builder(*getModule()).dropIfConcretelyTyped(ifTrueBreak);
+            ExpressionManipulator::spliceIntoBlock(curr, i + 1, iff->ifFalse);
+            continue;
+          }
+          // otherwise, perhaps we can flip the if
+          auto* ifFalseBreak = iff->ifFalse->dynCast<Break>();
+          if (ifFalseBreak && !ifFalseBreak->condition &&
+              canTurnIfIntoBrIf(iff->condition,
+                                ifFalseBreak->value,
+                                passOptions,
+                                *getModule())) {
+            ifFalseBreak->condition =
+              Builder(*getModule()).makeUnary(EqZInt32, iff->condition)
