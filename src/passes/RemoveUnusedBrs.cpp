@@ -1221,4 +1221,327 @@ struct RemoveUnusedBrs : public WalkerPass<PostWalker<RemoveUnusedBrs>> {
         }
         auto tryToOptimize =
           [&](Expression* one, Expression* two, bool flipCondition) {
-            if (
+            if (one->type == Type::unreachable &&
+                two->type != Type::unreachable) {
+              if (auto* br = one->dynCast<Break>()) {
+                if (ExpressionAnalyzer::isSimple(br)) {
+                  // Wonderful, do it!
+                  Builder builder(*getModule());
+                  if (flipCondition) {
+                    builder.flip(iff);
+                  }
+                  br->condition = iff->condition;
+                  br->finalize();
+                  set->value = two;
+                  auto* block = builder.makeSequence(br, set);
+                  *currp = block;
+                  // Recurse on the set, which now has a new value.
+                  optimizeSetIf(&block->list[1]);
+                  return true;
+                }
+              }
+            }
+            return false;
+          };
+        return tryToOptimize(iff->ifTrue, iff->ifFalse, false) ||
+               tryToOptimize(iff->ifFalse, iff->ifTrue, true);
+      }
+
+      // If one arm is a get of the same outer set, it is a copy which
+      // we can remove. If this is not a tee, then we remove the get
+      // as well as the if-else opcode in the binary format, which is
+      // great:
+      //  (local.set $x
+      //    (if (result i32)
+      //      (..condition..)
+      //      (..result)
+      //      (local.get $x)
+      //    )
+      //  )
+      // =>
+      //  (if
+      //    (..condition..)
+      //    (local.set $x
+      //      (..result)
+      //    )
+      //  )
+      // If this is a tee, then we can do the same operation but
+      // inside a block, and keep the get:
+      //  (local.tee $x
+      //    (if (result i32)
+      //      (..condition..)
+      //      (..result)
+      //      (local.get $x)
+      //    )
+      //  )
+      // =>
+      //  (block (result i32)
+      //    (if
+      //      (..condition..)
+      //      (local.set $x
+      //        (..result)
+      //      )
+      //    )
+      //    (local.get $x)
+      //  )
+      // We save the if-else opcode, and add the block's opcodes.
+      // This may be detrimental, however, often the block can be
+      // merged or eliminated given the outside scope, and we
+      // removed one of the if branches.
+      bool optimizeSetIfWithCopyArm(Expression** currp) {
+        auto* set = (*currp)->cast<LocalSet>();
+        auto* iff = set->value->dynCast<If>();
+        if (!iff || !iff->type.isConcrete() ||
+            !iff->condition->type.isConcrete()) {
+          return false;
+        }
+        Builder builder(*getModule());
+        LocalGet* get = iff->ifTrue->dynCast<LocalGet>();
+        if (get && get->index == set->index) {
+          builder.flip(iff);
+        } else {
+          get = iff->ifFalse->dynCast<LocalGet>();
+          if (get && get->index != set->index) {
+            get = nullptr;
+          }
+        }
+        if (!get) {
+          return false;
+        }
+        // We can do it!
+        bool tee = set->isTee();
+        assert(set->index == get->index);
+        assert(iff->ifFalse == get);
+        set->value = iff->ifTrue;
+        set->finalize();
+        iff->ifTrue = set;
+        iff->ifFalse = nullptr;
+        iff->finalize();
+        Expression* replacement = iff;
+        if (tee) {
+          set->makeSet();
+          // We need a block too.
+          replacement = builder.makeSequence(iff,
+                                             get // reuse the get
+          );
+        }
+        *currp = replacement;
+        // Recurse on the set, which now has a new value.
+        optimizeSetIf(&iff->ifTrue);
+        return true;
+      }
+
+      // (br_if)+ => br_table
+      // we look for the specific pattern of
+      //  (br_if ..target1..
+      //    (i32.eq
+      //      (..input..)
+      //      (i32.const ..value1..)
+      //    )
+      //  )
+      //  (br_if ..target2..
+      //    (i32.eq
+      //      (..input..)
+      //      (i32.const ..value2..)
+      //    )
+      //  )
+      // TODO: consider also looking at <= etc. and not just eq
+      void tablify(Block* block) {
+        auto& list = block->list;
+        if (list.size() <= 1) {
+          return;
+        }
+
+        // Heuristics. These are slightly inspired by the constants from the
+        // asm.js backend.
+
+        // How many br_ifs we need to see to consider doing this
+        const uint32_t MIN_NUM = 3;
+        // How much of a range of values is definitely too big
+        const uint32_t MAX_RANGE = 1024;
+        // Multiplied by the number of br_ifs, then compared to the range. When
+        // this is high, we allow larger ranges.
+        const uint32_t NUM_TO_RANGE_FACTOR = 3;
+
+        // check if the input is a proper br_if on an i32.eq of a condition
+        // value to a const, and the const is in the proper range,
+        // [0-int32_max), to avoid overflow concerns. returns the br_if if so,
+        // or nullptr otherwise
+        auto getProperBrIf = [](Expression* curr) -> Break* {
+          auto* br = curr->dynCast<Break>();
+          if (!br) {
+            return nullptr;
+          }
+          if (!br->condition || br->value) {
+            return nullptr;
+          }
+          if (br->type != Type::none) {
+            // no value, so can be unreachable or none. ignore unreachable ones,
+            // dce will clean it up
+            return nullptr;
+          }
+          auto* condition = br->condition;
+          // Also support eqz, which is the same as == 0.
+          if (auto* unary = condition->dynCast<Unary>()) {
+            if (unary->op == EqZInt32) {
+              return br;
+            }
+            return nullptr;
+          }
+          auto* binary = condition->dynCast<Binary>();
+          if (!binary) {
+            return nullptr;
+          }
+          if (binary->op != EqInt32) {
+            return nullptr;
+          }
+          auto* c = binary->right->dynCast<Const>();
+          if (!c) {
+            return nullptr;
+          }
+          uint32_t value = c->value.geti32();
+          if (value >= uint32_t(std::numeric_limits<int32_t>::max())) {
+            return nullptr;
+          }
+          return br;
+        };
+
+        // check if the input is a proper br_if
+        // and returns the condition if so, or nullptr otherwise
+        auto getProperBrIfConditionValue =
+          [&getProperBrIf](Expression* curr) -> Expression* {
+          auto* br = getProperBrIf(curr);
+          if (!br) {
+            return nullptr;
+          }
+          auto* condition = br->condition;
+          if (auto* binary = condition->dynCast<Binary>()) {
+            return binary->left;
+          } else if (auto* unary = condition->dynCast<Unary>()) {
+            assert(unary->op == EqZInt32);
+            return unary->value;
+          } else {
+            WASM_UNREACHABLE("invalid br_if condition");
+          }
+        };
+
+        // returns the constant value, as a uint32_t
+        auto getProperBrIfConstant =
+          [&getProperBrIf](Expression* curr) -> uint32_t {
+          auto* condition = getProperBrIf(curr)->condition;
+          if (auto* binary = condition->dynCast<Binary>()) {
+            return binary->right->cast<Const>()->value.geti32();
+          } else if (auto* unary = condition->dynCast<Unary>()) {
+            assert(unary->op == EqZInt32);
+            return 0;
+          } else {
+            WASM_UNREACHABLE("invalid br_if condition");
+          }
+        };
+        Index start = 0;
+        while (start < list.size() - 1) {
+          auto* conditionValue = getProperBrIfConditionValue(list[start]);
+          if (!conditionValue) {
+            start++;
+            continue;
+          }
+          // If the first condition value is a tee, that is ok, so long as the
+          // others afterwards are gets of the value that is tee'd.
+          LocalGet get;
+          if (auto* tee = conditionValue->dynCast<LocalSet>()) {
+            get.index = tee->index;
+            get.type = getFunction()->getLocalType(get.index);
+            conditionValue = &get;
+          }
+          // if the condition has side effects, we can't replace many
+          // appearances of it with a single one
+          if (EffectAnalyzer(passOptions, *getModule(), conditionValue)
+                .hasSideEffects()) {
+            start++;
+            continue;
+          }
+          // look for a "run" of br_ifs with all the same conditionValue, and
+          // having unique constants (an overlapping constant could be handled,
+          // just the first branch is taken, but we can't remove the other br_if
+          // (it may be the only branch keeping a block reachable), which may
+          // make this bad for code size.
+          Index end = start + 1;
+          std::unordered_set<uint32_t> usedConstants;
+          usedConstants.insert(getProperBrIfConstant(list[start]));
+          while (end < list.size() &&
+                 ExpressionAnalyzer::equal(
+                   getProperBrIfConditionValue(list[end]), conditionValue)) {
+            if (!usedConstants.insert(getProperBrIfConstant(list[end]))
+                   .second) {
+              // this constant already appeared
+              break;
+            }
+            end++;
+          }
+          auto num = end - start;
+          if (num >= 2 && num >= MIN_NUM) {
+            // we found a suitable range, [start, end), containing more than 1
+            // element. let's see if it's worth it
+            auto min = getProperBrIfConstant(list[start]);
+            auto max = min;
+            for (Index i = start + 1; i < end; i++) {
+              auto* curr = list[i];
+              min = std::min(min, getProperBrIfConstant(curr));
+              max = std::max(max, getProperBrIfConstant(curr));
+            }
+            uint32_t range = max - min;
+            // decision time
+            if (range <= MAX_RANGE && range <= num * NUM_TO_RANGE_FACTOR) {
+              // great! let's do this
+              std::unordered_set<Name> usedNames;
+              for (Index i = start; i < end; i++) {
+                usedNames.insert(getProperBrIf(list[i])->name);
+              }
+              // we need a name for the default too
+              Name defaultName;
+              Index i = 0;
+              while (1) {
+                defaultName = "tablify|" + std::to_string(i++);
+                if (usedNames.count(defaultName) == 0) {
+                  break;
+                }
+              }
+              std::vector<Name> table;
+              for (Index i = start; i < end; i++) {
+                auto name = getProperBrIf(list[i])->name;
+                auto index = getProperBrIfConstant(list[i]);
+                index -= min;
+                while (table.size() <= index) {
+                  table.push_back(defaultName);
+                }
+                // we should have made sure there are no overlaps
+                assert(table[index] == defaultName);
+                table[index] = name;
+              }
+              Builder builder(*getModule());
+              // the table and condition are offset by the min
+              auto* newCondition = getProperBrIfConditionValue(list[start]);
+
+              if (min != 0) {
+                newCondition = builder.makeBinary(
+                  SubInt32, newCondition, builder.makeConst(int32_t(min)));
+              }
+              list[end - 1] = builder.makeBlock(
+                defaultName,
+                builder.makeSwitch(table, defaultName, newCondition));
+              for (Index i = start; i < end - 1; i++) {
+                ExpressionManipulator::nop(list[i]);
+              }
+              // the defaultName may exist elsewhere in this function,
+              // uniquify it later
+              needUniqify = true;
+            }
+          }
+          start = end;
+        }
+      }
+    };
+    FinalOptimizer finalOptimizer(getPassOptions());
+    finalOptimizer.setModule(getModule());
+    finalOptimizer.shrink = getPassRunner()->options.shrinkLevel > 0;
+ 
