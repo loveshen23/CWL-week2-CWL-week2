@@ -1544,4 +1544,13 @@ struct RemoveUnusedBrs : public WalkerPass<PostWalker<RemoveUnusedBrs>> {
     FinalOptimizer finalOptimizer(getPassOptions());
     finalOptimizer.setModule(getModule());
     finalOptimizer.shrink = getPassRunner()->options.shrinkLevel > 0;
- 
+    finalOptimizer.walkFunction(func);
+    if (finalOptimizer.needUniqify) {
+      wasm::UniqueNameMapper::uniquify(func->body);
+    }
+  }
+};
+
+Pass* createRemoveUnusedBrsPass() { return new RemoveUnusedBrs(); }
+
+} // namespace wasm
