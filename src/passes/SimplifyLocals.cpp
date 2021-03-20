@@ -449,4 +449,349 @@ struct SimplifyLocals
     }
     // We cannot move expressions containing pops that are not enclosed in
     // 'catch', because 'pop' should follow right after 'catch'.
-    F
+    FeatureSet features = this->getModule()->features;
+    if (features.hasExceptionHandling() &&
+        EffectAnalyzer(this->getPassOptions(), *this->getModule(), set->value)
+          .danglingPop) {
+      return false;
+    }
+    // if in the first cycle, or not allowing tees, then we cannot sink if >1
+    // use as that would make a tee
+    if ((firstCycle || !allowTee) && getCounter.num[set->index] > 1) {
+      return false;
+    }
+    return true;
+  }
+
+  std::vector<Block*> blocksToEnlarge;
+  std::vector<If*> ifsToEnlarge;
+  std::vector<Loop*> loopsToEnlarge;
+
+  void optimizeLoopReturn(Loop* loop) {
+    // If there is a sinkable thing in an eligible loop, we can optimize
+    // it in a trivial way to the outside of the loop.
+    if (loop->type != Type::none) {
+      return;
+    }
+    if (sinkables.empty()) {
+      return;
+    }
+    Index goodIndex = sinkables.begin()->first;
+    // Ensure we have a place to write the return values for, if not, we
+    // need another cycle.
+    auto* block = loop->body->dynCast<Block>();
+    if (!block || block->name.is() || block->list.size() == 0 ||
+        !block->list.back()->is<Nop>()) {
+      loopsToEnlarge.push_back(loop);
+      return;
+    }
+    Builder builder(*this->getModule());
+    auto** item = sinkables.at(goodIndex).item;
+    auto* set = (*item)->template cast<LocalSet>();
+    block->list[block->list.size() - 1] = set->value;
+    *item = builder.makeNop();
+    block->finalize();
+    assert(block->type != Type::none);
+    loop->finalize();
+    set->value = loop;
+    set->finalize();
+    this->replaceCurrent(set);
+    // We moved things around, clear all tracking; we'll do another cycle
+    // anyhow.
+    sinkables.clear();
+    anotherCycle = true;
+  }
+
+  void optimizeBlockReturn(Block* block) {
+    if (!block->name.is() || unoptimizableBlocks.count(block->name) > 0) {
+      return;
+    }
+    auto breaks = std::move(blockBreaks[block->name]);
+    blockBreaks.erase(block->name);
+    if (breaks.size() == 0) {
+      // block has no branches TODO we might optimize trivial stuff here too
+      return;
+    }
+    // block does not already have a return value (if one break has one, they
+    // all do)
+    assert(!(*breaks[0].brp)->template cast<Break>()->value);
+    // look for a local.set that is present in them all
+    bool found = false;
+    Index sharedIndex = -1;
+    for (auto& [index, _] : sinkables) {
+      bool inAll = true;
+      for (size_t j = 0; j < breaks.size(); j++) {
+        if (breaks[j].sinkables.count(index) == 0) {
+          inAll = false;
+          break;
+        }
+      }
+      if (inAll) {
+        sharedIndex = index;
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      return;
+    }
+    // If one of our brs is a br_if, then we will give it a value. since
+    // the value executes before the condition, it is dangerous if we are
+    // moving code out of the condition,
+    //  (br_if
+    //   (block
+    //    ..use $x..
+    //    (local.set $x ..)
+    //   )
+    //  )
+    // =>
+    //  (br_if
+    //   (local.tee $x ..) ;; this now affects the use!
+    //   (block
+    //    ..use $x..
+    //   )
+    //  )
+    // so we must check for that.
+    for (size_t j = 0; j < breaks.size(); j++) {
+      // move break local.set's value to the break
+      auto* breakLocalSetPointer = breaks[j].sinkables.at(sharedIndex).item;
+      auto* brp = breaks[j].brp;
+      auto* br = (*brp)->template cast<Break>();
+      auto* set = (*breakLocalSetPointer)->template cast<LocalSet>();
+      if (br->condition) {
+        // TODO: optimize
+        FindAll<LocalSet> findAll(br->condition);
+        for (auto* otherSet : findAll.list) {
+          if (otherSet == set) {
+            // the set is indeed in the condition, so we can't just move it
+            // but maybe there are no effects? see if, ignoring the set
+            // itself, there is any risk
+            Nop nop;
+            *breakLocalSetPointer = &nop;
+            EffectAnalyzer condition(
+              this->getPassOptions(), *this->getModule(), br->condition);
+            EffectAnalyzer value(
+              this->getPassOptions(), *this->getModule(), set);
+            *breakLocalSetPointer = set;
+            if (condition.invalidates(value)) {
+              // indeed, we can't do this, stop
+              return;
+            }
+            break; // we found set in the list, can stop now
+          }
+        }
+      }
+    }
+    // Great, this local is set in them all, we can optimize!
+    if (block->list.size() == 0 || !block->list.back()->is<Nop>()) {
+      // We can't do this here, since we can't push to the block -
+      // it would invalidate sinkable pointers. So we queue a request
+      // to grow the block at the end of the turn, we'll get this next
+      // cycle.
+      blocksToEnlarge.push_back(block);
+      return;
+    }
+    // move block local.set's value to the end, in return position, and nop the
+    // set
+    auto* blockLocalSetPointer = sinkables.at(sharedIndex).item;
+    auto* value = (*blockLocalSetPointer)->template cast<LocalSet>()->value;
+    block->list[block->list.size() - 1] = value;
+    ExpressionManipulator::nop(*blockLocalSetPointer);
+    for (size_t j = 0; j < breaks.size(); j++) {
+      // move break local.set's value to the break
+      auto* breakLocalSetPointer = breaks[j].sinkables.at(sharedIndex).item;
+      auto* brp = breaks[j].brp;
+      auto* br = (*brp)->template cast<Break>();
+      assert(!br->value);
+      // if the break is conditional, then we must set the value here - if the
+      // break is not reached, we must still have the new value in the local
+      auto* set = (*breakLocalSetPointer)->template cast<LocalSet>();
+      if (br->condition) {
+        br->value = set;
+        set->makeTee(this->getFunction()->getLocalType(set->index));
+        *breakLocalSetPointer =
+          this->getModule()->allocator.template alloc<Nop>();
+        // in addition, as this is a conditional br that now has a value, it now
+        // returns a value, so it must be dropped
+        br->finalize();
+        *brp = Builder(*this->getModule()).makeDrop(br);
+      } else {
+        br->value = set->value;
+        ExpressionManipulator::nop(set);
+      }
+    }
+    // finally, create a local.set on the block itself
+    auto* newLocalSet =
+      Builder(*this->getModule()).makeLocalSet(sharedIndex, block);
+    this->replaceCurrent(newLocalSet);
+    sinkables.clear();
+    anotherCycle = true;
+    block->finalize();
+  }
+
+  // optimize local.sets from both sides of an if into a return value
+  void optimizeIfElseReturn(If* iff, Expression** currp, Sinkables& ifTrue) {
+    assert(iff->ifFalse);
+    // if this if already has a result, or is unreachable code, we have
+    // nothing to do
+    if (iff->type != Type::none) {
+      return;
+    }
+    // We now have the sinkables from both sides of the if, and can look
+    // for something to sink. That is either a shared index on both sides,
+    // *or* if one side is unreachable, we can sink anything from the other,
+    //   (if
+    //     (..)
+    //     (br $x)
+    //     (local.set $y (..))
+    //   )
+    //    =>
+    //   (local.set $y
+    //     (if (result i32)
+    //       (..)
+    //       (br $x)
+    //       (..)
+    //     )
+    //   )
+    Sinkables& ifFalse = sinkables;
+    Index goodIndex = -1;
+    bool found = false;
+    if (iff->ifTrue->type == Type::unreachable) {
+      // since the if type is none
+      assert(iff->ifFalse->type != Type::unreachable);
+      if (!ifFalse.empty()) {
+        goodIndex = ifFalse.begin()->first;
+        found = true;
+      }
+    } else if (iff->ifFalse->type == Type::unreachable) {
+      // since the if type is none
+      assert(iff->ifTrue->type != Type::unreachable);
+      if (!ifTrue.empty()) {
+        goodIndex = ifTrue.begin()->first;
+        found = true;
+      }
+    } else {
+      // Look for a shared index.
+      for (auto& [index, _] : ifTrue) {
+        if (ifFalse.count(index) > 0) {
+          goodIndex = index;
+          found = true;
+          break;
+        }
+      }
+    }
+    if (!found) {
+      return;
+    }
+    // great, we can optimize!
+    // ensure we have a place to write the return values for, if not, we
+    // need another cycle
+    auto* ifTrueBlock = iff->ifTrue->dynCast<Block>();
+    if (iff->ifTrue->type != Type::unreachable) {
+      if (!ifTrueBlock || ifTrueBlock->name.is() ||
+          ifTrueBlock->list.size() == 0 ||
+          !ifTrueBlock->list.back()->is<Nop>()) {
+        ifsToEnlarge.push_back(iff);
+        return;
+      }
+    }
+    auto* ifFalseBlock = iff->ifFalse->dynCast<Block>();
+    if (iff->ifFalse->type != Type::unreachable) {
+      if (!ifFalseBlock || ifFalseBlock->name.is() ||
+          ifFalseBlock->list.size() == 0 ||
+          !ifFalseBlock->list.back()->is<Nop>()) {
+        ifsToEnlarge.push_back(iff);
+        return;
+      }
+    }
+    // all set, go
+    if (iff->ifTrue->type != Type::unreachable) {
+      auto* ifTrueItem = ifTrue.at(goodIndex).item;
+      ifTrueBlock->list[ifTrueBlock->list.size() - 1] =
+        (*ifTrueItem)->template cast<LocalSet>()->value;
+      ExpressionManipulator::nop(*ifTrueItem);
+      ifTrueBlock->finalize();
+      assert(ifTrueBlock->type != Type::none);
+    }
+    if (iff->ifFalse->type != Type::unreachable) {
+      auto* ifFalseItem = ifFalse.at(goodIndex).item;
+      ifFalseBlock->list[ifFalseBlock->list.size() - 1] =
+        (*ifFalseItem)->template cast<LocalSet>()->value;
+      ExpressionManipulator::nop(*ifFalseItem);
+      ifFalseBlock->finalize();
+      assert(ifFalseBlock->type != Type::none);
+    }
+    iff->finalize(); // update type
+    assert(iff->type != Type::none);
+    // finally, create a local.set on the iff itself
+    auto* newLocalSet =
+      Builder(*this->getModule()).makeLocalSet(goodIndex, iff);
+    *currp = newLocalSet;
+    anotherCycle = true;
+  }
+
+  // Optimize local.sets from a one-sided iff, adding a get on the other:
+  //  (if
+  //    (..condition..)
+  //    (block
+  //      (local.set $x (..value..))
+  //    )
+  //  )
+  // =>
+  //  (local.set $x
+  //    (if (result ..)
+  //      (..condition..)
+  //      (block (result ..)
+  //        (..value..)
+  //      )
+  //      (local.get $x)
+  //    )
+  //  )
+  // This is a speculative optimization: we add a get here, as well as a branch
+  // in the if, so this is harmful for code size and for speed. However, later
+  // optimizations may sink the set and enable other useful things. If none of
+  // that happens, other passes can "undo" this by turning an if with a copy
+  // arm into a one-sided if.
+  void optimizeIfReturn(If* iff, Expression** currp) {
+    // If this if is unreachable code, we have nothing to do.
+    if (iff->type != Type::none || iff->ifTrue->type != Type::none) {
+      return;
+    }
+    // Anything sinkable is good for us.
+    if (sinkables.empty()) {
+      return;
+    }
+
+    // Check if the type makes sense. A non-nullable local might be dangerous
+    // here, as creating new local.gets for such locals is risky:
+    //
+    //  (func $silly
+    //    (local $x (ref $T))
+    //    (if
+    //      (condition)
+    //      (local.set $x ..)
+    //    )
+    //  )
+    //
+    // That local is silly as the write is never read. If we optimize it and add
+    // a local.get, however, then we'd no longer validate (as no set would
+    // dominate that new get in the if's else arm). Fixups would add a
+    // ref.as_non_null around the local.get, which will then trap at runtime:
+    //
+    //  (func $silly
+    //    (local $x (ref null $T))
+    //    (local.set $x
+    //      (if
+    //        (condition)
+    //        (..)
+    //        (ref.as_non_null
+    //          (local.get $x)
+    //        )
+    //      )
+    //    )
+    //  )
+    //
+    // In other words, local.get is not necessarily free of effects if the local
+    // is non-nullable - it must have been set already. We could check that
+    // here, but running that linear-time check may not be worth it as this
+    // optimization is fairly minor, so just skip th
