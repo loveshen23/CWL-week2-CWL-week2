@@ -1119,4 +1119,43 @@ struct SimplifyLocals
       }
     };
 
-    
+    EquivalentOptimizer eqOpter;
+    eqOpter.module = this->getModule();
+    eqOpter.passOptions = this->getPassOptions();
+    eqOpter.numLocalGets = &getCounter.num;
+    eqOpter.removeEquivalentSets = allowStructure;
+    eqOpter.walkFunction(func);
+    if (eqOpter.refinalize) {
+      ReFinalize().walkFunctionInModule(func, this->getModule());
+    }
+
+    // We may have already had a local with no uses, or we may have just
+    // gotten there thanks to the EquivalentOptimizer. If there are such
+    // locals, remove all their sets.
+    UnneededSetRemover setRemover(
+      getCounter, func, this->getPassOptions(), *this->getModule());
+    setRemover.setModule(this->getModule());
+
+    return eqOpter.anotherCycle || setRemover.removed;
+  }
+};
+
+Pass* createSimplifyLocalsPass() { return new SimplifyLocals<true, true>(); }
+
+Pass* createSimplifyLocalsNoTeePass() {
+  return new SimplifyLocals<false, true>();
+}
+
+Pass* createSimplifyLocalsNoStructurePass() {
+  return new SimplifyLocals<true, false>();
+}
+
+Pass* createSimplifyLocalsNoTeeNoStructurePass() {
+  return new SimplifyLocals<false, false>();
+}
+
+Pass* createSimplifyLocalsNoNestingPass() {
+  return new SimplifyLocals<false, false, false>();
+}
+
+} // namespace wasm
