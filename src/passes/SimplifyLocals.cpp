@@ -794,4 +794,329 @@ struct SimplifyLocals
     // In other words, local.get is not necessarily free of effects if the local
     // is non-nullable - it must have been set already. We could check that
     // here, but running that linear-time check may not be worth it as this
-    // optimization is fairly minor, so just skip th
+    // optimization is fairly minor, so just skip the non-nullable case.
+    //
+    // TODO investigate more
+    Index goodIndex = sinkables.begin()->first;
+    auto localType = this->getFunction()->getLocalType(goodIndex);
+    if (localType.isNonNullable()) {
+      return;
+    }
+
+    // Ensure we have a place to write the return values for, if not, we
+    // need another cycle.
+    auto* ifTrueBlock = iff->ifTrue->dynCast<Block>();
+    if (!ifTrueBlock || ifTrueBlock->name.is() ||
+        ifTrueBlock->list.size() == 0 || !ifTrueBlock->list.back()->is<Nop>()) {
+      ifsToEnlarge.push_back(iff);
+      return;
+    }
+
+    // We can optimize!
+
+    // Update the ifTrue side.
+    Builder builder(*this->getModule());
+    auto** item = sinkables.at(goodIndex).item;
+    auto* set = (*item)->template cast<LocalSet>();
+    ifTrueBlock->list[ifTrueBlock->list.size() - 1] = set->value;
+    *item = builder.makeNop();
+    ifTrueBlock->finalize();
+    assert(ifTrueBlock->type != Type::none);
+    // Update the ifFalse side.
+    iff->ifFalse = builder.makeLocalGet(set->index, localType);
+    iff->finalize(); // update type
+    // Update the get count.
+    getCounter.num[set->index]++;
+    assert(iff->type != Type::none);
+    // Finally, reuse the local.set on the iff itself.
+    set->value = iff;
+    set->finalize();
+    *currp = set;
+    anotherCycle = true;
+  }
+
+  // override scan to add a pre and a post check task to all nodes
+  static void scan(SimplifyLocals<allowTee, allowStructure, allowNesting>* self,
+                   Expression** currp) {
+    self->pushTask(visitPost, currp);
+
+    auto* curr = *currp;
+
+    if (auto* iff = curr->dynCast<If>()) {
+      // handle if in a special manner, using the ifStack for if-elses etc.
+      if (iff->ifFalse) {
+        self->pushTask(
+          SimplifyLocals<allowTee, allowStructure, allowNesting>::doNoteIfFalse,
+          currp);
+        self->pushTask(
+          SimplifyLocals<allowTee, allowStructure, allowNesting>::scan,
+          &iff->ifFalse);
+      }
+      self->pushTask(
+        SimplifyLocals<allowTee, allowStructure, allowNesting>::doNoteIfTrue,
+        currp);
+      self->pushTask(
+        SimplifyLocals<allowTee, allowStructure, allowNesting>::scan,
+        &iff->ifTrue);
+      self->pushTask(SimplifyLocals<allowTee, allowStructure, allowNesting>::
+                       doNoteIfCondition,
+                     currp);
+      self->pushTask(
+        SimplifyLocals<allowTee, allowStructure, allowNesting>::scan,
+        &iff->condition);
+    } else {
+      WalkerPass<LinearExecutionWalker<
+        SimplifyLocals<allowTee, allowStructure, allowNesting>>>::scan(self,
+                                                                       currp);
+    }
+
+    self->pushTask(visitPre, currp);
+  }
+
+  void doWalkFunction(Function* func) {
+    if (func->getNumLocals() == 0) {
+      return; // nothing to do
+    }
+    // scan local.gets
+    getCounter.analyze(func);
+    // multiple passes may be required per function, consider this:
+    //    x = load
+    //    y = store
+    //    c(x, y)
+    // the load cannot cross the store, but y can be sunk, after which so can x.
+    //
+    // we start with a cycle focusing on single-use locals, which are easy to
+    // sink (we don't need to put a set), and a good match for common compiler
+    // output patterns. further cycles do fully general sinking.
+    firstCycle = true;
+    do {
+      anotherCycle = runMainOptimizations(func);
+      // After the special first cycle, definitely do another.
+      if (firstCycle) {
+        firstCycle = false;
+        anotherCycle = true;
+      }
+      // If we are all done, run the final optimizations, which may suggest we
+      // can do more work.
+      if (!anotherCycle) {
+        // Don't run multiple cycles of just the final optimizations - in
+        // particular, get canonicalization is not guaranteed to converge.
+        // Instead, if final opts help then see if they enable main
+        // opts; continue only if they do. In other words, do not end up
+        // doing final opts again and again when no main opts are being
+        // enabled.
+        if (runLateOptimizations(func) && runMainOptimizations(func)) {
+          anotherCycle = true;
+        }
+      }
+    } while (anotherCycle);
+
+    if (refinalize) {
+      ReFinalize().walkFunctionInModule(func, this->getModule());
+    }
+  }
+
+  bool runMainOptimizations(Function* func) {
+    anotherCycle = false;
+    WalkerPass<LinearExecutionWalker<
+      SimplifyLocals<allowTee, allowStructure, allowNesting>>>::
+      doWalkFunction(func);
+    // enlarge blocks that were marked, for the next round
+    if (blocksToEnlarge.size() > 0) {
+      for (auto* block : blocksToEnlarge) {
+        block->list.push_back(
+          this->getModule()->allocator.template alloc<Nop>());
+      }
+      blocksToEnlarge.clear();
+      anotherCycle = true;
+    }
+    // enlarge ifs that were marked, for the next round
+    if (ifsToEnlarge.size() > 0) {
+      for (auto* iff : ifsToEnlarge) {
+        auto ifTrue =
+          Builder(*this->getModule()).blockifyWithName(iff->ifTrue, Name());
+        iff->ifTrue = ifTrue;
+        if (ifTrue->list.size() == 0 ||
+            !ifTrue->list.back()->template is<Nop>()) {
+          ifTrue->list.push_back(
+            this->getModule()->allocator.template alloc<Nop>());
+        }
+        if (iff->ifFalse) {
+          auto ifFalse =
+            Builder(*this->getModule()).blockifyWithName(iff->ifFalse, Name());
+          iff->ifFalse = ifFalse;
+          if (ifFalse->list.size() == 0 ||
+              !ifFalse->list.back()->template is<Nop>()) {
+            ifFalse->list.push_back(
+              this->getModule()->allocator.template alloc<Nop>());
+          }
+        }
+      }
+      ifsToEnlarge.clear();
+      anotherCycle = true;
+    }
+    // enlarge loops that were marked, for the next round
+    if (loopsToEnlarge.size() > 0) {
+      for (auto* loop : loopsToEnlarge) {
+        auto block =
+          Builder(*this->getModule()).blockifyWithName(loop->body, Name());
+        loop->body = block;
+        if (block->list.size() == 0 ||
+            !block->list.back()->template is<Nop>()) {
+          block->list.push_back(
+            this->getModule()->allocator.template alloc<Nop>());
+        }
+      }
+      loopsToEnlarge.clear();
+      anotherCycle = true;
+    }
+    // clean up
+    sinkables.clear();
+    blockBreaks.clear();
+    unoptimizableBlocks.clear();
+    return anotherCycle;
+  }
+
+  bool runLateOptimizations(Function* func) {
+    // Finally, after optimizing a function we can do some additional
+    // optimization.
+    getCounter.analyze(func);
+    // Remove equivalent copies - assignment of
+    // a local to another local that already contains that value. Note that
+    // we do that at the very end, and only after structure, as removing
+    // the copy here:
+    //   (if
+    //    (local.get $var$0)
+    //    (local.set $var$0
+    //     (local.get $var$0)
+    //    )
+    //    (local.set $var$0
+    //     (i32.const 208)
+    //    )
+    //   )
+    // will inhibit us creating an if return value.
+    struct EquivalentOptimizer
+      : public LinearExecutionWalker<EquivalentOptimizer> {
+      std::vector<Index>* numLocalGets;
+      bool removeEquivalentSets;
+      Module* module;
+      PassOptions passOptions;
+
+      bool anotherCycle = false;
+      bool refinalize = false;
+
+      // We track locals containing the same value.
+      EquivalentSets equivalences;
+
+      static void doNoteNonLinear(EquivalentOptimizer* self,
+                                  Expression** currp) {
+        // TODO do this across non-linear paths too, in coalesce-locals perhaps?
+        //      (would inhibit structure opts here, though.
+        self->equivalences.clear();
+      }
+
+      void visitLocalSet(LocalSet* curr) {
+        // Remove trivial copies, even through a tee
+        auto* value =
+          Properties::getFallthrough(curr->value, passOptions, *module);
+        if (auto* get = value->template dynCast<LocalGet>()) {
+          if (equivalences.check(curr->index, get->index)) {
+            // This is an unnecessary copy!
+            if (removeEquivalentSets) {
+              if (curr->isTee()) {
+                this->replaceCurrent(curr->value);
+              } else {
+                this->replaceCurrent(Builder(*module).makeDrop(curr->value));
+              }
+              anotherCycle = true;
+            }
+            // Nothing more to do, ignore the copy.
+            return;
+          } else {
+            // There is a new equivalence now. Remove all the old ones, and add
+            // the new one.
+            equivalences.reset(curr->index);
+            equivalences.add(curr->index, get->index);
+            return;
+          }
+        }
+        // A new value of some kind is assigned here, and it's not something we
+        // could handle earlier, so remove all the old equivalent ones.
+        equivalences.reset(curr->index);
+      }
+
+      void visitLocalGet(LocalGet* curr) {
+        // Canonicalize gets: if some are equivalent, then we can pick more
+        // then one, and other passes may benefit from having more uniformity.
+        if (auto* set = equivalences.getEquivalents(curr->index)) {
+          // Helper method that returns the # of gets *ignoring the current
+          // get*, as we want to see what is best overall, treating this one as
+          // to be decided upon.
+          auto getNumGetsIgnoringCurr = [&](Index index) {
+            auto ret = (*numLocalGets)[index];
+            if (index == curr->index) {
+              assert(ret >= 1);
+              ret--;
+            }
+            return ret;
+          };
+
+          // Pick the index with the most uses - maximizing the chance to
+          // lower one's uses to zero. If types differ though then we prefer to
+          // switch to a more refined type even if there are fewer uses, as that
+          // may have significant benefits to later optimizations (we may be
+          // able to use it to remove casts, etc.).
+          auto* func = this->getFunction();
+          Index best = -1;
+          for (auto index : *set) {
+            if (best == Index(-1)) {
+              // This is the first possible option we've seen.
+              best = index;
+              continue;
+            }
+
+            auto bestType = func->getLocalType(best);
+            auto indexType = func->getLocalType(index);
+            if (!Type::isSubType(indexType, bestType)) {
+              // This is less refined than the current best; ignore.
+              continue;
+            }
+
+            // This is better if it has a more refined type, or if it has more
+            // uses.
+            if (indexType != bestType ||
+                getNumGetsIgnoringCurr(index) > getNumGetsIgnoringCurr(best)) {
+              best = index;
+            }
+          }
+          assert(best != Index(-1));
+          // Due to ordering, the best index may be different from us but have
+          // the same # of locals - make sure we actually improve, either adding
+          // more gets, or a more refined type (and never change to a less
+          // refined type).
+          auto bestType = func->getLocalType(best);
+          auto oldType = func->getLocalType(curr->index);
+          if (best != curr->index && Type::isSubType(bestType, oldType)) {
+            auto hasMoreGets = getNumGetsIgnoringCurr(best) >
+                               getNumGetsIgnoringCurr(curr->index);
+            if (hasMoreGets || bestType != oldType) {
+              // Update the get counts.
+              (*numLocalGets)[best]++;
+              assert((*numLocalGets)[curr->index] >= 1);
+              (*numLocalGets)[curr->index]--;
+              // Make the change.
+              curr->index = best;
+              anotherCycle = true;
+              if (bestType != oldType) {
+                curr->type = func->getLocalType(best);
+                // We are switching to a more refined type, which might require
+                // changes in the user of the local.get.
+                refinalize = true;
+              }
+            }
+          }
+        }
+      }
+    };
+
+    
