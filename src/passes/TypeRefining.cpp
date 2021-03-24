@@ -99,4 +99,217 @@ struct TypeRefining : public Pass {
 
   StructUtils::StructValuesMap<FieldInfo> finalInfos;
 
-  void run(Module*
+  void run(Module* module) override {
+    if (!module->features.hasGC()) {
+      return;
+    }
+
+    if (!getPassOptions().closedWorld) {
+      Fatal() << "TypeRefining requires --closed-world";
+    }
+
+    // Find and analyze struct operations inside each function.
+    StructUtils::FunctionStructValuesMap<FieldInfo> functionNewInfos(*module),
+      functionSetGetInfos(*module);
+    FieldInfoScanner scanner(functionNewInfos, functionSetGetInfos);
+    scanner.run(getPassRunner(), module);
+    scanner.runOnModuleCode(getPassRunner(), module);
+
+    // Combine the data from the functions.
+    StructUtils::StructValuesMap<FieldInfo> combinedNewInfos;
+    StructUtils::StructValuesMap<FieldInfo> combinedSetGetInfos;
+    functionNewInfos.combineInto(combinedNewInfos);
+    functionSetGetInfos.combineInto(combinedSetGetInfos);
+
+    // Propagate things written during new to supertypes, as they must also be
+    // able to contain that type. Propagate things written using set to subtypes
+    // as well, as the reference might be to a supertype if the field is present
+    // there.
+    StructUtils::TypeHierarchyPropagator<FieldInfo> propagator(*module);
+    propagator.propagateToSuperTypes(combinedNewInfos);
+    propagator.propagateToSuperAndSubTypes(combinedSetGetInfos);
+
+    // Combine everything together.
+    combinedNewInfos.combineInto(finalInfos);
+    combinedSetGetInfos.combineInto(finalInfos);
+
+    // While we do the following work, see if we have anything to optimize, so
+    // that we can avoid wasteful work later if not.
+    bool canOptimize = false;
+
+    // We have combined all the information we have about writes to the fields,
+    // but we still need to make sure that the new types makes sense. In
+    // particular, subtyping cares about things like mutability, and we also
+    // need to handle the case where we have no writes to a type but do have
+    // them to subtypes or supertypes; in all these cases, we must preserve
+    // that a field is always a subtype of the parent field. To do so, we go
+    // through all the types downward from supertypes to subtypes, ensuring the
+    // subtypes are suitable.
+    auto& subTypes = propagator.subTypes;
+    UniqueDeferredQueue<HeapType> work;
+    for (auto type : subTypes.types) {
+      if (type.isStruct() && !type.getSuperType()) {
+        work.push(type);
+      }
+    }
+    while (!work.empty()) {
+      auto type = work.pop();
+
+      // First, find fields that have nothing written to them at all, and set
+      // their value to their old type. We must pick some type for the field,
+      // and we have nothing better to go on. (If we have a super, and it does
+      // have writes, then we may further update this type later, see the
+      // isSubType check in the loop after this.)
+      auto& fields = type.getStruct().fields;
+      for (Index i = 0; i < fields.size(); i++) {
+        auto oldType = fields[i].type;
+        auto& info = finalInfos[type][i];
+        if (!info.noted()) {
+          info = LUBFinder(oldType);
+        }
+      }
+
+      // Next ensure proper subtyping of this struct's fields versus its super.
+      if (auto super = type.getSuperType()) {
+        auto& superFields = super->getStruct().fields;
+        for (Index i = 0; i < superFields.size(); i++) {
+          auto newSuperType = finalInfos[*super][i].getLUB();
+          auto& info = finalInfos[type][i];
+          auto newType = info.getLUB();
+          if (!Type::isSubType(newType, newSuperType)) {
+            // To ensure we are a subtype of the super's field, simply copy that
+            // value, which is more specific than us.
+            //
+            // This situation cannot happen normally, but if a type is not used
+            // then it can. For example, imagine that $B and $C are subtypes of
+            // $A, and that $C is never created anywhere. A struct.new of $B
+            // propagates info to $A (forcing $A's type to take it into account
+            // and not be more specific than it), but that does not reach $C
+            // (struct.new propagates only up, not down; if it propagated down
+            // then we could never specialize a subtype more than its super). If
+            // $C had some value written to it then that value would force the
+            // LUB of $A to take it into account, but as here $C is never even
+            // created, that does not happen. And then if we update $A's type
+            // to something more specific than $C's old type, we end up with the
+            // problem that this code path fixes: we just need to get $C's type
+            // to be identical to its super so that validation works.
+            info = LUBFinder(newSuperType);
+          } else if (fields[i].mutable_ == Mutable) {
+            // Mutable fields must have identical types, so we cannot
+            // specialize.
+            // TODO: Perhaps we should be using a new Field::isSubType() method
+            //       here? This entire analysis might be done on fields, and not
+            //       types, which would also handle more things added to fields
+            //       in the future.
+            info = LUBFinder(newSuperType);
+          }
+        }
+      }
+
+      // After all those decisions, see if we found anything to optimize.
+      for (Index i = 0; i < fields.size(); i++) {
+        auto oldType = fields[i].type;
+        auto& lub = finalInfos[type][i];
+        auto newType = lub.getLUB();
+        if (newType != oldType) {
+          canOptimize = true;
+        }
+      }
+
+      for (auto subType : subTypes.getStrictSubTypes(type)) {
+        work.push(subType);
+      }
+    }
+
+    if (canOptimize) {
+      updateInstructions(*module);
+      updateTypes(*module);
+    }
+  }
+
+  // If we change types then some instructions may need to be modified.
+  // Specifically, we assume that reads from structs impose no constraints on
+  // us, so that we can optimize maximally. If a struct is never created nor
+  // written to, but only read from, then we have literally no constraints on it
+  // at all, and we can end up with a situation where we alter the type to
+  // something that is invalid for that read. To ensure the code still
+  // validates, simply remove such reads.
+  void updateInstructions(Module& wasm) {
+    struct ReadUpdater : public WalkerPass<PostWalker<ReadUpdater>> {
+      bool isFunctionParallel() override { return true; }
+
+      // Only affects struct.gets.
+      bool requiresNonNullableLocalFixups() override { return false; }
+
+      TypeRefining& parent;
+
+      ReadUpdater(TypeRefining& parent) : parent(parent) {}
+
+      std::unique_ptr<Pass> create() override {
+        return std::make_unique<ReadUpdater>(parent);
+      }
+
+      void visitStructGet(StructGet* curr) {
+        if (curr->ref->type == Type::unreachable || curr->ref->type.isNull()) {
+          return;
+        }
+
+        auto oldType = curr->ref->type.getHeapType();
+        auto newFieldType = parent.finalInfos[oldType][curr->index].getLUB();
+        if (!Type::isSubType(newFieldType, curr->type)) {
+          // This instruction is invalid, so it must be the result of the
+          // situation described above: we ignored the read during our
+          // inference, and optimized accordingly, and so now we must remove it
+          // to keep the module validating. It doesn't matter what we emit here,
+          // since there are no struct.new or struct.sets for this type, so this
+          // code is logically unreachable.
+          //
+          // Note that we emit an unreachable here, which changes the type, and
+          // so we should refinalize. However, we will be refinalizing later
+          // anyhow in updateTypes, so there is no need.
+          Builder builder(*getModule());
+          replaceCurrent(builder.makeSequence(builder.makeDrop(curr->ref),
+                                              builder.makeUnreachable()));
+        }
+      }
+    };
+
+    ReadUpdater updater(*this);
+    updater.run(getPassRunner(), &wasm);
+    updater.runOnModuleCode(getPassRunner(), &wasm);
+  }
+
+  void updateTypes(Module& wasm) {
+    class TypeRewriter : public GlobalTypeRewriter {
+      TypeRefining& parent;
+
+    public:
+      TypeRewriter(Module& wasm, TypeRefining& parent)
+        : GlobalTypeRewriter(wasm), parent(parent) {}
+
+      void modifyStruct(HeapType oldStructType, Struct& struct_) override {
+        const auto& oldFields = oldStructType.getStruct().fields;
+        auto& newFields = struct_.fields;
+
+        for (Index i = 0; i < newFields.size(); i++) {
+          auto oldType = oldFields[i].type;
+          if (!oldType.isRef()) {
+            continue;
+          }
+          auto newType = parent.finalInfos[oldStructType][i].getLUB();
+          newFields[i].type = getTempType(newType);
+        }
+      }
+    };
+
+    TypeRewriter(wasm, *this).update();
+
+    ReFinalize().run(getPassRunner(), &wasm);
+  }
+};
+
+} // anonymous namespace
+
+Pass* createTypeRefiningPass() { return new TypeRefining(); }
+
+} // namespace wasm
