@@ -470,4 +470,295 @@ void PassRegistry::registerPasses() {
                "replace trapping operations with clamping semantics",
                createTrapModeClamp);
   registerPass("trap-mode-js",
-          
+               "replace trapping operations with js semantics",
+               createTrapModeJS);
+  registerPass("type-merging",
+               "merge types to their supertypes where possible",
+               createTypeMergingPass);
+  registerPass("type-ssa",
+               "create new nominal types to help other optimizations",
+               createTypeSSAPass);
+  registerPass("untee",
+               "removes local.tees, replacing them with sets and gets",
+               createUnteePass);
+  registerPass("vacuum", "removes obviously unneeded code", createVacuumPass);
+  // registerPass(
+  //   "lower-i64", "lowers i64 into pairs of i32s", createLowerInt64Pass);
+
+  // Register passes used for internal testing. These don't show up in --help.
+  registerTestPass("catch-pop-fixup",
+                   "fixup nested pops within catches",
+                   createCatchPopFixupPass);
+}
+
+void PassRunner::addIfNoDWARFIssues(std::string passName) {
+  auto pass = PassRegistry::get()->createPass(passName);
+  if (!pass->invalidatesDWARF() || !shouldPreserveDWARF()) {
+    doAdd(std::move(pass));
+  }
+}
+
+void PassRunner::addDefaultOptimizationPasses() {
+  addDefaultGlobalOptimizationPrePasses();
+  addDefaultFunctionOptimizationPasses();
+  addDefaultGlobalOptimizationPostPasses();
+}
+
+void PassRunner::addDefaultFunctionOptimizationPasses() {
+  // All the additions here are optional if DWARF must be preserved. That is,
+  // when DWARF is relevant we run fewer optimizations.
+  // FIXME: support DWARF in all of them.
+
+  // Untangling to semi-ssa form is helpful (but best to ignore merges
+  // so as to not introduce new copies).
+  if (options.optimizeLevel >= 3 || options.shrinkLevel >= 1) {
+    addIfNoDWARFIssues("ssa-nomerge");
+  }
+  // if we are willing to work very very hard, flatten the IR and do opts
+  // that depend on flat IR
+  if (options.optimizeLevel >= 4) {
+    addIfNoDWARFIssues("flatten");
+    // LocalCSE is particularly useful after flatten (see comment in the pass
+    // itself), but we must simplify locals a little first (as flatten adds many
+    // new and redundant ones, which make things seem different if we do not
+    // run some amount of simplify-locals first).
+    addIfNoDWARFIssues("simplify-locals-notee-nostructure");
+    addIfNoDWARFIssues("local-cse");
+    // TODO: add rereloop etc. here
+  }
+  addIfNoDWARFIssues("dce");
+  addIfNoDWARFIssues("remove-unused-names");
+  addIfNoDWARFIssues("remove-unused-brs");
+  addIfNoDWARFIssues("remove-unused-names");
+  addIfNoDWARFIssues("optimize-instructions");
+  if (options.optimizeLevel >= 2 || options.shrinkLevel >= 2) {
+    addIfNoDWARFIssues("pick-load-signs");
+  }
+  // early propagation
+  if (options.optimizeLevel >= 3 || options.shrinkLevel >= 2) {
+    addIfNoDWARFIssues("precompute-propagate");
+  } else {
+    addIfNoDWARFIssues("precompute");
+  }
+  if (options.lowMemoryUnused) {
+    if (options.optimizeLevel >= 3 || options.shrinkLevel >= 1) {
+      addIfNoDWARFIssues("optimize-added-constants-propagate");
+    } else {
+      addIfNoDWARFIssues("optimize-added-constants");
+    }
+  }
+  if (options.optimizeLevel >= 2 || options.shrinkLevel >= 2) {
+    addIfNoDWARFIssues("code-pushing");
+  }
+  // don't create if/block return values yet, as coalesce can remove copies that
+  // that could inhibit
+  addIfNoDWARFIssues("simplify-locals-nostructure");
+  addIfNoDWARFIssues("vacuum"); // previous pass creates garbage
+  addIfNoDWARFIssues("reorder-locals");
+  // simplify-locals opens opportunities for optimizations
+  addIfNoDWARFIssues("remove-unused-brs");
+  if (options.optimizeLevel > 1 && wasm->features.hasGC()) {
+    addIfNoDWARFIssues("heap2local");
+  }
+  // if we are willing to work hard, also optimize copies before coalescing
+  if (options.optimizeLevel >= 3 || options.shrinkLevel >= 2) {
+    addIfNoDWARFIssues("merge-locals"); // very slow on e.g. sqlite
+  }
+  if (options.optimizeLevel > 1 && wasm->features.hasGC()) {
+    addIfNoDWARFIssues("optimize-casts");
+    // Coalescing may prevent subtyping (as a coalesced local must have the
+    // supertype of all those combined into it), so subtype first.
+    // TODO: when optimizing for size, maybe the order should reverse?
+    addIfNoDWARFIssues("local-subtyping");
+  }
+  addIfNoDWARFIssues("coalesce-locals");
+  if (options.optimizeLevel >= 3 || options.shrinkLevel >= 1) {
+    addIfNoDWARFIssues("local-cse");
+  }
+  addIfNoDWARFIssues("simplify-locals");
+  addIfNoDWARFIssues("vacuum");
+  addIfNoDWARFIssues("reorder-locals");
+  addIfNoDWARFIssues("coalesce-locals");
+  addIfNoDWARFIssues("reorder-locals");
+  addIfNoDWARFIssues("vacuum");
+  if (options.optimizeLevel >= 3 || options.shrinkLevel >= 1) {
+    addIfNoDWARFIssues("code-folding");
+  }
+  addIfNoDWARFIssues("merge-blocks"); // makes remove-unused-brs more effective
+  addIfNoDWARFIssues(
+    "remove-unused-brs"); // coalesce-locals opens opportunities
+  addIfNoDWARFIssues(
+    "remove-unused-names");           // remove-unused-brs opens opportunities
+  addIfNoDWARFIssues("merge-blocks"); // clean up remove-unused-brs new blocks
+  // late propagation
+  if (options.optimizeLevel >= 3 || options.shrinkLevel >= 2) {
+    addIfNoDWARFIssues("precompute-propagate");
+  } else {
+    addIfNoDWARFIssues("precompute");
+  }
+  addIfNoDWARFIssues("optimize-instructions");
+  if (options.optimizeLevel >= 2 || options.shrinkLevel >= 1) {
+    addIfNoDWARFIssues(
+      "rse"); // after all coalesce-locals, and before a final vacuum
+  }
+  addIfNoDWARFIssues("vacuum"); // just to be safe
+}
+
+void PassRunner::addDefaultGlobalOptimizationPrePasses() {
+  addIfNoDWARFIssues("duplicate-function-elimination");
+  addIfNoDWARFIssues("memory-packing");
+  if (options.optimizeLevel >= 2) {
+    addIfNoDWARFIssues("once-reduction");
+  }
+  if (wasm->features.hasGC() && options.optimizeLevel >= 2) {
+    if (options.closedWorld) {
+      addIfNoDWARFIssues("type-refining");
+      addIfNoDWARFIssues("signature-pruning");
+      addIfNoDWARFIssues("signature-refining");
+    }
+    addIfNoDWARFIssues("global-refining");
+    // Global type optimization can remove fields that are not needed, which can
+    // remove ref.funcs that were once assigned to vtables but are no longer
+    // needed, which can allow more code to be removed globally. After those,
+    // constant field propagation can be more effective.
+    if (options.closedWorld) {
+      addIfNoDWARFIssues("gto");
+    }
+    addIfNoDWARFIssues("remove-unused-module-elements");
+    if (options.closedWorld) {
+      addIfNoDWARFIssues("remove-unused-types");
+      addIfNoDWARFIssues("cfp");
+      addIfNoDWARFIssues("gsi");
+      addIfNoDWARFIssues("abstract-type-refining");
+    }
+  }
+  // TODO: generate-global-effects here, right before function passes, then
+  //       discard in addDefaultGlobalOptimizationPostPasses? the benefit seems
+  //       quite minor so far, except perhaps when using call.without.effects
+  //       which can lead to more opportunities for global effects to matter.
+}
+
+void PassRunner::addDefaultGlobalOptimizationPostPasses() {
+  if (options.optimizeLevel >= 2 || options.shrinkLevel >= 1) {
+    addIfNoDWARFIssues("dae-optimizing");
+  }
+  if (options.optimizeLevel >= 2 || options.shrinkLevel >= 2) {
+    addIfNoDWARFIssues("inlining-optimizing");
+  }
+
+  // Optimizations show more functions as duplicate, so run this here in Post.
+  addIfNoDWARFIssues("duplicate-function-elimination");
+  addIfNoDWARFIssues("duplicate-import-elimination");
+
+  // perform after the number of functions is reduced by inlining-optimizing
+  if (options.shrinkLevel >= 2) {
+    addIfNoDWARFIssues("merge-similar-functions");
+  }
+
+  if (options.optimizeLevel >= 2 || options.shrinkLevel >= 2) {
+    addIfNoDWARFIssues("simplify-globals-optimizing");
+  } else {
+    addIfNoDWARFIssues("simplify-globals");
+  }
+  addIfNoDWARFIssues("remove-unused-module-elements");
+  if (options.optimizeLevel >= 2 || options.shrinkLevel >= 1) {
+    addIfNoDWARFIssues("reorder-globals");
+  }
+  // may allow more inlining/dae/etc., need --converge for that
+  addIfNoDWARFIssues("directize");
+  // perform Stack IR optimizations here, at the very end of the
+  // optimization pipeline
+  if (options.optimizeLevel >= 2 || options.shrinkLevel >= 1) {
+    addIfNoDWARFIssues("generate-stack-ir");
+    addIfNoDWARFIssues("optimize-stack-ir");
+  }
+}
+
+static void dumpWasm(Name name, Module* wasm) {
+  static int counter = 0;
+  std::string numstr = std::to_string(counter++);
+  while (numstr.size() < 3) {
+    numstr = '0' + numstr;
+  }
+  auto fullName = std::string("byn-");
+#ifdef __linux__
+  // TODO: use _getpid() on windows, elsewhere?
+  fullName += std::to_string(getpid()) + '-';
+#endif
+  fullName += numstr + "-" + name.toString();
+  Colors::setEnabled(false);
+  ModuleWriter writer;
+  writer.setDebugInfo(true);
+  writer.writeBinary(*wasm, fullName + ".wasm");
+}
+
+void PassRunner::run() {
+  assert(!ran);
+  ran = true;
+
+  // As we run passes, we'll notice which we skip.
+  skippedPasses.clear();
+
+  static const int passDebug = getPassDebug();
+  // Emit logging information when asked for. At passDebug level 1+ we log
+  // the main passes, while in 2 we also log nested ones. Note that for
+  // nested ones we can only emit their name - we can't validate, or save the
+  // file, or print, as the wasm may be in an intermediate state that is not
+  // valid.
+  if (options.debug || (passDebug == 2 || (passDebug && !isNested))) {
+    // for debug logging purposes, run each pass in full before running the
+    // other
+    auto totalTime = std::chrono::duration<double>(0);
+    auto what = isNested ? "nested passes" : "passes";
+    std::cerr << "[PassRunner] running " << what << std::endl;
+    size_t padding = 0;
+    for (auto& pass : passes) {
+      padding = std::max(padding, pass->name.size());
+    }
+    if (passDebug >= 3 && !isNested) {
+      dumpWasm("before", wasm);
+    }
+    for (auto& pass : passes) {
+      // ignoring the time, save a printout of the module before, in case this
+      // pass breaks it, so we can print the before and after
+      std::stringstream moduleBefore;
+      if (passDebug == 2 && !isNested) {
+        moduleBefore << *wasm << '\n';
+      }
+      // prepare to run
+      std::cerr << "[PassRunner]   running pass: " << pass->name << "... ";
+      for (size_t i = 0; i < padding - pass->name.size(); i++) {
+        std::cerr << ' ';
+      }
+      auto before = std::chrono::steady_clock::now();
+      if (pass->isFunctionParallel()) {
+        // function-parallel passes should get a new instance per function
+        ModuleUtils::iterDefinedFunctions(
+          *wasm, [&](Function* func) { runPassOnFunction(pass.get(), func); });
+      } else {
+        runPass(pass.get());
+      }
+      auto after = std::chrono::steady_clock::now();
+      std::chrono::duration<double> diff = after - before;
+      std::cerr << diff.count() << " seconds." << std::endl;
+      totalTime += diff;
+      if (options.validate && !isNested) {
+        // validate, ignoring the time
+        std::cerr << "[PassRunner]   (validating)\n";
+        if (!WasmValidator().validate(*wasm, options)) {
+          std::cout << *wasm << '\n';
+          if (passDebug >= 2) {
+            Fatal() << "Last pass (" << pass->name
+                    << ") broke validation. Here is the module before: \n"
+                    << moduleBefore.str() << "\n";
+          } else {
+            Fatal() << "Last pass (" << pass->name
+                    << ") broke validation. Run with BINARYEN_PASS_DEBUG=2 "
+                       "in the env to see the earlier state, or 3 to dump "
+                       "byn-* files for each pass\n";
+          }
+        }
+      }
+      if (passDebug >= 3) {
+        dumpWasm(pass->name, wasm);
+      
