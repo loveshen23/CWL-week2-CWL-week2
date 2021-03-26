@@ -761,4 +761,322 @@ void PassRunner::run() {
       }
       if (passDebug >= 3) {
         dumpWasm(pass->name, wasm);
-      
+      }
+    }
+    std::cerr << "[PassRunner] " << what << " took " << totalTime.count()
+              << " seconds." << std::endl;
+    if (options.validate && !isNested) {
+      std::cerr << "[PassRunner] (final validation)\n";
+      if (!WasmValidator().validate(*wasm, options)) {
+        std::cout << *wasm << '\n';
+        Fatal() << "final module does not validate\n";
+      }
+    }
+  } else {
+    // non-debug normal mode, run them in an optimal manner - for locality it is
+    // better to run as many passes as possible on a single function before
+    // moving to the next
+    std::vector<Pass*> stack;
+    auto flush = [&]() {
+      if (stack.size() > 0) {
+        // run the stack of passes on all the functions, in parallel
+        size_t num = ThreadPool::get()->size();
+        std::vector<std::function<ThreadWorkState()>> doWorkers;
+        std::atomic<size_t> nextFunction;
+        nextFunction.store(0);
+        size_t numFunctions = wasm->functions.size();
+        for (size_t i = 0; i < num; i++) {
+          doWorkers.push_back([&]() {
+            auto index = nextFunction.fetch_add(1);
+            // get the next task, if there is one
+            if (index >= numFunctions) {
+              return ThreadWorkState::Finished; // nothing left
+            }
+            Function* func = this->wasm->functions[index].get();
+            if (!func->imported()) {
+              // do the current task: run all passes on this function
+              for (auto* pass : stack) {
+                runPassOnFunction(pass, func);
+              }
+            }
+            if (index + 1 == numFunctions) {
+              return ThreadWorkState::Finished; // we did the last one
+            }
+            return ThreadWorkState::More;
+          });
+        }
+        ThreadPool::get()->work(doWorkers);
+      }
+      stack.clear();
+    };
+    for (auto& pass : passes) {
+      if (pass->isFunctionParallel()) {
+        stack.push_back(pass.get());
+      } else {
+        flush();
+        runPass(pass.get());
+      }
+    }
+    flush();
+  }
+
+  if (!isNested) {
+    // All the passes the user requested to skip should have been seen, and
+    // skipped. If not, the user may have had a typo in the name of a pass to
+    // skip, and we will warn. (We don't do this in a nested runner because
+    // those are used for various internal tasks inside passes, which would lead
+    // to many spurious warnings.)
+    for (auto pass : options.passesToSkip) {
+      if (!skippedPasses.count(pass)) {
+        std::cerr << "warning: --" << pass << " was requested to be skipped, "
+                  << "but it was not found in the passes that were run.\n";
+      }
+    }
+  }
+}
+
+void PassRunner::runOnFunction(Function* func) {
+  if (options.debug) {
+    std::cerr << "[PassRunner] running passes on function " << func->name
+              << std::endl;
+  }
+  for (auto& pass : passes) {
+    runPassOnFunction(pass.get(), func);
+  }
+}
+
+void PassRunner::doAdd(std::unique_ptr<Pass> pass) {
+  if (pass->invalidatesDWARF() && shouldPreserveDWARF()) {
+    std::cerr << "warning: running pass '" << pass->name
+              << "' which is not fully compatible with DWARF\n";
+  }
+  if (passRemovesDebugInfo(pass->name)) {
+    addedPassesRemovedDWARF = true;
+  }
+  passes.emplace_back(std::move(pass));
+}
+
+// Checks that the state is valid before and after a
+// pass runs on a function. We run these extra checks when
+// pass-debug mode is enabled.
+struct AfterEffectFunctionChecker {
+  Function* func;
+  Name name;
+
+  // Check Stack IR state: if the main IR changes, there should be no
+  // stack IR, as the stack IR would be wrong.
+  bool beganWithStackIR;
+  size_t originalFunctionHash;
+
+  // In the creator we can scan the state of the module and function before the
+  // pass runs.
+  AfterEffectFunctionChecker(Function* func) : func(func), name(func->name) {
+    beganWithStackIR = func->stackIR != nullptr;
+    if (beganWithStackIR) {
+      originalFunctionHash = FunctionHasher::hashFunction(func);
+    }
+  }
+
+  // This is called after the pass is run, at which time we can check things.
+  void check() {
+    assert(func->name == name); // no global module changes should have occurred
+    if (beganWithStackIR && func->stackIR) {
+      auto after = FunctionHasher::hashFunction(func);
+      if (after != originalFunctionHash) {
+        Fatal() << "[PassRunner] PASS_DEBUG check failed: had Stack IR before "
+                   "and after the pass ran, and the pass modified the main IR, "
+                   "which invalidates Stack IR - pass should have been marked "
+                   "'modifiesBinaryenIR'";
+      }
+    }
+  }
+};
+
+// Runs checks on the entire module, in a non-function-parallel pass.
+// In particular, in such a pass functions may be removed or renamed, track
+// that.
+struct AfterEffectModuleChecker {
+  Module* module;
+
+  std::vector<AfterEffectFunctionChecker> checkers;
+
+  bool beganWithAnyStackIR;
+
+  AfterEffectModuleChecker(Module* module) : module(module) {
+    for (auto& func : module->functions) {
+      checkers.emplace_back(func.get());
+    }
+    beganWithAnyStackIR = hasAnyStackIR();
+  }
+
+  void check() {
+    if (beganWithAnyStackIR && hasAnyStackIR()) {
+      // If anything changed to the functions, that's not good.
+      if (checkers.size() != module->functions.size()) {
+        error();
+      }
+      for (Index i = 0; i < checkers.size(); i++) {
+        // Did a pointer change? (a deallocated function could cause that)
+        if (module->functions[i].get() != checkers[i].func ||
+            module->functions[i]->body != checkers[i].func->body) {
+          error();
+        }
+        // Did a name change?
+        if (module->functions[i]->name != checkers[i].name) {
+          error();
+        }
+      }
+      // Global function state appears to not have been changed: the same
+      // functions are there. Look into their contents.
+      for (auto& checker : checkers) {
+        checker.check();
+      }
+    }
+  }
+
+  void error() {
+    Fatal() << "[PassRunner] PASS_DEBUG check failed: had Stack IR before and "
+               "after the pass ran, and the pass modified global function "
+               "state - pass should have been marked 'modifiesBinaryenIR'";
+  }
+
+  bool hasAnyStackIR() {
+    for (auto& func : module->functions) {
+      if (func->stackIR) {
+        return true;
+      }
+    }
+    return false;
+  }
+};
+
+void PassRunner::runPass(Pass* pass) {
+  assert(!pass->isFunctionParallel());
+
+  if (options.passesToSkip.count(pass->name)) {
+    skippedPasses.insert(pass->name);
+    return;
+  }
+
+  std::unique_ptr<AfterEffectModuleChecker> checker;
+  if (getPassDebug()) {
+    checker = std::unique_ptr<AfterEffectModuleChecker>(
+      new AfterEffectModuleChecker(wasm));
+  }
+  // Passes can only be run once and we deliberately do not clear the pass
+  // runner after running the pass, so there must not already be a runner here.
+  assert(!pass->getPassRunner());
+  pass->setPassRunner(this);
+  pass->run(wasm);
+  handleAfterEffects(pass);
+  if (getPassDebug()) {
+    checker->check();
+  }
+}
+
+void PassRunner::runPassOnFunction(Pass* pass, Function* func) {
+  assert(pass->isFunctionParallel());
+
+  if (options.passesToSkip.count(pass->name)) {
+    skippedPasses.insert(pass->name);
+    return;
+  }
+
+  auto passDebug = getPassDebug();
+
+  // Add extra validation logic in pass-debug mode 2. The main logic in
+  // PassRunner::run will work at the module level, and here for a function-
+  // parallel pass we can do the same at the function level: we can print the
+  // function before the pass, run the pass on the function, and then if it
+  // fails to validate we can show an error and print the state right before the
+  // pass broke it.
+  //
+  // Skip nameless passes for this. Anything without a name is an internal
+  // component of some larger pass, and information about it won't be very
+  // useful - leave it to the entire module to fail validation in that case.
+  bool extraFunctionValidation =
+    passDebug == 2 && options.validate && !pass->name.empty();
+  std::stringstream bodyBefore;
+  if (extraFunctionValidation) {
+    bodyBefore << *func->body << '\n';
+  }
+
+  std::unique_ptr<AfterEffectFunctionChecker> checker;
+  if (passDebug) {
+    checker = std::make_unique<AfterEffectFunctionChecker>(func);
+  }
+
+  // Function-parallel passes get a new instance per function
+  auto instance = pass->create();
+  instance->setPassRunner(this);
+  instance->runOnFunction(wasm, func);
+  handleAfterEffects(pass, func);
+
+  if (passDebug) {
+    checker->check();
+  }
+
+  if (extraFunctionValidation) {
+    if (!WasmValidator().validate(func, *wasm, WasmValidator::Minimal)) {
+      Fatal() << "Last nested function-parallel pass (" << pass->name
+              << ") broke validation of function " << func->name
+              << ". Here is the function body before:\n"
+              << bodyBefore.str() << "\n\nAnd here it is now:\n"
+              << *func->body << '\n';
+    }
+  }
+}
+
+void PassRunner::handleAfterEffects(Pass* pass, Function* func) {
+  if (!pass->modifiesBinaryenIR()) {
+    return;
+  }
+
+  // Binaryen IR is modified, so we may have work here.
+
+  if (!func) {
+    // If no function is provided, then this is not a function-parallel pass,
+    // and it may have operated on any of the functions in theory, so run on
+    // them all.
+    assert(!pass->isFunctionParallel());
+    for (auto& func : wasm->functions) {
+      handleAfterEffects(pass, func.get());
+    }
+    return;
+  }
+
+  // If Binaryen IR is modified, Stack IR must be cleared - it would
+  // be out of sync in a potentially dangerous way.
+  func->stackIR.reset(nullptr);
+
+  if (pass->requiresNonNullableLocalFixups()) {
+    TypeUpdating::handleNonDefaultableLocals(func, *wasm);
+  }
+}
+
+int PassRunner::getPassDebug() {
+  static const int passDebug =
+    getenv("BINARYEN_PASS_DEBUG") ? atoi(getenv("BINARYEN_PASS_DEBUG")) : 0;
+  return passDebug;
+}
+
+bool PassRunner::passRemovesDebugInfo(const std::string& name) {
+  return name == "strip" || name == "strip-debug" || name == "strip-dwarf";
+}
+
+bool PassRunner::shouldPreserveDWARF() {
+  // Check if the debugging subsystem wants to preserve DWARF.
+  if (!Debug::shouldPreserveDWARF(options, *wasm)) {
+    return false;
+  }
+
+  // We may need DWARF. Check if one of our previous passes would remove it
+  // anyhow, in which case, there is nothing to preserve.
+  if (addedPassesRemovedDWARF) {
+    return false;
+  }
+
+  return true;
+}
+
+} // namespace wasm
