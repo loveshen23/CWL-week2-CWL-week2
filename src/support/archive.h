@@ -51,4 +51,55 @@ public:
     uint32_t len = 0;
     // Offset from data to the start of the file
     uint16_t startOfFile = 0;
-    const ArchiveMemberHeader* get
+    const ArchiveMemberHeader* getHeader() const {
+      return reinterpret_cast<const ArchiveMemberHeader*>(data);
+    }
+    Child getNext(bool& error) const;
+
+  public:
+    Child(){};
+    Child(const Archive* parent, const uint8_t* data, bool* error);
+    // Size of actual member data (no header/padding)
+    uint32_t getSize() const;
+    SubBuffer getBuffer() const;
+    std::string getRawName() const;
+    std::string getName() const;
+    bool operator==(const Child& other) const { return data == other.data; }
+  };
+  class child_iterator {
+    friend class Archive;
+    Child child;
+    bool error = false; // TODO: use std::error_code instead?
+  public:
+    child_iterator() = default;
+    explicit child_iterator(bool error) : error(error) {}
+    child_iterator(const Child& c) : child(c) {}
+    const Child* operator->() const { return &child; }
+    const Child& operator*() const { return child; }
+    bool operator==(const child_iterator& other) const {
+      return child == other.child;
+    }
+    bool operator!=(const child_iterator& other) const {
+      return !(*this == other);
+    }
+    child_iterator& operator++() {
+      assert(!error);
+      child = child.getNext(error);
+      return *this;
+    }
+    bool hasError() const { return error; }
+  };
+  Archive(Buffer& buffer, bool& error);
+  child_iterator child_begin(bool SkipInternal = true) const;
+  child_iterator child_end() const;
+  void dump() const;
+
+private:
+  void setFirstRegular(const Child& c) { firstRegularData = c.data; }
+  Buffer& data;
+  SubBuffer symbolTable;
+  SubBuffer stringTable;
+  const uint8_t* firstRegularData;
+};
+
+#endif // wasm_support_archive_h
