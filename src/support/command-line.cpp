@@ -190,4 +190,64 @@ void Options::parse(int argc, const char* argv[]) {
         case Arguments::One:
           if (positionalsSeen) {
             std::cerr << "Unexpected second positional argument '"
-                      << currentOption << "' for " << positionalNa
+                      << currentOption << "' for " << positionalName << '\n';
+            exit(EXIT_FAILURE);
+          }
+          [[fallthrough]];
+        case Arguments::N:
+          positionalAction(this, currentOption);
+          ++positionalsSeen;
+          break;
+      }
+      continue;
+    }
+
+    // Non-positional.
+    std::string argument;
+    auto equal = currentOption.find_first_of('=');
+    if (equal != std::string::npos) {
+      argument = currentOption.substr(equal + 1);
+      currentOption = currentOption.substr(0, equal);
+    }
+    Option* option = nullptr;
+    for (auto& o : options) {
+      if (o.longName == currentOption || o.shortName == currentOption) {
+        option = &o;
+      }
+    }
+    if (!option) {
+      std::cerr << "Unknown option '" << currentOption << "'\n";
+      exit(EXIT_FAILURE);
+    }
+    switch (option->arguments) {
+      case Arguments::Zero:
+        if (argument.size()) {
+          std::cerr << "Unexpected argument '" << argument << "' for option '"
+                    << currentOption << "'\n";
+          exit(EXIT_FAILURE);
+        }
+        break;
+      case Arguments::One:
+        if (option->seen) {
+          std::cerr << "Unexpected second argument '" << argument << "' for '"
+                    << currentOption << "'\n";
+          exit(EXIT_FAILURE);
+        }
+        [[fallthrough]];
+      case Arguments::N:
+        if (!argument.size()) {
+          if (i + 1 == e) {
+            std::cerr << "Couldn't find expected argument for '"
+                      << currentOption << "'\n";
+            exit(EXIT_FAILURE);
+          }
+          argument = argv[++i];
+        }
+        break;
+      case Arguments::Optional:
+        break;
+    }
+    option->action(this, argument);
+    ++option->seen;
+  }
+}
