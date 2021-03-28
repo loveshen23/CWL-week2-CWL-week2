@@ -32,4 +32,40 @@ namespace wasm {
 //       numerical indices directly.
 
 struct Name : public IString {
-  Name() 
+  Name() : IString() {}
+  Name(std::string_view str) : IString(str, false) {}
+  Name(const char* str) : IString(str, false) {}
+  Name(IString str) : IString(str) {}
+  Name(const std::string& str) : IString(str) {}
+
+  // String literals do not need to be copied. Note: Not safe to construct from
+  // temporary char arrays! Take their address first.
+  template<size_t N> Name(const char (&str)[N]) : IString(str) {}
+
+  friend std::ostream& operator<<(std::ostream& o, Name name) {
+    if (name) {
+      return o << name.str;
+    } else {
+      return o << "(null Name)";
+    }
+  }
+
+  static Name fromInt(size_t i) {
+    return IString(std::to_string(i).c_str(), false);
+  }
+
+  bool hasSubstring(IString substring) {
+    // TODO: Use C++23 `contains`.
+    return str.find(substring.str) != std::string_view::npos;
+  }
+};
+
+} // namespace wasm
+
+namespace std {
+
+template<> struct hash<wasm::Name> : hash<wasm::IString> {};
+
+} // namespace std
+
+#endif // wasm_support_name_h
