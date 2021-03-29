@@ -47,4 +47,9 @@ struct HeapTypeGenerator {
 
   // Returns the types in the input that are inhabitable.
   static std::vector<HeapType>
-  getInhabitable(const std::vector<Hea
+  getInhabitable(const std::vector<HeapType>& types);
+};
+
+} // namespace wasm
+
+#endif // wasm_tools_fuzzing_heap_types_h
