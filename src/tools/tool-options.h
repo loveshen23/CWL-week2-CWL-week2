@@ -180,4 +180,36 @@ struct ToolOptions : public Options {
            ToolOptionsCategory,
            Arguments::Zero,
            [this, feature](Options*, const std::string&) {
-             enabledFeatures.set(feature, t
+             enabledFeatures.set(feature, true);
+             disabledFeatures.set(feature, false);
+           })
+
+      .add(std::string("--disable-") + FeatureSet::toString(feature),
+           "",
+           std::string("Disable ") + description,
+           ToolOptionsCategory,
+           Arguments::Zero,
+           [this, feature](Options*, const std::string&) {
+             enabledFeatures.set(feature, false);
+             disabledFeatures.set(feature, true);
+           });
+    return *this;
+  }
+
+  void applyFeatures(Module& module) const {
+    module.features.enable(enabledFeatures);
+    module.features.disable(disabledFeatures);
+    // Non-default type systems only make sense with GC enabled.
+    if (!module.features.hasGC() && getTypeSystem() == TypeSystem::Nominal) {
+      Fatal() << "Nominal typing is only allowed when GC is enabled";
+    }
+  }
+
+private:
+  FeatureSet enabledFeatures = FeatureSet::Default;
+  FeatureSet disabledFeatures = FeatureSet::None;
+};
+
+} // namespace wasm
+
+#endif
