@@ -401,4 +401,248 @@ public:
       if (DCENodeToGlobal.find(name) != DCENodeToGlobal.end()) {
         std::cout << "  is global " << DCENodeToGlobal[name] << '\n';
       }
-      if (DCENodeToTag.fi
+      if (DCENodeToTag.find(name) != DCENodeToTag.end()) {
+        std::cout << "  is tag " << DCENodeToTag[name] << '\n';
+      }
+      for (auto target : node.reaches) {
+        std::cout << "  reaches: " << target << '\n';
+      }
+    }
+    std::cout << "=============\n";
+  }
+};
+
+//
+// main
+//
+
+int main(int argc, const char* argv[]) {
+  Name entry;
+  std::vector<std::string> passes;
+  bool emitBinary = true;
+  bool debugInfo = false;
+  std::string graphFile;
+  bool dump = false;
+
+  const std::string WasmMetaDCEOption = "wasm-opt options";
+
+  ToolOptions options(
+    "wasm-metadce",
+    "This tool performs dead code elimination (DCE) on a larger space "
+    "that the wasm module is just a part of. For example, if you have "
+    "JS and wasm that are connected, this can DCE the combined graph. "
+    "By doing so, it is able to eliminate wasm module exports, which "
+    "otherwise regular optimizations cannot.\n\n"
+    "This tool receives a representation of the reachability graph "
+    "that the wasm module resides in, which contains abstract nodes "
+    "and connections showing what they reach. Some of those nodes "
+    "can represent the wasm module's imports and exports. The tool "
+    "then completes the graph by adding the internal parts of the "
+    "module, and does DCE on the entire thing.\n\n"
+    "This tool will output a wasm module with dead code eliminated, "
+    "and metadata describing the things in the rest of the graph "
+    "that can be eliminated as well.\n\n"
+    "The graph description file should represent the graph in the following "
+    "JSON-like notation (note, this is not true JSON, things like "
+    "comments, escaping, single-quotes, etc. are not supported):\n\n"
+    "  [\n"
+    "    {\n"
+    "      \"name\": \"entity1\",\n"
+    "      \"reaches\": [\"entity2, \"entity3\"],\n"
+    "      \"root\": true\n"
+    "    },\n"
+    "    {\n"
+    "      \"name\": \"entity2\",\n"
+    "      \"reaches\": [\"entity1, \"entity4\"]\n"
+    "    },\n"
+    "    {\n"
+    "      \"name\": \"entity3\",\n"
+    "      \"reaches\": [\"entity1\"],\n"
+    "      \"export\": \"export1\"\n"
+    "    },\n"
+    "    {\n"
+    "      \"name\": \"entity4\",\n"
+    "      \"import\": [\"module\", \"import1\"]\n"
+    "    },\n"
+    "  ]\n\n"
+    "Each entity has a name and an optional list of the other "
+    "entities it reaches. It can also be marked as a root, "
+    "export (with the export string), or import (with the "
+    "module and import strings). DCE then computes what is "
+    "reachable from the roots.");
+
+  options
+    .add("--output",
+         "-o",
+         "Output file (stdout if not specified)",
+         WasmMetaDCEOption,
+         Options::Arguments::One,
+         [](Options* o, const std::string& argument) {
+           o->extra["output"] = argument;
+           Colors::setEnabled(false);
+         })
+    .add("--emit-text",
+         "-S",
+         "Emit text instead of binary for the output file",
+         WasmMetaDCEOption,
+         Options::Arguments::Zero,
+         [&](Options* o, const std::string& argument) { emitBinary = false; })
+    .add("--debuginfo",
+         "-g",
+         "Emit names section and debug info",
+         WasmMetaDCEOption,
+         Options::Arguments::Zero,
+         [&](Options* o, const std::string& arguments) { debugInfo = true; })
+    .add("--graph-file",
+         "-f",
+         "Filename of the graph description file",
+         WasmMetaDCEOption,
+         Options::Arguments::One,
+         [&](Options* o, const std::string& argument) { graphFile = argument; })
+    .add("--dump",
+         "-d",
+         "Dump the combined graph file (useful for debugging)",
+         WasmMetaDCEOption,
+         Options::Arguments::Zero,
+         [&](Options* o, const std::string& arguments) { dump = true; })
+    .add_positional("INFILE",
+                    Options::Arguments::One,
+                    [](Options* o, const std::string& argument) {
+                      o->extra["infile"] = argument;
+                    });
+  options.parse(argc, argv);
+
+  if (graphFile.size() == 0) {
+    Fatal() << "no graph file provided.";
+  }
+
+  auto input(read_file<std::string>(options.extra["infile"], Flags::Text));
+
+  Module wasm;
+  options.applyFeatures(wasm);
+
+  {
+    if (options.debug) {
+      std::cerr << "reading...\n";
+    }
+    ModuleReader reader;
+    reader.setDWARF(debugInfo);
+    try {
+      reader.read(options.extra["infile"], wasm);
+    } catch (ParseException& p) {
+      p.dump(std::cerr);
+      Fatal() << "error in parsing wasm input";
+    }
+  }
+
+  if (options.passOptions.validate) {
+    if (!WasmValidator().validate(wasm)) {
+      std::cout << wasm << '\n';
+      Fatal() << "error in validating input";
+    }
+  }
+
+  auto graphInput(read_file<std::string>(graphFile, Flags::Text));
+  auto* copy = strdup(graphInput.c_str());
+  json::Value outside;
+  outside.parse(copy);
+
+  // parse the JSON into our graph, doing all the JSON parsing here, leaving
+  // the abstract computation for the class itself
+  const json::IString NAME("name");
+  const json::IString REACHES("reaches");
+  const json::IString ROOT("root");
+  const json::IString EXPORT("export");
+  const json::IString IMPORT("import");
+
+  MetaDCEGraph graph(wasm);
+
+  if (!outside.isArray()) {
+    Fatal()
+      << "input graph must be a JSON array of nodes. see --help for the form";
+  }
+  auto size = outside.size();
+  for (size_t i = 0; i < size; i++) {
+    json::Ref ref = outside[i];
+    if (!ref->isObject()) {
+      Fatal()
+        << "nodes in input graph must be JSON objects. see --help for the form";
+    }
+    if (!ref->has(NAME)) {
+      Fatal()
+        << "nodes in input graph must have a name. see --help for the form";
+    }
+    DCENode node(ref[NAME]->getIString());
+    if (ref->has(REACHES)) {
+      json::Ref reaches = ref[REACHES];
+      if (!reaches->isArray()) {
+        Fatal() << "node.reaches must be an array. see --help for the form";
+      }
+      auto size = reaches->size();
+      for (size_t j = 0; j < size; j++) {
+        json::Ref name = reaches[j];
+        if (!name->isString()) {
+          Fatal()
+            << "node.reaches items must be strings. see --help for the form";
+        }
+        node.reaches.push_back(name->getIString());
+      }
+    }
+    if (ref->has(ROOT)) {
+      json::Ref root = ref[ROOT];
+      if (!root->isBool() || !root->getBool()) {
+        Fatal()
+          << "node.root, if it exists, must be true. see --help for the form";
+      }
+      graph.roots.insert(node.name);
+    }
+    if (ref->has(EXPORT)) {
+      json::Ref exp = ref[EXPORT];
+      if (!exp->isString()) {
+        Fatal() << "node.export, if it exists, must be a string. see --help "
+                   "for the form";
+      }
+      graph.exportToDCENode[exp->getIString()] = node.name;
+      graph.DCENodeToExport[node.name] = exp->getIString();
+    }
+    if (ref->has(IMPORT)) {
+      json::Ref imp = ref[IMPORT];
+      if (!imp->isArray() || imp->size() != 2 || !imp[0]->isString() ||
+          !imp[1]->isString()) {
+        Fatal() << "node.import, if it exists, must be an array of two "
+                   "strings. see --help for the form";
+      }
+      auto id = graph.getImportId(imp[0]->getIString(), imp[1]->getIString());
+      graph.importIdToDCENode[id] = node.name;
+    }
+    // TODO: optimize this copy with a clever move
+    graph.nodes[node.name] = node;
+  }
+
+  // The external graph is now populated. Scan the module
+  graph.scanWebAssembly();
+
+  // Debug dump the graph, if requested
+  if (dump) {
+    graph.dump();
+  }
+
+  // Perform the DCE
+  graph.deadCodeElimination();
+
+  // Apply to the wasm
+  graph.apply();
+
+  if (options.extra.count("output") > 0) {
+    ModuleWriter writer;
+    writer.setBinary(emitBinary);
+    writer.setDebugInfo(debugInfo);
+    writer.write(wasm, options.extra["output"]);
+  }
+
+  // Print out everything that we found is removable, the outside might use that
+  graph.printAllUnused();
+
+  // Clean up
+  free(copy);
+}
