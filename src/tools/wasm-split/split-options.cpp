@@ -357,4 +357,92 @@ WasmSplitOptions& WasmSplitOptions::add(const std::string& longName,
     }
     desc << "] ";
   }
-  desc << descriptio
+  desc << description;
+  ToolOptions::add(
+    longName,
+    shortName,
+    desc.str(),
+    category,
+    arguments,
+    [&, action, longName](Options* o, const std::string& argument) {
+      usedOptions.push_back(longName);
+      action(o, argument);
+    });
+  return *this;
+}
+
+WasmSplitOptions& WasmSplitOptions::add(const std::string& longName,
+                                        const std::string& shortName,
+                                        const std::string& description,
+                                        const std::string& category,
+                                        Arguments arguments,
+                                        const Action& action) {
+  // Add an option valid in all modes.
+  for (unsigned i = 0; i < NumModes; ++i) {
+    validOptions[i].insert(longName);
+  }
+  return add(longName, shortName, description, category, {}, arguments, action);
+}
+
+bool WasmSplitOptions::validate() {
+  bool valid = true;
+  auto fail = [&](auto msg) {
+    std::cerr << "error: " << msg << "\n";
+    valid = false;
+  };
+
+  // Validate the positional arguments.
+  if (inputFiles.size() == 0) {
+    fail("no input file");
+  }
+  switch (mode) {
+    case Mode::Split:
+    case Mode::Instrument:
+      if (inputFiles.size() > 1) {
+        fail("Cannot have more than one input file.");
+      }
+      break;
+    case Mode::MergeProfiles:
+      // Any number >= 1 allowed.
+      break;
+    case Mode::PrintProfile:
+      if (inputFiles.size() != 1) {
+        fail("Must have exactly one profile path.");
+      }
+      break;
+  }
+
+  // Validate that all used options are allowed in the current mode.
+  for (std::string& opt : usedOptions) {
+    if (!validOptions[static_cast<unsigned>(mode)].count(opt)) {
+      std::stringstream msg;
+      msg << "Option " << opt << " cannot be used in " << mode << " mode.";
+      fail(msg.str());
+    }
+  }
+
+  if (mode == Mode::Split) {
+    if (profileFile.size() && keepFuncs.size()) {
+      fail("Cannot use both --profile and --keep-funcs.");
+    }
+    if (profileFile.size() && splitFuncs.size()) {
+      fail("Cannot use both --profile and --split-funcs.");
+    }
+    if (keepFuncs.size() && splitFuncs.size()) {
+      fail("Cannot use both --keep-funcs and --split-funcs.");
+    }
+  }
+
+  return valid;
+}
+
+void WasmSplitOptions::parse(int argc, const char* argv[]) {
+  ToolOptions::parse(argc, argv);
+  // Since --quiet is defined in ToolOptions but --verbose is defined here,
+  // --quiet doesn't know to unset --verbose. Fix it up here.
+  if (quiet && verbose) {
+    verbose = false;
+  }
+}
+
+} // namespace wasm
