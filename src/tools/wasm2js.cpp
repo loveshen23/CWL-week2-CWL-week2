@@ -466,4 +466,330 @@ static void optimizeJS(Ref ast, Wasm2JSBuilder::Flags flags) {
     [&](Ref node) {
       if (node->isArray() && !node->empty()) {
         if (node[0] == LABEL) {
-          auto lab
+          auto label = node[1]->getIString();
+          labelToValue.erase(label);
+          labelled.erase(node[2].get());
+        } else if (node[0] == WHILE || node[0] == DO || node[0] == FOR) {
+          breakCapturers.pop_back();
+          continueCapturers.pop_back();
+        } else if (node[0] == cashew::BLOCK) {
+          if (labelled.count(node.get())) {
+            breakCapturers.pop_back();
+          }
+        } else if (node[0] == SWITCH) {
+          breakCapturers.pop_back();
+        } else if (node[0] == BREAK || node[0] == CONTINUE) {
+          if (!node[1]->isNull()) {
+            auto label = node[1]->getIString();
+            assert(labelToValue.count(label));
+            auto& capturers =
+              node[0] == BREAK ? breakCapturers : continueCapturers;
+            assert(!capturers.empty());
+            if (capturers.back() == labelToValue[label]) {
+              // Success, the break/continue goes exactly where we would if we
+              // didn't have the label!
+              node[1]->setNull();
+            }
+          }
+        }
+      }
+    });
+
+  // Remove unnecessary block/loop labels.
+
+  std::set<IString> usedLabelNames;
+
+  traversePost(ast, [&](Ref node) {
+    if (node->isArray() && !node->empty()) {
+      if (node[0] == BREAK || node[0] == CONTINUE) {
+        if (!node[1]->isNull()) {
+          auto label = node[1]->getIString();
+          usedLabelNames.insert(label);
+        }
+      } else if (node[0] == LABEL) {
+        auto label = node[1]->getIString();
+        if (usedLabelNames.count(label)) {
+          // It's used; just erase it from the data structure.
+          usedLabelNames.erase(label);
+        } else {
+          // It's not used - get rid of it.
+          replaceInPlaceIfPossible(node, node[2]);
+        }
+      }
+    }
+  });
+}
+
+static void emitWasm(Module& wasm,
+                     Output& output,
+                     Wasm2JSBuilder::Flags flags,
+                     PassOptions options,
+                     Name name) {
+  if (options.optimizeLevel > 0) {
+    optimizeWasm(wasm, options);
+  }
+  Wasm2JSBuilder wasm2js(flags, options);
+  auto js = wasm2js.processWasm(&wasm, name);
+  if (options.optimizeLevel >= 2) {
+    optimizeJS(js, flags);
+  }
+  Wasm2JSGlue glue(wasm, output, flags, name);
+  glue.emitPre();
+  printJS(js, output);
+  glue.emitPost();
+}
+
+class AssertionEmitter {
+public:
+  AssertionEmitter(Element& root,
+                   SExpressionWasmBuilder& sexpBuilder,
+                   Output& out,
+                   Wasm2JSBuilder::Flags flags,
+                   const ToolOptions& options)
+    : root(root), sexpBuilder(sexpBuilder), out(out), flags(flags),
+      options(options) {}
+
+  void emit();
+
+private:
+  Element& root;
+  SExpressionWasmBuilder& sexpBuilder;
+  Output& out;
+  Wasm2JSBuilder::Flags flags;
+  ToolOptions options;
+  Module tempAllocationModule;
+
+  Expression* parseInvoke(Builder& wasmBuilder, Module& module, Element& e);
+  Ref emitAssertReturnFunc(Builder& wasmBuilder,
+                           Module& module,
+                           Element& e,
+                           Name testFuncName,
+                           Name asmModule);
+  Ref emitAssertReturnNanFunc(Builder& wasmBuilder,
+                              Element& e,
+                              Name testFuncName,
+                              Name asmModule);
+  Ref emitAssertTrapFunc(Builder& wasmBuilder,
+                         Module& module,
+                         Element& e,
+                         Name testFuncName,
+                         Name asmModule);
+  Ref emitInvokeFunc(Builder& wasmBuilder,
+                     Module& module,
+                     Element& e,
+                     Name testFuncName,
+                     Name asmModule);
+  bool isInvokeHandled(Element& e);
+  bool isAssertHandled(Element& e);
+  void fixCalls(Ref asmjs, Name asmModule);
+
+  Ref processFunction(Function* func) {
+    Wasm2JSBuilder sub(flags, options.passOptions);
+    return sub.processStandaloneFunction(&tempAllocationModule, func);
+  }
+
+  void emitFunction(Ref func) {
+    JSPrinter jser(true, true, func);
+    jser.printAst();
+    out << jser.buffer << std::endl;
+  }
+};
+
+Expression* AssertionEmitter::parseInvoke(Builder& wasmBuilder,
+                                          Module& module,
+                                          Element& e) {
+  // After legalization, the sexpBuilder doesn't necessarily have correct type
+  // information about all of the functions in the module, so create the call
+  // manually and only use the parser for the operands.
+  Name target = e[1]->str();
+  std::vector<Expression*> args;
+  for (size_t i = 2; i < e.size(); ++i) {
+    args.push_back(sexpBuilder.parseExpression(e[i]));
+  }
+  Type type = module.getFunction(module.getExport(target)->value)->getResults();
+  return wasmBuilder.makeCall(target, args, type);
+}
+
+Ref AssertionEmitter::emitAssertReturnFunc(Builder& wasmBuilder,
+                                           Module& module,
+                                           Element& e,
+                                           Name testFuncName,
+                                           Name asmModule) {
+  Expression* actual = parseInvoke(wasmBuilder, module, *e[1]);
+  Expression* body = nullptr;
+  if (e.size() == 2) {
+    if (actual->type == Type::none) {
+      body = wasmBuilder.blockify(actual, wasmBuilder.makeConst(uint32_t(1)));
+    } else {
+      body = actual;
+    }
+  } else if (e.size() == 3) {
+    Expression* expected = sexpBuilder.parseExpression(e[2]);
+    Type resType = expected->type;
+    TODO_SINGLE_COMPOUND(resType);
+    switch (resType.getBasic()) {
+      case Type::i32:
+        body = wasmBuilder.makeBinary(EqInt32, actual, expected);
+        break;
+
+      case Type::i64:
+        body = wasmBuilder.makeCall(
+          "i64Equal",
+          {actual,
+           wasmBuilder.makeCall(WASM_FETCH_HIGH_BITS, {}, Type::i32),
+           expected},
+          Type::i32);
+        break;
+
+      case Type::f32: {
+        body = wasmBuilder.makeCall("f32Equal", {actual, expected}, Type::i32);
+        break;
+      }
+      case Type::f64: {
+        body = wasmBuilder.makeCall("f64Equal", {actual, expected}, Type::i32);
+        break;
+      }
+
+      default: {
+        Fatal() << "Unhandled type in assert: " << resType;
+      }
+    }
+  } else {
+    assert(false && "Unexpected number of parameters in assert_return");
+  }
+  std::unique_ptr<Function> testFunc(
+    wasmBuilder.makeFunction(testFuncName,
+                             std::vector<NameType>{},
+                             Signature(Type::none, body->type),
+                             std::vector<NameType>{},
+                             body));
+  Ref jsFunc = processFunction(testFunc.get());
+  fixCalls(jsFunc, asmModule);
+  emitFunction(jsFunc);
+  return jsFunc;
+}
+
+Ref AssertionEmitter::emitAssertReturnNanFunc(Builder& wasmBuilder,
+                                              Element& e,
+                                              Name testFuncName,
+                                              Name asmModule) {
+  Expression* actual = sexpBuilder.parseExpression(e[1]);
+  Expression* body = wasmBuilder.makeCall("isNaN", {actual}, Type::i32);
+  std::unique_ptr<Function> testFunc(
+    wasmBuilder.makeFunction(testFuncName,
+                             std::vector<NameType>{},
+                             Signature(Type::none, body->type),
+                             std::vector<NameType>{},
+                             body));
+  Ref jsFunc = processFunction(testFunc.get());
+  fixCalls(jsFunc, asmModule);
+  emitFunction(jsFunc);
+  return jsFunc;
+}
+
+Ref AssertionEmitter::emitAssertTrapFunc(Builder& wasmBuilder,
+                                         Module& module,
+                                         Element& e,
+                                         Name testFuncName,
+                                         Name asmModule) {
+  Name innerFuncName("f");
+  Expression* expr = parseInvoke(wasmBuilder, module, *e[1]);
+  std::unique_ptr<Function> exprFunc(
+    wasmBuilder.makeFunction(innerFuncName,
+                             std::vector<NameType>{},
+                             Signature(Type::none, expr->type),
+                             std::vector<NameType>{},
+                             expr));
+  IString expectedErr = e[2]->str();
+  Ref innerFunc = processFunction(exprFunc.get());
+  fixCalls(innerFunc, asmModule);
+  Ref outerFunc = ValueBuilder::makeFunction(testFuncName);
+  outerFunc[3]->push_back(innerFunc);
+  Ref tryBlock = ValueBuilder::makeBlock();
+  ValueBuilder::appendToBlock(tryBlock, ValueBuilder::makeCall(innerFuncName));
+  Ref catchBlock = ValueBuilder::makeBlock();
+  ValueBuilder::appendToBlock(
+    catchBlock,
+    ValueBuilder::makeReturn(ValueBuilder::makeCall(
+      ValueBuilder::makeDot(ValueBuilder::makeName(IString("e")),
+                            ValueBuilder::makeName(IString("message")),
+                            ValueBuilder::makeName(IString("includes"))),
+      ValueBuilder::makeString(expectedErr))));
+  outerFunc[3]->push_back(ValueBuilder::makeTry(
+    tryBlock, ValueBuilder::makeName((IString("e"))), catchBlock));
+  outerFunc[3]->push_back(ValueBuilder::makeReturn(ValueBuilder::makeInt(0)));
+  emitFunction(outerFunc);
+  return outerFunc;
+}
+
+Ref AssertionEmitter::emitInvokeFunc(Builder& wasmBuilder,
+                                     Module& module,
+                                     Element& e,
+                                     Name testFuncName,
+                                     Name asmModule) {
+  Expression* body = parseInvoke(wasmBuilder, module, e);
+  std::unique_ptr<Function> testFunc(
+    wasmBuilder.makeFunction(testFuncName,
+                             std::vector<NameType>{},
+                             Signature(Type::none, body->type),
+                             std::vector<NameType>{},
+                             body));
+  Ref jsFunc = processFunction(testFunc.get());
+  fixCalls(jsFunc, asmModule);
+  emitFunction(jsFunc);
+  return jsFunc;
+}
+
+bool AssertionEmitter::isInvokeHandled(Element& e) {
+  return e.isList() && e.size() >= 2 && e[0]->isStr() &&
+         e[0]->str() == Name("invoke");
+}
+
+bool AssertionEmitter::isAssertHandled(Element& e) {
+  return e.isList() && e.size() >= 2 && e[0]->isStr() &&
+         (e[0]->str() == Name("assert_return") ||
+          e[0]->str() == Name("assert_return_nan") ||
+          (flags.pedantic && e[0]->str() == Name("assert_trap"))) &&
+         e[1]->isList() && e[1]->size() >= 2 && (*e[1])[0]->isStr() &&
+         (*e[1])[0]->str() == Name("invoke");
+}
+
+void AssertionEmitter::fixCalls(Ref asmjs, Name asmModule) {
+  if (asmjs->isArray()) {
+    ArrayStorage& arr = asmjs->getArray();
+    for (Ref& r : arr) {
+      fixCalls(r, asmModule);
+    }
+    if (arr.size() > 0 && arr[0]->isString() &&
+        arr[0]->getIString() == cashew::CALL) {
+      assert(arr.size() >= 2);
+      if (arr[1]->getIString() == "f32Equal" ||
+          arr[1]->getIString() == "f64Equal" ||
+          arr[1]->getIString() == "i64Equal" ||
+          arr[1]->getIString() == "isNaN") {
+        // ...
+      } else if (arr[1]->getIString() == "Math_fround") {
+        arr[1]->setString("Math.fround");
+      } else {
+        Ref fixed = ValueBuilder::makeDot(ValueBuilder::makeName(asmModule),
+                                          arr[1]->getIString());
+        arr[1]->setArray(fixed->getArray());
+      }
+    }
+  }
+
+  if (asmjs->isAssign()) {
+    fixCalls(asmjs->asAssign()->target(), asmModule);
+    fixCalls(asmjs->asAssign()->value(), asmModule);
+  }
+  if (asmjs->isAssignName()) {
+    fixCalls(asmjs->asAssignName()->value(), asmModule);
+  }
+}
+
+void AssertionEmitter::emit() {
+  // When equating floating point values in spec tests we want to use bitwise
+  // equality like wasm does. Unfortunately though NaN makes this tricky. JS
+  // implementations like Spidermonkey and JSC will canonicalize NaN loads from
+  // `Float32Array`, but V8 will not. This means that NaN representations are
+  /
