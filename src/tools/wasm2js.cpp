@@ -792,4 +792,235 @@ void AssertionEmitter::emit() {
   // equality like wasm does. Unfortunately though NaN makes this tricky. JS
   // implementations like Spidermonkey and JSC will canonicalize NaN loads from
   // `Float32Array`, but V8 will not. This means that NaN representations are
-  /
+  // kind of all over the place and difficult to bitwise equate.
+  //
+  // To work around this problem we just use a small shim which considers all
+  // NaN representations equivalent and otherwise tests for bitwise equality.
+  out << R"(
+    function f32Equal(a, b) {
+       var i = new Int32Array(1);
+       var f = new Float32Array(i.buffer);
+       f[0] = a;
+       var ai = f[0];
+       f[0] = b;
+       var bi = f[0];
+
+       return (isNaN(a) && isNaN(b)) || a == b;
+    }
+
+    function f64Equal(a, b) {
+       var i = new Int32Array(2);
+       var f = new Float64Array(i.buffer);
+       f[0] = a;
+       var ai1 = i[0];
+       var ai2 = i[1];
+       f[0] = b;
+       var bi1 = i[0];
+       var bi2 = i[1];
+
+       return (isNaN(a) && isNaN(b)) || (ai1 == bi1 && ai2 == bi2);
+    }
+
+    function i64Equal(actual_lo, actual_hi, expected_lo, expected_hi) {
+       return (actual_lo | 0) == (expected_lo | 0) && (actual_hi | 0) == (expected_hi | 0);
+    }
+  )";
+
+  Builder wasmBuilder(sexpBuilder.getModule());
+  Name asmModule = std::string("ret") + ASM_FUNC.toString();
+  // Track the last built module.
+  Module wasm;
+  for (size_t i = 0; i < root.size(); ++i) {
+    Element& e = *root[i];
+    if (e.isList() && e.size() >= 1 && e[0]->isStr() &&
+        e[0]->str() == Name("module")) {
+      ModuleUtils::clearModule(wasm);
+      std::stringstream funcNameS;
+      funcNameS << ASM_FUNC << i;
+      std::stringstream moduleNameS;
+      moduleNameS << "ret" << ASM_FUNC << i;
+      Name funcName(funcNameS.str());
+      asmModule = Name(moduleNameS.str());
+      options.applyFeatures(wasm);
+      SExpressionWasmBuilder builder(wasm, e, options.profile);
+      emitWasm(wasm, out, flags, options.passOptions, funcName);
+      continue;
+    }
+    if (!isInvokeHandled(e) && !isAssertHandled(e)) {
+      std::cerr << "skipping " << e << std::endl;
+      continue;
+    }
+    Name testFuncName("check" + std::to_string(i));
+    bool isInvoke = (e[0]->str() == Name("invoke"));
+    bool isReturn = (e[0]->str() == Name("assert_return"));
+    bool isReturnNan = (e[0]->str() == Name("assert_return_nan"));
+    if (isInvoke) {
+      emitInvokeFunc(wasmBuilder, wasm, e, testFuncName, asmModule);
+      out << testFuncName << "();\n";
+      continue;
+    }
+    // Otherwise, this is some form of assertion.
+    if (isReturn) {
+      emitAssertReturnFunc(wasmBuilder, wasm, e, testFuncName, asmModule);
+    } else if (isReturnNan) {
+      emitAssertReturnNanFunc(wasmBuilder, e, testFuncName, asmModule);
+    } else {
+      emitAssertTrapFunc(wasmBuilder, wasm, e, testFuncName, asmModule);
+    }
+
+    out << "if (!" << testFuncName << "()) throw 'assertion failed: " << e
+        << "';\n";
+  }
+}
+
+} // anonymous namespace
+
+// Main
+
+int main(int argc, const char* argv[]) {
+  Wasm2JSBuilder::Flags flags;
+
+  const std::string Wasm2JSOption = "wasm2js options";
+
+  OptimizationOptions options("wasm2js",
+                              "Transform .wasm/.wat files to asm.js");
+  options
+    .add("--output",
+         "-o",
+         "Output file (stdout if not specified)",
+         Wasm2JSOption,
+         Options::Arguments::One,
+         [](Options* o, const std::string& argument) {
+           o->extra["output"] = argument;
+           Colors::setEnabled(false);
+         })
+    .add("--allow-asserts",
+         "",
+         "Allow compilation of .wast testing asserts",
+         Wasm2JSOption,
+         Options::Arguments::Zero,
+         [&](Options* o, const std::string& argument) {
+           flags.allowAsserts = true;
+           o->extra["asserts"] = "1";
+         })
+    .add(
+      "--pedantic",
+      "",
+      "Emulate WebAssembly trapping behavior",
+      Wasm2JSOption,
+      Options::Arguments::Zero,
+      [&](Options* o, const std::string& argument) { flags.pedantic = true; })
+    .add(
+      "--emscripten",
+      "",
+      "Emulate the glue in emscripten-compatible form (and not ES6 module "
+      "form)",
+      Wasm2JSOption,
+      Options::Arguments::Zero,
+      [&](Options* o, const std::string& argument) { flags.emscripten = true; })
+    .add(
+      "--deterministic",
+      "",
+      "Replace WebAssembly trapping behavior deterministically "
+      "(the default is to not care about what would trap in wasm, like a load "
+      "out of bounds or integer divide by zero; with this flag, we try to be "
+      "deterministic at least in what happens, which might or might not be "
+      "to trap like wasm, but at least should not vary)",
+      Wasm2JSOption,
+      Options::Arguments::Zero,
+      [&](Options* o, const std::string& argument) {
+        flags.deterministic = true;
+      })
+    .add(
+      "--symbols-file",
+      "",
+      "Emit a symbols file that maps function indexes to their original names",
+      Wasm2JSOption,
+      Options::Arguments::One,
+      [&](Options* o, const std::string& argument) {
+        flags.symbolsFile = argument;
+      })
+    .add_positional("INFILE",
+                    Options::Arguments::One,
+                    [](Options* o, const std::string& argument) {
+                      o->extra["infile"] = argument;
+                    });
+  options.parse(argc, argv);
+  if (options.debug) {
+    flags.debug = true;
+  }
+
+  Element* root = nullptr;
+  Module wasm;
+  options.applyFeatures(wasm);
+  Ref js;
+  std::unique_ptr<SExpressionParser> sexprParser;
+  std::unique_ptr<SExpressionWasmBuilder> sexprBuilder;
+
+  auto& input = options.extra["infile"];
+  std::string suffix(".wasm");
+  bool binaryInput =
+    input.size() >= suffix.size() &&
+    input.compare(input.size() - suffix.size(), suffix.size(), suffix) == 0;
+
+  try {
+    // If the input filename ends in `.wasm`, then parse it in binary form,
+    // otherwise assume it's a `*.wat` file and go from there.
+    //
+    // Note that we're not using the built-in `ModuleReader` which will also do
+    // similar logic here because when testing JS files we use the
+    // `--allow-asserts` flag which means we need to parse the extra
+    // s-expressions that come at the end of the `*.wast` file after the module
+    // is defined.
+    if (binaryInput) {
+      ModuleReader reader;
+      reader.read(input, wasm, "");
+    } else {
+      auto input(
+        read_file<std::vector<char>>(options.extra["infile"], Flags::Text));
+      if (options.debug) {
+        std::cerr << "s-parsing..." << std::endl;
+      }
+      sexprParser = make_unique<SExpressionParser>(input.data());
+      root = sexprParser->root;
+
+      if (options.debug) {
+        std::cerr << "w-parsing..." << std::endl;
+      }
+      sexprBuilder =
+        make_unique<SExpressionWasmBuilder>(wasm, *(*root)[0], options.profile);
+    }
+  } catch (ParseException& p) {
+    p.dump(std::cerr);
+    Fatal() << "error in parsing input";
+  } catch (std::bad_alloc&) {
+    Fatal() << "error in building module, std::bad_alloc (possibly invalid "
+               "request for silly amounts of memory)";
+  }
+
+  // TODO: Remove this restriction when wasm2js can handle multiple tables
+  if (wasm.tables.size() > 1) {
+    Fatal() << "error: modules with multiple tables are not supported yet.";
+  }
+
+  if (options.passOptions.validate) {
+    if (!WasmValidator().validate(wasm)) {
+      std::cout << wasm << '\n';
+      Fatal() << "error in validating input";
+    }
+  }
+
+  if (options.debug) {
+    std::cerr << "j-printing..." << std::endl;
+  }
+  Output output(options.extra["output"], Flags::Text);
+  if (!binaryInput && options.extra["asserts"] == "1") {
+    AssertionEmitter(*root, *sexprBuilder, output, flags, options).emit();
+  } else {
+    emitWasm(wasm, output, flags, options.passOptions, "asmFunc");
+  }
+
+  if (options.debug) {
+    std::cerr << "done." << std::endl;
+  }
+}
