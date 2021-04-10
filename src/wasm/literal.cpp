@@ -614,4 +614,432 @@ std::ostream& operator<<(std::ostream& o, Literal literal) {
       o << "funcref(" << literal.getFunc() << ")";
     } else {
       assert(literal.isData());
-      auto data = literal.getGCData(
+      auto data = literal.getGCData();
+      assert(data);
+      o << "[ref " << data->type << ' ' << data->values << ']';
+    }
+  }
+  restoreNormalColor(o);
+  return o;
+}
+
+std::ostream& operator<<(std::ostream& o, wasm::Literals literals) {
+  if (literals.size() == 1) {
+    return o << literals[0];
+  } else {
+    o << '(';
+    if (literals.size() > 0) {
+      o << literals[0];
+    }
+    for (size_t i = 1; i < literals.size(); ++i) {
+      o << ", " << literals[i];
+    }
+    return o << ')';
+  }
+}
+
+Literal Literal::countLeadingZeroes() const {
+  if (type == Type::i32) {
+    return Literal((int32_t)Bits::countLeadingZeroes(i32));
+  }
+  if (type == Type::i64) {
+    return Literal((int64_t)Bits::countLeadingZeroes(i64));
+  }
+  WASM_UNREACHABLE("invalid type");
+}
+
+Literal Literal::countTrailingZeroes() const {
+  if (type == Type::i32) {
+    return Literal((int32_t)Bits::countTrailingZeroes(i32));
+  }
+  if (type == Type::i64) {
+    return Literal((int64_t)Bits::countTrailingZeroes(i64));
+  }
+  WASM_UNREACHABLE("invalid type");
+}
+
+Literal Literal::popCount() const {
+  if (type == Type::i32) {
+    return Literal((int32_t)Bits::popCount(i32));
+  }
+  if (type == Type::i64) {
+    return Literal((int64_t)Bits::popCount(i64));
+  }
+  WASM_UNREACHABLE("invalid type");
+}
+
+Literal Literal::extendToSI64() const {
+  assert(type == Type::i32);
+  return Literal((int64_t)i32);
+}
+
+Literal Literal::extendToUI64() const {
+  assert(type == Type::i32);
+  return Literal((uint64_t)(uint32_t)i32);
+}
+
+Literal Literal::extendToF64() const {
+  assert(type == Type::f32);
+  return Literal(double(getf32()));
+}
+
+Literal Literal::extendS8() const {
+  if (type == Type::i32) {
+    return Literal(int32_t(int8_t(geti32() & 0xFF)));
+  }
+  if (type == Type::i64) {
+    return Literal(int64_t(int8_t(geti64() & 0xFF)));
+  }
+  WASM_UNREACHABLE("invalid type");
+}
+
+Literal Literal::extendS16() const {
+  if (type == Type::i32) {
+    return Literal(int32_t(int16_t(geti32() & 0xFFFF)));
+  }
+  if (type == Type::i64) {
+    return Literal(int64_t(int16_t(geti64() & 0xFFFF)));
+  }
+  WASM_UNREACHABLE("invalid type");
+}
+
+Literal Literal::extendS32() const {
+  if (type == Type::i64) {
+    return Literal(int64_t(int32_t(geti64() & 0xFFFFFFFF)));
+  }
+  WASM_UNREACHABLE("invalid type");
+}
+
+Literal Literal::wrapToI32() const {
+  assert(type == Type::i64);
+  return Literal((int32_t)i64);
+}
+
+Literal Literal::convertSIToF32() const {
+  if (type == Type::i32) {
+    return Literal(float(i32));
+  }
+  if (type == Type::i64) {
+    return Literal(float(i64));
+  }
+  WASM_UNREACHABLE("invalid type");
+}
+
+Literal Literal::convertUIToF32() const {
+  if (type == Type::i32) {
+    return Literal(float(uint32_t(i32)));
+  }
+  if (type == Type::i64) {
+    return Literal(float(uint64_t(i64)));
+  }
+  WASM_UNREACHABLE("invalid type");
+}
+
+Literal Literal::convertSIToF64() const {
+  if (type == Type::i32) {
+    return Literal(double(i32));
+  }
+  if (type == Type::i64) {
+    return Literal(double(i64));
+  }
+  WASM_UNREACHABLE("invalid type");
+}
+
+Literal Literal::convertUIToF64() const {
+  if (type == Type::i32) {
+    return Literal(double(uint32_t(i32)));
+  }
+  if (type == Type::i64) {
+    return Literal(double(uint64_t(i64)));
+  }
+  WASM_UNREACHABLE("invalid type");
+}
+
+template<typename F> struct AsInt { using type = void; };
+template<> struct AsInt<float> { using type = int32_t; };
+template<> struct AsInt<double> { using type = int64_t; };
+
+template<typename F, typename I, bool (*RangeCheck)(typename AsInt<F>::type)>
+static Literal saturating_trunc(typename AsInt<F>::type val) {
+  if (std::isnan(bit_cast<F>(val))) {
+    return Literal(I(0));
+  }
+  if (!RangeCheck(val)) {
+    if (std::signbit(bit_cast<F>(val))) {
+      return Literal(std::numeric_limits<I>::min());
+    } else {
+      return Literal(std::numeric_limits<I>::max());
+    }
+  }
+  return Literal(I(std::trunc(bit_cast<F>(val))));
+}
+
+Literal Literal::truncSatToSI32() const {
+  if (type == Type::f32) {
+    return saturating_trunc<float, int32_t, isInRangeI32TruncS>(
+      Literal(*this).castToI32().geti32());
+  }
+  if (type == Type::f64) {
+    return saturating_trunc<double, int32_t, isInRangeI32TruncS>(
+      Literal(*this).castToI64().geti64());
+  }
+  WASM_UNREACHABLE("invalid type");
+}
+
+Literal Literal::truncSatToSI64() const {
+  if (type == Type::f32) {
+    return saturating_trunc<float, int64_t, isInRangeI64TruncS>(
+      Literal(*this).castToI32().geti32());
+  }
+  if (type == Type::f64) {
+    return saturating_trunc<double, int64_t, isInRangeI64TruncS>(
+      Literal(*this).castToI64().geti64());
+  }
+  WASM_UNREACHABLE("invalid type");
+}
+
+Literal Literal::truncSatToUI32() const {
+  if (type == Type::f32) {
+    return saturating_trunc<float, uint32_t, isInRangeI32TruncU>(
+      Literal(*this).castToI32().geti32());
+  }
+  if (type == Type::f64) {
+    return saturating_trunc<double, uint32_t, isInRangeI32TruncU>(
+      Literal(*this).castToI64().geti64());
+  }
+  WASM_UNREACHABLE("invalid type");
+}
+
+Literal Literal::truncSatToUI64() const {
+  if (type == Type::f32) {
+    return saturating_trunc<float, uint64_t, isInRangeI64TruncU>(
+      Literal(*this).castToI32().geti32());
+  }
+  if (type == Type::f64) {
+    return saturating_trunc<double, uint64_t, isInRangeI64TruncU>(
+      Literal(*this).castToI64().geti64());
+  }
+  WASM_UNREACHABLE("invalid type");
+}
+
+Literal Literal::eqz() const {
+  switch (type.getBasic()) {
+    case Type::i32:
+      return eq(Literal(int32_t(0)));
+    case Type::i64:
+      return eq(Literal(int64_t(0)));
+    case Type::f32:
+      return eq(Literal(float(0)));
+    case Type::f64:
+      return eq(Literal(double(0)));
+    case Type::v128:
+    case Type::none:
+    case Type::unreachable:
+      WASM_UNREACHABLE("unexpected type");
+  }
+  WASM_UNREACHABLE("invalid type");
+}
+
+Literal Literal::neg() const {
+  switch (type.getBasic()) {
+    case Type::i32:
+      return Literal(-uint32_t(i32));
+    case Type::i64:
+      return Literal(-uint64_t(i64));
+    case Type::f32:
+      return Literal(i32 ^ 0x80000000).castToF32();
+    case Type::f64:
+      return Literal(int64_t(i64 ^ 0x8000000000000000ULL)).castToF64();
+    case Type::v128:
+    case Type::none:
+    case Type::unreachable:
+      WASM_UNREACHABLE("unexpected type");
+  }
+  WASM_UNREACHABLE("invalid type");
+}
+
+Literal Literal::abs() const {
+  switch (type.getBasic()) {
+    case Type::i32:
+      return Literal(std::abs(i32));
+    case Type::i64:
+      return Literal(std::abs(i64));
+    case Type::f32:
+      return Literal(i32 & 0x7fffffff).castToF32();
+    case Type::f64:
+      return Literal(int64_t(i64 & 0x7fffffffffffffffULL)).castToF64();
+    case Type::v128:
+    case Type::none:
+    case Type::unreachable:
+      WASM_UNREACHABLE("unexpected type");
+  }
+  WASM_UNREACHABLE("unexpected type");
+}
+
+Literal Literal::ceil() const {
+  switch (type.getBasic()) {
+    case Type::f32:
+      return Literal(std::ceil(getf32()));
+    case Type::f64:
+      return Literal(std::ceil(getf64()));
+    default:
+      WASM_UNREACHABLE("unexpected type");
+  }
+}
+
+Literal Literal::floor() const {
+  switch (type.getBasic()) {
+    case Type::f32:
+      return Literal(std::floor(getf32()));
+    case Type::f64:
+      return Literal(std::floor(getf64()));
+    default:
+      WASM_UNREACHABLE("unexpected type");
+  }
+}
+
+Literal Literal::trunc() const {
+  switch (type.getBasic()) {
+    case Type::f32:
+      return Literal(std::trunc(getf32()));
+    case Type::f64:
+      return Literal(std::trunc(getf64()));
+    default:
+      WASM_UNREACHABLE("unexpected type");
+  }
+}
+
+Literal Literal::nearbyint() const {
+  switch (type.getBasic()) {
+    case Type::f32:
+      return Literal(std::nearbyint(getf32()));
+    case Type::f64:
+      return Literal(std::nearbyint(getf64()));
+    default:
+      WASM_UNREACHABLE("unexpected type");
+  }
+}
+
+Literal Literal::sqrt() const {
+  switch (type.getBasic()) {
+    case Type::f32:
+      return Literal(std::sqrt(getf32()));
+    case Type::f64:
+      return Literal(std::sqrt(getf64()));
+    default:
+      WASM_UNREACHABLE("unexpected type");
+  }
+}
+
+Literal Literal::demote() const {
+  auto f64 = getf64();
+  if (std::isnan(f64)) {
+    return Literal(float(f64));
+  }
+  if (std::isinf(f64)) {
+    return Literal(float(f64));
+  }
+  // when close to the limit, but still truncatable to a valid value, do that
+  // see
+  // https://github.com/WebAssembly/sexpr-wasm-prototype/blob/2d375e8d502327e814d62a08f22da9d9b6b675dc/src/wasm-interpreter.c#L247
+  uint64_t bits = reinterpreti64();
+  if (bits > 0x47efffffe0000000ULL && bits < 0x47effffff0000000ULL) {
+    return Literal(std::numeric_limits<float>::max());
+  }
+  if (bits > 0xc7efffffe0000000ULL && bits < 0xc7effffff0000000ULL) {
+    return Literal(-std::numeric_limits<float>::max());
+  }
+  // when we must convert to infinity, do that
+  if (f64 < -std::numeric_limits<float>::max()) {
+    return Literal(-std::numeric_limits<float>::infinity());
+  }
+  if (f64 > std::numeric_limits<float>::max()) {
+    return Literal(std::numeric_limits<float>::infinity());
+  }
+  return Literal(float(getf64()));
+}
+
+Literal Literal::add(const Literal& other) const {
+  switch (type.getBasic()) {
+    case Type::i32:
+      return Literal(uint32_t(i32) + uint32_t(other.i32));
+    case Type::i64:
+      return Literal(uint64_t(i64) + uint64_t(other.i64));
+    case Type::f32:
+      return standardizeNaN(Literal(getf32() + other.getf32()));
+    case Type::f64:
+      return standardizeNaN(Literal(getf64() + other.getf64()));
+    case Type::v128:
+    case Type::none:
+    case Type::unreachable:
+      WASM_UNREACHABLE("unexpected type");
+  }
+  WASM_UNREACHABLE("unexpected type");
+}
+
+Literal Literal::sub(const Literal& other) const {
+  switch (type.getBasic()) {
+    case Type::i32:
+      return Literal(uint32_t(i32) - uint32_t(other.i32));
+    case Type::i64:
+      return Literal(uint64_t(i64) - uint64_t(other.i64));
+    case Type::f32:
+      return standardizeNaN(Literal(getf32() - other.getf32()));
+    case Type::f64:
+      return standardizeNaN(Literal(getf64() - other.getf64()));
+    case Type::v128:
+    case Type::none:
+    case Type::unreachable:
+      WASM_UNREACHABLE("unexpected type");
+  }
+  WASM_UNREACHABLE("unexpected type");
+}
+
+template<typename T> static T add_sat_s(T a, T b) {
+  static_assert(std::is_signed<T>::value,
+                "Trying to instantiate add_sat_s with unsigned type");
+  using UT = typename std::make_unsigned<T>::type;
+  UT ua = static_cast<UT>(a);
+  UT ub = static_cast<UT>(b);
+  UT ures = ua + ub;
+  // overflow if sign of result is different from sign of a and b
+  if (static_cast<T>((ures ^ ua) & (ures ^ ub)) < 0) {
+    return (a < 0) ? std::numeric_limits<T>::min()
+                   : std::numeric_limits<T>::max();
+  }
+  return static_cast<T>(ures);
+}
+
+template<typename T> static T sub_sat_s(T a, T b) {
+  static_assert(std::is_signed<T>::value,
+                "Trying to instantiate sub_sat_s with unsigned type");
+  using UT = typename std::make_unsigned<T>::type;
+  UT ua = static_cast<UT>(a);
+  UT ub = static_cast<UT>(b);
+  UT ures = ua - ub;
+  // overflow if a and b have different signs and result and a differ in sign
+  if (static_cast<T>((ua ^ ub) & (ures ^ ua)) < 0) {
+    return (a < 0) ? std::numeric_limits<T>::min()
+                   : std::numeric_limits<T>::max();
+  }
+  return static_cast<T>(ures);
+}
+
+template<typename T> static T add_sat_u(T a, T b) {
+  static_assert(std::is_unsigned<T>::value,
+                "Trying to instantiate add_sat_u with signed type");
+  T res = a + b;
+  // overflow if result is less than arguments
+  return (res < a) ? std::numeric_limits<T>::max() : res;
+}
+
+template<typename T> static T sub_sat_u(T a, T b) {
+  static_assert(std::is_unsigned<T>::value,
+                "Trying to instantiate sub_sat_u with signed type");
+  T res = a - b;
+  // overflow if result is greater than a
+  return (res > a) ? 0 : res;
+}
+
+Literal Literal::addSatSI8(const Literal& other) const {
+  return Literal(add
