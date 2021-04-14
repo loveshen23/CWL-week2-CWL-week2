@@ -1825,4 +1825,301 @@ static Literal extAddPairwise(const Literal& vec) {
   return Literal(result);
 }
 
-Literal Literal::extAddPairw
+Literal Literal::extAddPairwiseToSI16x8() const {
+  return extAddPairwise<8, int8_t, int16_t>(*this);
+}
+Literal Literal::extAddPairwiseToUI16x8() const {
+  return extAddPairwise<8, uint8_t, int16_t>(*this);
+}
+Literal Literal::extAddPairwiseToSI32x4() const {
+  return extAddPairwise<4, int16_t, int32_t>(*this);
+}
+Literal Literal::extAddPairwiseToUI32x4() const {
+  return extAddPairwise<4, uint16_t, uint32_t>(*this);
+}
+
+Literal Literal::truncSatToSI32x4() const {
+  return unary<4, &Literal::getLanesF32x4, &Literal::truncSatToSI32>(*this);
+}
+Literal Literal::truncSatToUI32x4() const {
+  return unary<4, &Literal::getLanesF32x4, &Literal::truncSatToUI32>(*this);
+}
+Literal Literal::convertSToF32x4() const {
+  return unary<4, &Literal::getLanesI32x4, &Literal::convertSIToF32>(*this);
+}
+Literal Literal::convertUToF32x4() const {
+  return unary<4, &Literal::getLanesI32x4, &Literal::convertUIToF32>(*this);
+}
+
+Literal Literal::anyTrueV128() const {
+  auto lanes = getLanesI32x4();
+  for (size_t i = 0; i < 4; ++i) {
+    if (lanes[i].geti32() != 0) {
+      return Literal(int32_t(1));
+    }
+  }
+  return Literal(int32_t(0));
+}
+
+template<int Lanes, LaneArray<Lanes> (Literal::*IntoLanes)() const>
+static Literal all_true(const Literal& val) {
+  LaneArray<Lanes> lanes = (val.*IntoLanes)();
+  for (size_t i = 0; i < Lanes; ++i) {
+    if (lanes[i] == Literal::makeZero(lanes[i].type)) {
+      return Literal(int32_t(0));
+    }
+  }
+  return Literal(int32_t(1));
+}
+
+template<int Lanes, LaneArray<Lanes> (Literal::*IntoLanes)() const>
+static Literal bitmask(const Literal& val) {
+  uint32_t result = 0;
+  LaneArray<Lanes> lanes = (val.*IntoLanes)();
+  for (size_t i = 0; i < Lanes; ++i) {
+    if (lanes[i].geti32() & (1 << 31)) {
+      result = result | (1 << i);
+    }
+  }
+  return Literal(result);
+}
+
+Literal Literal::allTrueI8x16() const {
+  return all_true<16, &Literal::getLanesUI8x16>(*this);
+}
+Literal Literal::bitmaskI8x16() const {
+  return bitmask<16, &Literal::getLanesSI8x16>(*this);
+}
+Literal Literal::allTrueI16x8() const {
+  return all_true<8, &Literal::getLanesUI16x8>(*this);
+}
+Literal Literal::bitmaskI16x8() const {
+  return bitmask<8, &Literal::getLanesSI16x8>(*this);
+}
+Literal Literal::allTrueI32x4() const {
+  return all_true<4, &Literal::getLanesI32x4>(*this);
+}
+Literal Literal::bitmaskI32x4() const {
+  return bitmask<4, &Literal::getLanesI32x4>(*this);
+}
+Literal Literal::allTrueI64x2() const {
+  return all_true<2, &Literal::getLanesI64x2>(*this);
+}
+Literal Literal::bitmaskI64x2() const {
+  uint32_t result = 0;
+  LaneArray<2> lanes = getLanesI64x2();
+  for (size_t i = 0; i < 2; ++i) {
+    if (lanes[i].geti64() & (1ll << 63)) {
+      result = result | (1 << i);
+    }
+  }
+  return Literal(result);
+}
+
+template<int Lanes,
+         LaneArray<Lanes> (Literal::*IntoLanes)() const,
+         Literal (Literal::*ShiftOp)(const Literal&) const>
+static Literal shift(const Literal& vec, const Literal& shift) {
+  assert(shift.type == Type::i32);
+  size_t lane_bits = 128 / Lanes;
+  LaneArray<Lanes> lanes = (vec.*IntoLanes)();
+  for (size_t i = 0; i < Lanes; ++i) {
+    lanes[i] =
+      (lanes[i].*ShiftOp)(Literal(int32_t(shift.geti32() % lane_bits)));
+  }
+  return Literal(lanes);
+}
+
+Literal Literal::shlI8x16(const Literal& other) const {
+  return shift<16, &Literal::getLanesUI8x16, &Literal::shl>(*this, other);
+}
+Literal Literal::shrSI8x16(const Literal& other) const {
+  return shift<16, &Literal::getLanesSI8x16, &Literal::shrS>(*this, other);
+}
+Literal Literal::shrUI8x16(const Literal& other) const {
+  return shift<16, &Literal::getLanesUI8x16, &Literal::shrU>(*this, other);
+}
+Literal Literal::shlI16x8(const Literal& other) const {
+  return shift<8, &Literal::getLanesUI16x8, &Literal::shl>(*this, other);
+}
+Literal Literal::shrSI16x8(const Literal& other) const {
+  return shift<8, &Literal::getLanesSI16x8, &Literal::shrS>(*this, other);
+}
+Literal Literal::shrUI16x8(const Literal& other) const {
+  return shift<8, &Literal::getLanesUI16x8, &Literal::shrU>(*this, other);
+}
+Literal Literal::shlI32x4(const Literal& other) const {
+  return shift<4, &Literal::getLanesI32x4, &Literal::shl>(*this, other);
+}
+Literal Literal::shrSI32x4(const Literal& other) const {
+  return shift<4, &Literal::getLanesI32x4, &Literal::shrS>(*this, other);
+}
+Literal Literal::shrUI32x4(const Literal& other) const {
+  return shift<4, &Literal::getLanesI32x4, &Literal::shrU>(*this, other);
+}
+Literal Literal::shlI64x2(const Literal& other) const {
+  return shift<2, &Literal::getLanesI64x2, &Literal::shl>(*this, other);
+}
+Literal Literal::shrSI64x2(const Literal& other) const {
+  return shift<2, &Literal::getLanesI64x2, &Literal::shrS>(*this, other);
+}
+Literal Literal::shrUI64x2(const Literal& other) const {
+  return shift<2, &Literal::getLanesI64x2, &Literal::shrU>(*this, other);
+}
+
+template<int Lanes,
+         LaneArray<Lanes> (Literal::*IntoLanes)() const,
+         Literal (Literal::*CompareOp)(const Literal&) const,
+         typename LaneT = int32_t>
+static Literal compare(const Literal& val, const Literal& other) {
+  LaneArray<Lanes> lanes = (val.*IntoLanes)();
+  LaneArray<Lanes> other_lanes = (other.*IntoLanes)();
+  for (size_t i = 0; i < Lanes; ++i) {
+    lanes[i] = (lanes[i].*CompareOp)(other_lanes[i]) == Literal(int32_t(1))
+                 ? Literal(LaneT(-1))
+                 : Literal(LaneT(0));
+  }
+  return Literal(lanes);
+}
+
+Literal Literal::eqI8x16(const Literal& other) const {
+  return compare<16, &Literal::getLanesUI8x16, &Literal::eq>(*this, other);
+}
+Literal Literal::neI8x16(const Literal& other) const {
+  return compare<16, &Literal::getLanesUI8x16, &Literal::ne>(*this, other);
+}
+Literal Literal::ltSI8x16(const Literal& other) const {
+  return compare<16, &Literal::getLanesSI8x16, &Literal::ltS>(*this, other);
+}
+Literal Literal::ltUI8x16(const Literal& other) const {
+  return compare<16, &Literal::getLanesUI8x16, &Literal::ltU>(*this, other);
+}
+Literal Literal::gtSI8x16(const Literal& other) const {
+  return compare<16, &Literal::getLanesSI8x16, &Literal::gtS>(*this, other);
+}
+Literal Literal::gtUI8x16(const Literal& other) const {
+  return compare<16, &Literal::getLanesUI8x16, &Literal::gtU>(*this, other);
+}
+Literal Literal::leSI8x16(const Literal& other) const {
+  return compare<16, &Literal::getLanesSI8x16, &Literal::leS>(*this, other);
+}
+Literal Literal::leUI8x16(const Literal& other) const {
+  return compare<16, &Literal::getLanesUI8x16, &Literal::leU>(*this, other);
+}
+Literal Literal::geSI8x16(const Literal& other) const {
+  return compare<16, &Literal::getLanesSI8x16, &Literal::geS>(*this, other);
+}
+Literal Literal::geUI8x16(const Literal& other) const {
+  return compare<16, &Literal::getLanesUI8x16, &Literal::geU>(*this, other);
+}
+Literal Literal::eqI16x8(const Literal& other) const {
+  return compare<8, &Literal::getLanesUI16x8, &Literal::eq>(*this, other);
+}
+Literal Literal::neI16x8(const Literal& other) const {
+  return compare<8, &Literal::getLanesUI16x8, &Literal::ne>(*this, other);
+}
+Literal Literal::ltSI16x8(const Literal& other) const {
+  return compare<8, &Literal::getLanesSI16x8, &Literal::ltS>(*this, other);
+}
+Literal Literal::ltUI16x8(const Literal& other) const {
+  return compare<8, &Literal::getLanesUI16x8, &Literal::ltU>(*this, other);
+}
+Literal Literal::gtSI16x8(const Literal& other) const {
+  return compare<8, &Literal::getLanesSI16x8, &Literal::gtS>(*this, other);
+}
+Literal Literal::gtUI16x8(const Literal& other) const {
+  return compare<8, &Literal::getLanesUI16x8, &Literal::gtU>(*this, other);
+}
+Literal Literal::leSI16x8(const Literal& other) const {
+  return compare<8, &Literal::getLanesSI16x8, &Literal::leS>(*this, other);
+}
+Literal Literal::leUI16x8(const Literal& other) const {
+  return compare<8, &Literal::getLanesUI16x8, &Literal::leU>(*this, other);
+}
+Literal Literal::geSI16x8(const Literal& other) const {
+  return compare<8, &Literal::getLanesSI16x8, &Literal::geS>(*this, other);
+}
+Literal Literal::geUI16x8(const Literal& other) const {
+  return compare<8, &Literal::getLanesUI16x8, &Literal::geU>(*this, other);
+}
+Literal Literal::eqI32x4(const Literal& other) const {
+  return compare<4, &Literal::getLanesI32x4, &Literal::eq>(*this, other);
+}
+Literal Literal::neI32x4(const Literal& other) const {
+  return compare<4, &Literal::getLanesI32x4, &Literal::ne>(*this, other);
+}
+Literal Literal::ltSI32x4(const Literal& other) const {
+  return compare<4, &Literal::getLanesI32x4, &Literal::ltS>(*this, other);
+}
+Literal Literal::ltUI32x4(const Literal& other) const {
+  return compare<4, &Literal::getLanesI32x4, &Literal::ltU>(*this, other);
+}
+Literal Literal::gtSI32x4(const Literal& other) const {
+  return compare<4, &Literal::getLanesI32x4, &Literal::gtS>(*this, other);
+}
+Literal Literal::gtUI32x4(const Literal& other) const {
+  return compare<4, &Literal::getLanesI32x4, &Literal::gtU>(*this, other);
+}
+Literal Literal::leSI32x4(const Literal& other) const {
+  return compare<4, &Literal::getLanesI32x4, &Literal::leS>(*this, other);
+}
+Literal Literal::leUI32x4(const Literal& other) const {
+  return compare<4, &Literal::getLanesI32x4, &Literal::leU>(*this, other);
+}
+Literal Literal::geSI32x4(const Literal& other) const {
+  return compare<4, &Literal::getLanesI32x4, &Literal::geS>(*this, other);
+}
+Literal Literal::geUI32x4(const Literal& other) const {
+  return compare<4, &Literal::getLanesI32x4, &Literal::geU>(*this, other);
+}
+Literal Literal::eqI64x2(const Literal& other) const {
+  return compare<2, &Literal::getLanesI64x2, &Literal::eq, int64_t>(*this,
+                                                                    other);
+}
+Literal Literal::neI64x2(const Literal& other) const {
+  return compare<2, &Literal::getLanesI64x2, &Literal::ne, int64_t>(*this,
+                                                                    other);
+}
+Literal Literal::ltSI64x2(const Literal& other) const {
+  return compare<2, &Literal::getLanesI64x2, &Literal::ltS, int64_t>(*this,
+                                                                     other);
+}
+Literal Literal::gtSI64x2(const Literal& other) const {
+  return compare<2, &Literal::getLanesI64x2, &Literal::gtS, int64_t>(*this,
+                                                                     other);
+}
+Literal Literal::leSI64x2(const Literal& other) const {
+  return compare<2, &Literal::getLanesI64x2, &Literal::leS, int64_t>(*this,
+                                                                     other);
+}
+Literal Literal::geSI64x2(const Literal& other) const {
+  return compare<2, &Literal::getLanesI64x2, &Literal::geS, int64_t>(*this,
+                                                                     other);
+}
+Literal Literal::eqF32x4(const Literal& other) const {
+  return compare<4, &Literal::getLanesF32x4, &Literal::eq>(*this, other);
+}
+Literal Literal::neF32x4(const Literal& other) const {
+  return compare<4, &Literal::getLanesF32x4, &Literal::ne>(*this, other);
+}
+Literal Literal::ltF32x4(const Literal& other) const {
+  return compare<4, &Literal::getLanesF32x4, &Literal::lt>(*this, other);
+}
+Literal Literal::gtF32x4(const Literal& other) const {
+  return compare<4, &Literal::getLanesF32x4, &Literal::gt>(*this, other);
+}
+Literal Literal::leF32x4(const Literal& other) const {
+  return compare<4, &Literal::getLanesF32x4, &Literal::le>(*this, other);
+}
+Literal Literal::geF32x4(const Literal& other) const {
+  return compare<4, &Literal::getLanesF32x4, &Literal::ge>(*this, other);
+}
+Literal Literal::eqF64x2(const Literal& other) const {
+  return compare<2, &Literal::getLanesF64x2, &Literal::eq, int64_t>(*this,
+                                                                    other);
+}
+Literal Literal::neF64x2(const Literal& other) const {
+  return compare<2, &Literal::getLanesF64x2, &Literal::ne, int64_t>(*this,
+                                                                    other);
+}
+Literal Literal::ltF64x2(const Literal& other) 
