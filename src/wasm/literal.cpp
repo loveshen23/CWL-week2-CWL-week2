@@ -2122,4 +2122,274 @@ Literal Literal::neF64x2(const Literal& other) const {
   return compare<2, &Literal::getLanesF64x2, &Literal::ne, int64_t>(*this,
                                                                     other);
 }
-Literal Literal::ltF64x2(const Literal& other) 
+Literal Literal::ltF64x2(const Literal& other) const {
+  return compare<2, &Literal::getLanesF64x2, &Literal::lt, int64_t>(*this,
+                                                                    other);
+}
+Literal Literal::gtF64x2(const Literal& other) const {
+  return compare<2, &Literal::getLanesF64x2, &Literal::gt, int64_t>(*this,
+                                                                    other);
+}
+Literal Literal::leF64x2(const Literal& other) const {
+  return compare<2, &Literal::getLanesF64x2, &Literal::le, int64_t>(*this,
+                                                                    other);
+}
+Literal Literal::geF64x2(const Literal& other) const {
+  return compare<2, &Literal::getLanesF64x2, &Literal::ge, int64_t>(*this,
+                                                                    other);
+}
+
+template<int Lanes,
+         LaneArray<Lanes> (Literal::*IntoLanes)() const,
+         Literal (Literal::*BinaryOp)(const Literal&) const>
+static Literal binary(const Literal& val, const Literal& other) {
+  LaneArray<Lanes> lanes = (val.*IntoLanes)();
+  LaneArray<Lanes> other_lanes = (other.*IntoLanes)();
+  for (size_t i = 0; i < Lanes; ++i) {
+    lanes[i] = (lanes[i].*BinaryOp)(other_lanes[i]);
+  }
+  return Literal(lanes);
+}
+
+Literal Literal::andV128(const Literal& other) const {
+  return binary<4, &Literal::getLanesI32x4, &Literal::and_>(*this, other);
+}
+Literal Literal::orV128(const Literal& other) const {
+  return binary<4, &Literal::getLanesI32x4, &Literal::or_>(*this, other);
+}
+Literal Literal::xorV128(const Literal& other) const {
+  return binary<4, &Literal::getLanesI32x4, &Literal::xor_>(*this, other);
+}
+Literal Literal::addI8x16(const Literal& other) const {
+  return binary<16, &Literal::getLanesUI8x16, &Literal::add>(*this, other);
+}
+Literal Literal::addSaturateSI8x16(const Literal& other) const {
+  return binary<16, &Literal::getLanesUI8x16, &Literal::addSatSI8>(*this,
+                                                                   other);
+}
+Literal Literal::addSaturateUI8x16(const Literal& other) const {
+  return binary<16, &Literal::getLanesSI8x16, &Literal::addSatUI8>(*this,
+                                                                   other);
+}
+Literal Literal::subI8x16(const Literal& other) const {
+  return binary<16, &Literal::getLanesUI8x16, &Literal::sub>(*this, other);
+}
+Literal Literal::subSaturateSI8x16(const Literal& other) const {
+  return binary<16, &Literal::getLanesUI8x16, &Literal::subSatSI8>(*this,
+                                                                   other);
+}
+Literal Literal::subSaturateUI8x16(const Literal& other) const {
+  return binary<16, &Literal::getLanesSI8x16, &Literal::subSatUI8>(*this,
+                                                                   other);
+}
+Literal Literal::minSI8x16(const Literal& other) const {
+  return binary<16, &Literal::getLanesSI8x16, &Literal::minInt>(*this, other);
+}
+Literal Literal::minUI8x16(const Literal& other) const {
+  return binary<16, &Literal::getLanesUI8x16, &Literal::minInt>(*this, other);
+}
+Literal Literal::maxSI8x16(const Literal& other) const {
+  return binary<16, &Literal::getLanesSI8x16, &Literal::maxInt>(*this, other);
+}
+Literal Literal::maxUI8x16(const Literal& other) const {
+  return binary<16, &Literal::getLanesUI8x16, &Literal::maxInt>(*this, other);
+}
+Literal Literal::avgrUI8x16(const Literal& other) const {
+  return binary<16, &Literal::getLanesUI8x16, &Literal::avgrUInt>(*this, other);
+}
+Literal Literal::addI16x8(const Literal& other) const {
+  return binary<8, &Literal::getLanesUI16x8, &Literal::add>(*this, other);
+}
+Literal Literal::addSaturateSI16x8(const Literal& other) const {
+  return binary<8, &Literal::getLanesUI16x8, &Literal::addSatSI16>(*this,
+                                                                   other);
+}
+Literal Literal::addSaturateUI16x8(const Literal& other) const {
+  return binary<8, &Literal::getLanesSI16x8, &Literal::addSatUI16>(*this,
+                                                                   other);
+}
+Literal Literal::subI16x8(const Literal& other) const {
+  return binary<8, &Literal::getLanesUI16x8, &Literal::sub>(*this, other);
+}
+Literal Literal::subSaturateSI16x8(const Literal& other) const {
+  return binary<8, &Literal::getLanesUI16x8, &Literal::subSatSI16>(*this,
+                                                                   other);
+}
+Literal Literal::subSaturateUI16x8(const Literal& other) const {
+  return binary<8, &Literal::getLanesSI16x8, &Literal::subSatUI16>(*this,
+                                                                   other);
+}
+Literal Literal::mulI16x8(const Literal& other) const {
+  return binary<8, &Literal::getLanesUI16x8, &Literal::mul>(*this, other);
+}
+Literal Literal::minSI16x8(const Literal& other) const {
+  return binary<8, &Literal::getLanesSI16x8, &Literal::minInt>(*this, other);
+}
+Literal Literal::minUI16x8(const Literal& other) const {
+  return binary<8, &Literal::getLanesUI16x8, &Literal::minInt>(*this, other);
+}
+Literal Literal::maxSI16x8(const Literal& other) const {
+  return binary<8, &Literal::getLanesSI16x8, &Literal::maxInt>(*this, other);
+}
+Literal Literal::maxUI16x8(const Literal& other) const {
+  return binary<8, &Literal::getLanesUI16x8, &Literal::maxInt>(*this, other);
+}
+Literal Literal::avgrUI16x8(const Literal& other) const {
+  return binary<8, &Literal::getLanesUI16x8, &Literal::avgrUInt>(*this, other);
+}
+Literal Literal::q15MulrSatSI16x8(const Literal& other) const {
+  return binary<8, &Literal::getLanesSI16x8, &Literal::q15MulrSatSI16>(*this,
+                                                                       other);
+}
+Literal Literal::addI32x4(const Literal& other) const {
+  return binary<4, &Literal::getLanesI32x4, &Literal::add>(*this, other);
+}
+Literal Literal::subI32x4(const Literal& other) const {
+  return binary<4, &Literal::getLanesI32x4, &Literal::sub>(*this, other);
+}
+Literal Literal::mulI32x4(const Literal& other) const {
+  return binary<4, &Literal::getLanesI32x4, &Literal::mul>(*this, other);
+}
+Literal Literal::minSI32x4(const Literal& other) const {
+  return binary<4, &Literal::getLanesI32x4, &Literal::minInt>(*this, other);
+}
+Literal Literal::minUI32x4(const Literal& other) const {
+  return binary<4, &Literal::getLanesI32x4, &Literal::minUInt>(*this, other);
+}
+Literal Literal::maxSI32x4(const Literal& other) const {
+  return binary<4, &Literal::getLanesI32x4, &Literal::maxInt>(*this, other);
+}
+Literal Literal::maxUI32x4(const Literal& other) const {
+  return binary<4, &Literal::getLanesI32x4, &Literal::maxUInt>(*this, other);
+}
+Literal Literal::addI64x2(const Literal& other) const {
+  return binary<2, &Literal::getLanesI64x2, &Literal::add>(*this, other);
+}
+Literal Literal::subI64x2(const Literal& other) const {
+  return binary<2, &Literal::getLanesI64x2, &Literal::sub>(*this, other);
+}
+Literal Literal::mulI64x2(const Literal& other) const {
+  return binary<2, &Literal::getLanesI64x2, &Literal::mul>(*this, other);
+}
+Literal Literal::addF32x4(const Literal& other) const {
+  return binary<4, &Literal::getLanesF32x4, &Literal::add>(*this, other);
+}
+Literal Literal::subF32x4(const Literal& other) const {
+  return binary<4, &Literal::getLanesF32x4, &Literal::sub>(*this, other);
+}
+Literal Literal::mulF32x4(const Literal& other) const {
+  return binary<4, &Literal::getLanesF32x4, &Literal::mul>(*this, other);
+}
+Literal Literal::divF32x4(const Literal& other) const {
+  return binary<4, &Literal::getLanesF32x4, &Literal::div>(*this, other);
+}
+Literal Literal::minF32x4(const Literal& other) const {
+  return binary<4, &Literal::getLanesF32x4, &Literal::min>(*this, other);
+}
+Literal Literal::maxF32x4(const Literal& other) const {
+  return binary<4, &Literal::getLanesF32x4, &Literal::max>(*this, other);
+}
+Literal Literal::pminF32x4(const Literal& other) const {
+  return binary<4, &Literal::getLanesF32x4, &Literal::pmin>(*this, other);
+}
+Literal Literal::pmaxF32x4(const Literal& other) const {
+  return binary<4, &Literal::getLanesF32x4, &Literal::pmax>(*this, other);
+}
+Literal Literal::addF64x2(const Literal& other) const {
+  return binary<2, &Literal::getLanesF64x2, &Literal::add>(*this, other);
+}
+Literal Literal::subF64x2(const Literal& other) const {
+  return binary<2, &Literal::getLanesF64x2, &Literal::sub>(*this, other);
+}
+Literal Literal::mulF64x2(const Literal& other) const {
+  return binary<2, &Literal::getLanesF64x2, &Literal::mul>(*this, other);
+}
+Literal Literal::divF64x2(const Literal& other) const {
+  return binary<2, &Literal::getLanesF64x2, &Literal::div>(*this, other);
+}
+Literal Literal::minF64x2(const Literal& other) const {
+  return binary<2, &Literal::getLanesF64x2, &Literal::min>(*this, other);
+}
+Literal Literal::maxF64x2(const Literal& other) const {
+  return binary<2, &Literal::getLanesF64x2, &Literal::max>(*this, other);
+}
+Literal Literal::pminF64x2(const Literal& other) const {
+  return binary<2, &Literal::getLanesF64x2, &Literal::pmin>(*this, other);
+}
+Literal Literal::pmaxF64x2(const Literal& other) const {
+  return binary<2, &Literal::getLanesF64x2, &Literal::pmax>(*this, other);
+}
+
+template<size_t Lanes,
+         size_t Factor,
+         LaneArray<Lanes * Factor> (Literal::*IntoLanes)() const>
+static Literal dot(const Literal& left, const Literal& right) {
+  LaneArray<Lanes* Factor> lhs = (left.*IntoLanes)();
+  LaneArray<Lanes* Factor> rhs = (right.*IntoLanes)();
+  LaneArray<Lanes> result;
+  for (size_t i = 0; i < Lanes; ++i) {
+    result[i] = Literal(int32_t(0));
+    for (size_t j = 0; j < Factor; ++j) {
+      result[i] = Literal(result[i].geti32() + lhs[i * Factor + j].geti32() *
+                                                 rhs[i * Factor + j].geti32());
+    }
+  }
+  return Literal(result);
+}
+
+Literal Literal::dotSI8x16toI16x8(const Literal& other) const {
+  return dot<8, 2, &Literal::getLanesSI8x16>(*this, other);
+}
+Literal Literal::dotUI8x16toI16x8(const Literal& other) const {
+  return dot<8, 2, &Literal::getLanesUI8x16>(*this, other);
+}
+Literal Literal::dotSI16x8toI32x4(const Literal& other) const {
+  return dot<4, 2, &Literal::getLanesSI16x8>(*this, other);
+}
+
+Literal Literal::bitselectV128(const Literal& left,
+                               const Literal& right) const {
+  return andV128(left).orV128(notV128().andV128(right));
+}
+
+template<typename T> struct TwiceWidth {};
+template<> struct TwiceWidth<int8_t> { using type = int16_t; };
+template<> struct TwiceWidth<int16_t> { using type = int32_t; };
+
+template<typename T>
+Literal saturating_narrow(
+  typename TwiceWidth<typename std::make_signed<T>::type>::type val) {
+  using WideT = typename TwiceWidth<typename std::make_signed<T>::type>::type;
+  if (val > WideT(std::numeric_limits<T>::max())) {
+    val = std::numeric_limits<T>::max();
+  } else if (val < WideT(std::numeric_limits<T>::min())) {
+    val = std::numeric_limits<T>::min();
+  }
+  return Literal(int32_t(val));
+}
+
+template<size_t Lanes,
+         typename T,
+         LaneArray<Lanes / 2> (Literal::*IntoLanes)() const>
+Literal narrow(const Literal& low, const Literal& high) {
+  LaneArray<Lanes / 2> lowLanes = (low.*IntoLanes)();
+  LaneArray<Lanes / 2> highLanes = (high.*IntoLanes)();
+  LaneArray<Lanes> result;
+  for (size_t i = 0; i < Lanes / 2; ++i) {
+    result[i] = saturating_narrow<T>(lowLanes[i].geti32());
+    result[Lanes / 2 + i] = saturating_narrow<T>(highLanes[i].geti32());
+  }
+  return Literal(result);
+}
+
+Literal Literal::narrowSToI8x16(const Literal& other) const {
+  return narrow<16, int8_t, &Literal::getLanesSI16x8>(*this, other);
+}
+Literal Literal::narrowUToI8x16(const Literal& other) const {
+  return narrow<16, uint8_t, &Literal::getLanesSI16x8>(*this, other);
+}
+Literal Literal::narrowSToI16x8(const Literal& other) const {
+  return narrow<8, int16_t, &Literal::getLanesI32x4>(*this, other);
+}
+Literal Literal::narrowUToI16x8(const Literal& other) const {
+  return narrow<8, uint1
