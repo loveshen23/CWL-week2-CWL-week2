@@ -2392,4 +2392,202 @@ Literal Literal::narrowSToI16x8(const Literal& other) const {
   return narrow<8, int16_t, &Literal::getLanesI32x4>(*this, other);
 }
 Literal Literal::narrowUToI16x8(const Literal& other) const {
-  return narrow<8, uint1
+  return narrow<8, uint16_t, &Literal::getLanesI32x4>(*this, other);
+}
+
+enum class LaneOrder { Low, High };
+
+template<size_t Lanes, typename LaneFrom, typename LaneTo, LaneOrder Side>
+Literal extend(const Literal& vec) {
+  LaneArray<Lanes* 2> lanes = getLanes<LaneFrom, Lanes * 2>(vec);
+  LaneArray<Lanes> result;
+  for (size_t i = 0; i < Lanes; ++i) {
+    size_t idx = (Side == LaneOrder::Low) ? i : i + Lanes;
+    result[i] = Literal((LaneTo)(LaneFrom)lanes[idx].geti32());
+  }
+  return Literal(result);
+}
+
+template<LaneOrder Side> Literal extendF32(const Literal& vec) {
+  LaneArray<4> lanes = vec.getLanesF32x4();
+  LaneArray<2> result;
+  for (size_t i = 0; i < 2; ++i) {
+    size_t idx = (Side == LaneOrder::Low) ? i : i + 2;
+    result[i] = Literal((double)lanes[idx].getf32());
+  }
+  return Literal(result);
+}
+
+Literal Literal::extendLowSToI16x8() const {
+  return extend<8, int8_t, int16_t, LaneOrder::Low>(*this);
+}
+Literal Literal::extendHighSToI16x8() const {
+  return extend<8, int8_t, int16_t, LaneOrder::High>(*this);
+}
+Literal Literal::extendLowUToI16x8() const {
+  return extend<8, uint8_t, uint16_t, LaneOrder::Low>(*this);
+}
+Literal Literal::extendHighUToI16x8() const {
+  return extend<8, uint8_t, uint16_t, LaneOrder::High>(*this);
+}
+Literal Literal::extendLowSToI32x4() const {
+  return extend<4, int16_t, int32_t, LaneOrder::Low>(*this);
+}
+Literal Literal::extendHighSToI32x4() const {
+  return extend<4, int16_t, int32_t, LaneOrder::High>(*this);
+}
+Literal Literal::extendLowUToI32x4() const {
+  return extend<4, uint16_t, uint32_t, LaneOrder::Low>(*this);
+}
+Literal Literal::extendHighUToI32x4() const {
+  return extend<4, uint16_t, uint32_t, LaneOrder::High>(*this);
+}
+Literal Literal::extendLowSToI64x2() const {
+  return extend<2, int32_t, int64_t, LaneOrder::Low>(*this);
+}
+Literal Literal::extendHighSToI64x2() const {
+  return extend<2, int32_t, int64_t, LaneOrder::High>(*this);
+}
+Literal Literal::extendLowUToI64x2() const {
+  return extend<2, uint32_t, uint64_t, LaneOrder::Low>(*this);
+}
+Literal Literal::extendHighUToI64x2() const {
+  return extend<2, uint32_t, uint64_t, LaneOrder::High>(*this);
+}
+
+template<size_t Lanes, typename LaneFrom, typename LaneTo, LaneOrder Side>
+Literal extMul(const Literal& a, const Literal& b) {
+  LaneArray<Lanes* 2> lhs = getLanes<LaneFrom, Lanes * 2>(a);
+  LaneArray<Lanes* 2> rhs = getLanes<LaneFrom, Lanes * 2>(b);
+  LaneArray<Lanes> result;
+  for (size_t i = 0; i < Lanes; ++i) {
+    size_t idx = (Side == LaneOrder::Low) ? i : i + Lanes;
+    result[i] = Literal((LaneTo)(LaneFrom)lhs[idx].geti32() *
+                        (LaneTo)(LaneFrom)rhs[idx].geti32());
+  }
+  return Literal(result);
+}
+
+Literal Literal::extMulLowSI16x8(const Literal& other) const {
+  return extMul<8, int8_t, int16_t, LaneOrder::Low>(*this, other);
+}
+Literal Literal::extMulHighSI16x8(const Literal& other) const {
+  return extMul<8, int8_t, int16_t, LaneOrder::High>(*this, other);
+}
+Literal Literal::extMulLowUI16x8(const Literal& other) const {
+  return extMul<8, uint8_t, uint16_t, LaneOrder::Low>(*this, other);
+}
+Literal Literal::extMulHighUI16x8(const Literal& other) const {
+  return extMul<8, uint8_t, uint16_t, LaneOrder::High>(*this, other);
+}
+Literal Literal::extMulLowSI32x4(const Literal& other) const {
+  return extMul<4, int16_t, int32_t, LaneOrder::Low>(*this, other);
+}
+Literal Literal::extMulHighSI32x4(const Literal& other) const {
+  return extMul<4, int16_t, int32_t, LaneOrder::High>(*this, other);
+}
+Literal Literal::extMulLowUI32x4(const Literal& other) const {
+  return extMul<4, uint16_t, uint32_t, LaneOrder::Low>(*this, other);
+}
+Literal Literal::extMulHighUI32x4(const Literal& other) const {
+  return extMul<4, uint16_t, uint32_t, LaneOrder::High>(*this, other);
+}
+Literal Literal::extMulLowSI64x2(const Literal& other) const {
+  return extMul<2, int32_t, int64_t, LaneOrder::Low>(*this, other);
+}
+Literal Literal::extMulHighSI64x2(const Literal& other) const {
+  return extMul<2, int32_t, int64_t, LaneOrder::High>(*this, other);
+}
+Literal Literal::extMulLowUI64x2(const Literal& other) const {
+  return extMul<2, uint32_t, uint64_t, LaneOrder::Low>(*this, other);
+}
+Literal Literal::extMulHighUI64x2(const Literal& other) const {
+  return extMul<2, uint32_t, uint64_t, LaneOrder::High>(*this, other);
+}
+
+Literal Literal::convertLowSToF64x2() const {
+  return extend<2, int32_t, double, LaneOrder::Low>(*this);
+}
+Literal Literal::convertLowUToF64x2() const {
+  return extend<2, uint32_t, double, LaneOrder::Low>(*this);
+}
+
+template<int Lanes,
+         LaneArray<Lanes / 2> (Literal::*IntoLanes)() const,
+         Literal (Literal::*UnaryOp)(void) const>
+static Literal unary_zero(const Literal& val) {
+  LaneArray<Lanes / 2> lanes = (val.*IntoLanes)();
+  LaneArray<Lanes> result;
+  for (size_t i = 0; i < Lanes / 2; ++i) {
+    result[i] = (lanes[i].*UnaryOp)();
+  }
+  for (size_t i = Lanes / 2; i < Lanes; ++i) {
+    result[i] = Literal::makeZero(lanes[0].type);
+  }
+  return Literal(result);
+}
+
+Literal Literal::truncSatZeroSToI32x4() const {
+  return unary_zero<4, &Literal::getLanesF64x2, &Literal::truncSatToSI32>(
+    *this);
+}
+Literal Literal::truncSatZeroUToI32x4() const {
+  return unary_zero<4, &Literal::getLanesF64x2, &Literal::truncSatToUI32>(
+    *this);
+}
+
+Literal Literal::demoteZeroToF32x4() const {
+  return unary_zero<4, &Literal::getLanesF64x2, &Literal::demote>(*this);
+}
+Literal Literal::promoteLowToF64x2() const {
+  return extendF32<LaneOrder::Low>(*this);
+}
+
+Literal Literal::swizzleI8x16(const Literal& other) const {
+  auto lanes = getLanesUI8x16();
+  auto indices = other.getLanesUI8x16();
+  LaneArray<16> result;
+  for (size_t i = 0; i < 16; ++i) {
+    size_t index = indices[i].geti32();
+    result[i] = index >= 16 ? Literal(int32_t(0)) : lanes[index];
+  }
+  return Literal(result);
+}
+
+namespace {
+template<int Lanes,
+         LaneArray<Lanes> (Literal::*IntoLanes)() const,
+         Literal (Literal::*TernaryOp)(const Literal&, const Literal&) const>
+static Literal ternary(const Literal& a, const Literal& b, const Literal& c) {
+  LaneArray<Lanes> x = (a.*IntoLanes)();
+  LaneArray<Lanes> y = (b.*IntoLanes)();
+  LaneArray<Lanes> z = (c.*IntoLanes)();
+  LaneArray<Lanes> r;
+  for (size_t i = 0; i < Lanes; ++i) {
+    r[i] = (x[i].*TernaryOp)(y[i], z[i]);
+  }
+  return Literal(r);
+}
+} // namespace
+
+Literal Literal::relaxedFmaF32x4(const Literal& left,
+                                 const Literal& right) const {
+  return ternary<4, &Literal::getLanesF32x4, &Literal::fma>(*this, left, right);
+}
+
+Literal Literal::relaxedFmsF32x4(const Literal& left,
+                                 const Literal& right) const {
+  return ternary<4, &Literal::getLanesF32x4, &Literal::fms>(*this, left, right);
+}
+
+Literal Literal::relaxedFmaF64x2(const Literal& left,
+                                 const Literal& right) const {
+  return ternary<2, &Literal::getLanesF64x2, &Literal::fma>(*this, left, right);
+}
+
+Literal Literal::relaxedFmsF64x2(const Literal& left,
+                                 const Literal& right) const {
+  return ternary<2, &Literal::getLanesF64x2, &Literal::fms>(*this, left, right);
+}
+
+} // namespace wasm
