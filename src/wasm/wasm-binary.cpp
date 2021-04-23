@@ -476,4 +476,393 @@ void WasmBinaryWriter::writeStrings() {
 
   ModuleUtils::ParallelFunctionAnalysis<StringSet> analysis(
     *wasm, [&](Function* func, StringSet& strings) {
-      if (!fun
+      if (!func->imported()) {
+        StringWalker(strings).walk(func->body);
+      }
+    });
+
+  // Also walk the global module code (for simplicity, also add it to the
+  // function map, using a "function" key of nullptr).
+  auto& globalStrings = analysis.map[nullptr];
+  StringWalker(globalStrings).walkModuleCode(wasm);
+
+  // Generate the indexes from the combined set of necessary strings,
+  // which we sort for determinism.
+  StringSet allStrings;
+  for (auto& [func, strings] : analysis.map) {
+    for (auto& string : strings) {
+      allStrings.insert(string);
+    }
+  }
+  std::vector<Name> sorted;
+  for (auto& string : allStrings) {
+    sorted.push_back(string);
+  }
+  std::sort(sorted.begin(), sorted.end());
+  for (Index i = 0; i < sorted.size(); i++) {
+    stringIndexes[sorted[i]] = i;
+  }
+
+  auto num = sorted.size();
+  if (num == 0) {
+    return;
+  }
+
+  auto start = startSection(BinaryConsts::Section::Strings);
+
+  // Placeholder for future use in the spec.
+  o << U32LEB(0);
+
+  // The number of strings and then their contents.
+  o << U32LEB(num);
+  for (auto& string : sorted) {
+    writeInlineString(string.str);
+  }
+
+  finishSection(start);
+}
+
+void WasmBinaryWriter::writeGlobals() {
+  if (importInfo->getNumDefinedGlobals() == 0) {
+    return;
+  }
+  BYN_TRACE("== writeglobals\n");
+  auto start = startSection(BinaryConsts::Section::Global);
+  // Count and emit the total number of globals after tuple globals have been
+  // expanded into their constituent parts.
+  Index num = 0;
+  ModuleUtils::iterDefinedGlobals(
+    *wasm, [&num](Global* global) { num += global->type.size(); });
+  o << U32LEB(num);
+  ModuleUtils::iterDefinedGlobals(*wasm, [&](Global* global) {
+    BYN_TRACE("write one\n");
+    size_t i = 0;
+    for (const auto& t : global->type) {
+      writeType(t);
+      o << U32LEB(global->mutable_);
+      if (global->type.size() == 1) {
+        writeExpression(global->init);
+      } else {
+        writeExpression(global->init->cast<TupleMake>()->operands[i]);
+      }
+      o << int8_t(BinaryConsts::End);
+      ++i;
+    }
+  });
+  finishSection(start);
+}
+
+void WasmBinaryWriter::writeExports() {
+  if (wasm->exports.size() == 0) {
+    return;
+  }
+  BYN_TRACE("== writeexports\n");
+  auto start = startSection(BinaryConsts::Section::Export);
+  o << U32LEB(wasm->exports.size());
+  for (auto& curr : wasm->exports) {
+    BYN_TRACE("write one\n");
+    writeInlineString(curr->name.str);
+    o << U32LEB(int32_t(curr->kind));
+    switch (curr->kind) {
+      case ExternalKind::Function:
+        o << U32LEB(getFunctionIndex(curr->value));
+        break;
+      case ExternalKind::Table:
+        o << U32LEB(getTableIndex(curr->value));
+        break;
+      case ExternalKind::Memory:
+        o << U32LEB(getMemoryIndex(curr->value));
+        break;
+      case ExternalKind::Global:
+        o << U32LEB(getGlobalIndex(curr->value));
+        break;
+      case ExternalKind::Tag:
+        o << U32LEB(getTagIndex(curr->value));
+        break;
+      default:
+        WASM_UNREACHABLE("unexpected extern kind");
+    }
+  }
+  finishSection(start);
+}
+
+void WasmBinaryWriter::writeDataCount() {
+  if (!wasm->features.hasBulkMemory() || !wasm->dataSegments.size()) {
+    return;
+  }
+  auto start = startSection(BinaryConsts::Section::DataCount);
+  o << U32LEB(wasm->dataSegments.size());
+  finishSection(start);
+}
+
+void WasmBinaryWriter::writeDataSegments() {
+  if (wasm->dataSegments.size() == 0) {
+    return;
+  }
+  if (wasm->dataSegments.size() > WebLimitations::MaxDataSegments) {
+    std::cerr << "Some VMs may not accept this binary because it has a large "
+              << "number of data segments. Run the limit-segments pass to "
+              << "merge segments.\n";
+  }
+  auto start = startSection(BinaryConsts::Section::Data);
+  o << U32LEB(wasm->dataSegments.size());
+  for (auto& segment : wasm->dataSegments) {
+    uint32_t flags = 0;
+    if (segment->isPassive) {
+      flags |= BinaryConsts::IsPassive;
+    }
+    o << U32LEB(flags);
+    if (!segment->isPassive) {
+      writeExpression(segment->offset);
+      o << int8_t(BinaryConsts::End);
+    }
+    writeInlineBuffer(segment->data.data(), segment->data.size());
+  }
+  finishSection(start);
+}
+
+uint32_t WasmBinaryWriter::getFunctionIndex(Name name) const {
+  auto it = indexes.functionIndexes.find(name);
+  assert(it != indexes.functionIndexes.end());
+  return it->second;
+}
+
+uint32_t WasmBinaryWriter::getTableIndex(Name name) const {
+  auto it = indexes.tableIndexes.find(name);
+  assert(it != indexes.tableIndexes.end());
+  return it->second;
+}
+
+uint32_t WasmBinaryWriter::getMemoryIndex(Name name) const {
+  auto it = indexes.memoryIndexes.find(name);
+  assert(it != indexes.memoryIndexes.end());
+  return it->second;
+}
+
+uint32_t WasmBinaryWriter::getGlobalIndex(Name name) const {
+  auto it = indexes.globalIndexes.find(name);
+  assert(it != indexes.globalIndexes.end());
+  return it->second;
+}
+
+uint32_t WasmBinaryWriter::getTagIndex(Name name) const {
+  auto it = indexes.tagIndexes.find(name);
+  assert(it != indexes.tagIndexes.end());
+  return it->second;
+}
+
+uint32_t WasmBinaryWriter::getTypeIndex(HeapType type) const {
+  auto it = indexedTypes.indices.find(type);
+#ifndef NDEBUG
+  if (it == indexedTypes.indices.end()) {
+    std::cout << "Missing type: " << type << '\n';
+    assert(0);
+  }
+#endif
+  return it->second;
+}
+
+uint32_t WasmBinaryWriter::getStringIndex(Name string) const {
+  auto it = stringIndexes.find(string);
+  assert(it != stringIndexes.end());
+  return it->second;
+}
+
+void WasmBinaryWriter::writeTableDeclarations() {
+  if (importInfo->getNumDefinedTables() == 0) {
+    // std::cerr << std::endl << "(WasmBinaryWriter::writeTableDeclarations) No
+    // defined tables found. skipping" << std::endl;
+    return;
+  }
+  BYN_TRACE("== writeTableDeclarations\n");
+  auto start = startSection(BinaryConsts::Section::Table);
+  auto num = importInfo->getNumDefinedTables();
+  o << U32LEB(num);
+  ModuleUtils::iterDefinedTables(*wasm, [&](Table* table) {
+    writeType(table->type);
+    writeResizableLimits(table->initial,
+                         table->max,
+                         table->hasMax(),
+                         /*shared=*/false,
+                         /*is64*/ false);
+  });
+  finishSection(start);
+}
+
+void WasmBinaryWriter::writeElementSegments() {
+  size_t elemCount = wasm->elementSegments.size();
+  auto needingElemDecl = TableUtils::getFunctionsNeedingElemDeclare(*wasm);
+  if (!needingElemDecl.empty()) {
+    elemCount++;
+  }
+  if (elemCount == 0) {
+    return;
+  }
+
+  BYN_TRACE("== writeElementSegments\n");
+  auto start = startSection(BinaryConsts::Section::Element);
+  o << U32LEB(elemCount);
+
+  Type funcref = Type(HeapType::func, Nullable);
+  for (auto& segment : wasm->elementSegments) {
+    Index tableIdx = 0;
+
+    bool isPassive = segment->table.isNull();
+    // If the segment is MVP, we can use the shorter form.
+    bool usesExpressions = TableUtils::usesExpressions(segment.get(), wasm);
+
+    // The table index can and should be elided for active segments of table 0
+    // when table 0 has type funcref. This was the only type of segment
+    // supported by the MVP, which also did not support table indices in the
+    // segment encoding.
+    bool hasTableIndex = false;
+    if (!isPassive) {
+      tableIdx = getTableIndex(segment->table);
+      hasTableIndex =
+        tableIdx > 0 || wasm->getTable(segment->table)->type != funcref;
+    }
+
+    uint32_t flags = 0;
+    if (usesExpressions) {
+      flags |= BinaryConsts::UsesExpressions;
+    }
+    if (isPassive) {
+      flags |= BinaryConsts::IsPassive;
+    } else if (hasTableIndex) {
+      flags |= BinaryConsts::HasIndex;
+    }
+
+    o << U32LEB(flags);
+    if (!isPassive) {
+      if (hasTableIndex) {
+        o << U32LEB(tableIdx);
+      }
+      writeExpression(segment->offset);
+      o << int8_t(BinaryConsts::End);
+    }
+
+    if (isPassive || hasTableIndex) {
+      if (usesExpressions) {
+        // elemType
+        writeType(segment->type);
+      } else {
+        // MVP elemKind of funcref
+        o << U32LEB(0);
+      }
+    }
+    o << U32LEB(segment->data.size());
+    if (usesExpressions) {
+      for (auto* item : segment->data) {
+        writeExpression(item);
+        o << int8_t(BinaryConsts::End);
+      }
+    } else {
+      for (auto& item : segment->data) {
+        // We've ensured that all items are ref.func.
+        auto& name = item->cast<RefFunc>()->func;
+        o << U32LEB(getFunctionIndex(name));
+      }
+    }
+  }
+
+  if (!needingElemDecl.empty()) {
+    o << U32LEB(BinaryConsts::IsPassive | BinaryConsts::IsDeclarative);
+    o << U32LEB(0); // type (indicating funcref)
+    o << U32LEB(needingElemDecl.size());
+    for (auto name : needingElemDecl) {
+      o << U32LEB(indexes.functionIndexes[name]);
+    }
+  }
+
+  finishSection(start);
+}
+
+void WasmBinaryWriter::writeTags() {
+  if (importInfo->getNumDefinedTags() == 0) {
+    return;
+  }
+  BYN_TRACE("== writeTags\n");
+  auto start = startSection(BinaryConsts::Section::Tag);
+  auto num = importInfo->getNumDefinedTags();
+  o << U32LEB(num);
+  ModuleUtils::iterDefinedTags(*wasm, [&](Tag* tag) {
+    BYN_TRACE("write one\n");
+    o << uint8_t(0); // Reserved 'attribute' field. Always 0.
+    o << U32LEB(getTypeIndex(tag->sig));
+  });
+
+  finishSection(start);
+}
+
+void WasmBinaryWriter::writeNames() {
+  BYN_TRACE("== writeNames\n");
+  auto start = startSection(BinaryConsts::Section::Custom);
+  writeInlineString(BinaryConsts::CustomSections::Name);
+
+  // module name
+  if (emitModuleName && wasm->name.is()) {
+    auto substart =
+      startSubsection(BinaryConsts::CustomSections::Subsection::NameModule);
+    writeEscapedName(wasm->name.str);
+    finishSubsection(substart);
+  }
+
+  if (!debugInfo) {
+    // We were only writing the module name.
+    finishSection(start);
+    return;
+  }
+
+  // function names
+  {
+    auto substart =
+      startSubsection(BinaryConsts::CustomSections::Subsection::NameFunction);
+    o << U32LEB(indexes.functionIndexes.size());
+    Index emitted = 0;
+    auto add = [&](Function* curr) {
+      o << U32LEB(emitted);
+      writeEscapedName(curr->name.str);
+      emitted++;
+    };
+    ModuleUtils::iterImportedFunctions(*wasm, add);
+    ModuleUtils::iterDefinedFunctions(*wasm, add);
+    assert(emitted == indexes.functionIndexes.size());
+    finishSubsection(substart);
+  }
+
+  // local names
+  {
+    // Find all functions with at least one local name and only emit the
+    // subsection if there is at least one.
+    std::vector<std::pair<Index, Function*>> functionsWithLocalNames;
+    Index checked = 0;
+    auto check = [&](Function* curr) {
+      auto numLocals = curr->getNumLocals();
+      for (Index i = 0; i < numLocals; ++i) {
+        if (curr->hasLocalName(i)) {
+          functionsWithLocalNames.push_back({checked, curr});
+          break;
+        }
+      }
+      checked++;
+    };
+    ModuleUtils::iterImportedFunctions(*wasm, check);
+    ModuleUtils::iterDefinedFunctions(*wasm, check);
+    assert(checked == indexes.functionIndexes.size());
+    if (functionsWithLocalNames.size() > 0) {
+      // Otherwise emit those functions but only include locals with a name.
+      auto substart =
+        startSubsection(BinaryConsts::CustomSections::Subsection::NameLocal);
+      o << U32LEB(functionsWithLocalNames.size());
+      Index emitted = 0;
+      for (auto& [index, func] : functionsWithLocalNames) {
+        // Pairs of (local index in IR, name).
+        std::vector<std::pair<Index, Name>> localsWithNames;
+        auto numLocals = func->getNumLocals();
+        for (Index indexInFunc = 0; indexInFunc < numLocals; ++indexInFunc) {
+          if (func->hasLocalName(indexInFunc)) {
+            Index indexInBinary;
+            auto iter = funcMappedLocals.find(func->name);
+            if (iter != funcMappedLocals.end()) {
+              // TODO: handle multivalue
+              indexInBi
