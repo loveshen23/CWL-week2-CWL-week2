@@ -865,4 +865,380 @@ void WasmBinaryWriter::writeNames() {
             auto iter = funcMappedLocals.find(func->name);
             if (iter != funcMappedLocals.end()) {
               // TODO: handle multivalue
-              indexInBi
+              indexInBinary = iter->second[{indexInFunc, 0}];
+            } else {
+              // No data on funcMappedLocals. That is only possible if we are an
+              // imported function, where there are no locals to map, and in
+              // that case the index is unchanged anyhow: parameters always have
+              // the same index, they are not mapped in any way.
+              assert(func->imported());
+              indexInBinary = indexInFunc;
+            }
+            localsWithNames.push_back(
+              {indexInBinary, func->getLocalName(indexInFunc)});
+          }
+        }
+        assert(localsWithNames.size());
+        std::sort(localsWithNames.begin(), localsWithNames.end());
+        o << U32LEB(index);
+        o << U32LEB(localsWithNames.size());
+        for (auto& [indexInBinary, name] : localsWithNames) {
+          o << U32LEB(indexInBinary);
+          writeEscapedName(name.str);
+        }
+        emitted++;
+      }
+      assert(emitted == functionsWithLocalNames.size());
+      finishSubsection(substart);
+    }
+  }
+
+  // type names
+  {
+    std::vector<HeapType> namedTypes;
+    for (auto& [type, _] : indexedTypes.indices) {
+      if (wasm->typeNames.count(type) && wasm->typeNames[type].name.is()) {
+        namedTypes.push_back(type);
+      }
+    }
+    if (!namedTypes.empty()) {
+      auto substart =
+        startSubsection(BinaryConsts::CustomSections::Subsection::NameType);
+      o << U32LEB(namedTypes.size());
+      for (auto type : namedTypes) {
+        o << U32LEB(indexedTypes.indices[type]);
+        writeEscapedName(wasm->typeNames[type].name.str);
+      }
+      finishSubsection(substart);
+    }
+  }
+
+  // table names
+  {
+    std::vector<std::pair<Index, Table*>> tablesWithNames;
+    Index checked = 0;
+    auto check = [&](Table* curr) {
+      if (curr->hasExplicitName) {
+        tablesWithNames.push_back({checked, curr});
+      }
+      checked++;
+    };
+    ModuleUtils::iterImportedTables(*wasm, check);
+    ModuleUtils::iterDefinedTables(*wasm, check);
+    assert(checked == indexes.tableIndexes.size());
+
+    if (tablesWithNames.size() > 0) {
+      auto substart =
+        startSubsection(BinaryConsts::CustomSections::Subsection::NameTable);
+      o << U32LEB(tablesWithNames.size());
+
+      for (auto& [index, table] : tablesWithNames) {
+        o << U32LEB(index);
+        writeEscapedName(table->name.str);
+      }
+
+      finishSubsection(substart);
+    }
+  }
+
+  // memory names
+  {
+    std::vector<std::pair<Index, Memory*>> memoriesWithNames;
+    Index checked = 0;
+    auto check = [&](Memory* curr) {
+      if (curr->hasExplicitName) {
+        memoriesWithNames.push_back({checked, curr});
+      }
+      checked++;
+    };
+    ModuleUtils::iterImportedMemories(*wasm, check);
+    ModuleUtils::iterDefinedMemories(*wasm, check);
+    assert(checked == indexes.memoryIndexes.size());
+    if (memoriesWithNames.size() > 0) {
+      auto substart =
+        startSubsection(BinaryConsts::CustomSections::Subsection::NameMemory);
+      o << U32LEB(memoriesWithNames.size());
+      for (auto& [index, memory] : memoriesWithNames) {
+        o << U32LEB(index);
+        writeEscapedName(memory->name.str);
+      }
+      finishSubsection(substart);
+    }
+  }
+
+  // global names
+  {
+    std::vector<std::pair<Index, Global*>> globalsWithNames;
+    Index checked = 0;
+    auto check = [&](Global* curr) {
+      if (curr->hasExplicitName) {
+        globalsWithNames.push_back({checked, curr});
+      }
+      checked++;
+    };
+    ModuleUtils::iterImportedGlobals(*wasm, check);
+    ModuleUtils::iterDefinedGlobals(*wasm, check);
+    assert(checked == indexes.globalIndexes.size());
+    if (globalsWithNames.size() > 0) {
+      auto substart =
+        startSubsection(BinaryConsts::CustomSections::Subsection::NameGlobal);
+      o << U32LEB(globalsWithNames.size());
+      for (auto& [index, global] : globalsWithNames) {
+        o << U32LEB(index);
+        writeEscapedName(global->name.str);
+      }
+      finishSubsection(substart);
+    }
+  }
+
+  // elem segment names
+  {
+    std::vector<std::pair<Index, ElementSegment*>> elemsWithNames;
+    Index checked = 0;
+    for (auto& curr : wasm->elementSegments) {
+      if (curr->hasExplicitName) {
+        elemsWithNames.push_back({checked, curr.get()});
+      }
+      checked++;
+    }
+    assert(checked == indexes.elemIndexes.size());
+
+    if (elemsWithNames.size() > 0) {
+      auto substart =
+        startSubsection(BinaryConsts::CustomSections::Subsection::NameElem);
+      o << U32LEB(elemsWithNames.size());
+
+      for (auto& [index, elem] : elemsWithNames) {
+        o << U32LEB(index);
+        writeEscapedName(elem->name.str);
+      }
+
+      finishSubsection(substart);
+    }
+  }
+
+  // data segment names
+  if (!wasm->memories.empty()) {
+    Index count = 0;
+    for (auto& seg : wasm->dataSegments) {
+      if (seg->hasExplicitName) {
+        count++;
+      }
+    }
+
+    if (count) {
+      auto substart =
+        startSubsection(BinaryConsts::CustomSections::Subsection::NameData);
+      o << U32LEB(count);
+      for (Index i = 0; i < wasm->dataSegments.size(); i++) {
+        auto& seg = wasm->dataSegments[i];
+        if (seg->name.is()) {
+          o << U32LEB(i);
+          writeEscapedName(seg->name.str);
+        }
+      }
+      finishSubsection(substart);
+    }
+  }
+
+  // TODO: label, type, and element names
+  // see: https://github.com/WebAssembly/extended-name-section
+
+  // GC field names
+  if (wasm->features.hasGC()) {
+    std::vector<HeapType> relevantTypes;
+    for (auto& type : indexedTypes.types) {
+      if (type.isStruct() && wasm->typeNames.count(type) &&
+          !wasm->typeNames[type].fieldNames.empty()) {
+        relevantTypes.push_back(type);
+      }
+    }
+    if (!relevantTypes.empty()) {
+      auto substart =
+        startSubsection(BinaryConsts::CustomSections::Subsection::NameField);
+      o << U32LEB(relevantTypes.size());
+      for (Index i = 0; i < relevantTypes.size(); i++) {
+        auto type = relevantTypes[i];
+        o << U32LEB(indexedTypes.indices[type]);
+        std::unordered_map<Index, Name>& fieldNames =
+          wasm->typeNames.at(type).fieldNames;
+        o << U32LEB(fieldNames.size());
+        for (auto& [index, name] : fieldNames) {
+          o << U32LEB(index);
+          writeEscapedName(name.str);
+        }
+      }
+      finishSubsection(substart);
+    }
+  }
+
+  // tag names
+  if (!wasm->tags.empty()) {
+    Index count = 0;
+    for (auto& tag : wasm->tags) {
+      if (tag->hasExplicitName) {
+        count++;
+      }
+    }
+
+    if (count) {
+      auto substart =
+        startSubsection(BinaryConsts::CustomSections::Subsection::NameTag);
+      o << U32LEB(count);
+      for (Index i = 0; i < wasm->tags.size(); i++) {
+        auto& tag = wasm->tags[i];
+        if (tag->hasExplicitName) {
+          o << U32LEB(i);
+          writeEscapedName(tag->name.str);
+        }
+      }
+      finishSubsection(substart);
+    }
+  }
+
+  finishSection(start);
+}
+
+void WasmBinaryWriter::writeSourceMapUrl() {
+  BYN_TRACE("== writeSourceMapUrl\n");
+  auto start = startSection(BinaryConsts::Section::Custom);
+  writeInlineString(BinaryConsts::CustomSections::SourceMapUrl);
+  writeInlineString(sourceMapUrl.c_str());
+  finishSection(start);
+}
+
+void WasmBinaryWriter::writeSymbolMap() {
+  std::ofstream file(symbolMap);
+  auto write = [&](Function* func) {
+    file << getFunctionIndex(func->name) << ":" << func->name.str << std::endl;
+  };
+  ModuleUtils::iterImportedFunctions(*wasm, write);
+  ModuleUtils::iterDefinedFunctions(*wasm, write);
+  file.close();
+}
+
+void WasmBinaryWriter::initializeDebugInfo() {
+  lastDebugLocation = {0, /* lineNumber = */ 1, 0};
+}
+
+void WasmBinaryWriter::writeSourceMapProlog() {
+  *sourceMap << "{\"version\":3,\"sources\":[";
+  for (size_t i = 0; i < wasm->debugInfoFileNames.size(); i++) {
+    if (i > 0) {
+      *sourceMap << ",";
+    }
+    // TODO respect JSON string encoding, e.g. quotes and control chars.
+    *sourceMap << "\"" << wasm->debugInfoFileNames[i] << "\"";
+  }
+  *sourceMap << "],\"names\":[],\"mappings\":\"";
+}
+
+static void writeBase64VLQ(std::ostream& out, int32_t n) {
+  uint32_t value = n >= 0 ? n << 1 : ((-n) << 1) | 1;
+  while (1) {
+    uint32_t digit = value & 0x1F;
+    value >>= 5;
+    if (!value) {
+      // last VLQ digit -- base64 codes 'A'..'Z', 'a'..'f'
+      out << char(digit < 26 ? 'A' + digit : 'a' + digit - 26);
+      break;
+    }
+    // more VLG digit will follow -- add continuation bit (0x20),
+    // base64 codes 'g'..'z', '0'..'9', '+', '/'
+    out << char(digit < 20
+                  ? 'g' + digit
+                  : digit < 30 ? '0' + digit - 20 : digit == 30 ? '+' : '/');
+  }
+}
+
+void WasmBinaryWriter::writeSourceMapEpilog() {
+  // write source map entries
+  size_t lastOffset = 0;
+  Function::DebugLocation lastLoc = {0, /* lineNumber = */ 1, 0};
+  for (const auto& [offset, loc] : sourceMapLocations) {
+    if (lastOffset > 0) {
+      *sourceMap << ",";
+    }
+    writeBase64VLQ(*sourceMap, int32_t(offset - lastOffset));
+    writeBase64VLQ(*sourceMap, int32_t(loc->fileIndex - lastLoc.fileIndex));
+    writeBase64VLQ(*sourceMap, int32_t(loc->lineNumber - lastLoc.lineNumber));
+    writeBase64VLQ(*sourceMap,
+                   int32_t(loc->columnNumber - lastLoc.columnNumber));
+    lastLoc = *loc;
+    lastOffset = offset;
+  }
+  *sourceMap << "\"}";
+}
+
+void WasmBinaryWriter::writeLateCustomSections() {
+  for (auto& section : wasm->customSections) {
+    if (section.name != BinaryConsts::CustomSections::Dylink) {
+      writeCustomSection(section);
+    }
+  }
+}
+
+void WasmBinaryWriter::writeCustomSection(const CustomSection& section) {
+  auto start = startSection(BinaryConsts::Custom);
+  writeInlineString(section.name.c_str());
+  for (size_t i = 0; i < section.data.size(); i++) {
+    o << uint8_t(section.data[i]);
+  }
+  finishSection(start);
+}
+
+void WasmBinaryWriter::writeFeaturesSection() {
+  if (!wasm->hasFeaturesSection || wasm->features.isMVP()) {
+    return;
+  }
+
+  // TODO(tlively): unify feature names with rest of toolchain and use
+  // FeatureSet::toString()
+  auto toString = [](FeatureSet::Feature f) {
+    switch (f) {
+      case FeatureSet::Atomics:
+        return BinaryConsts::CustomSections::AtomicsFeature;
+      case FeatureSet::MutableGlobals:
+        return BinaryConsts::CustomSections::MutableGlobalsFeature;
+      case FeatureSet::TruncSat:
+        return BinaryConsts::CustomSections::TruncSatFeature;
+      case FeatureSet::SIMD:
+        return BinaryConsts::CustomSections::SIMD128Feature;
+      case FeatureSet::BulkMemory:
+        return BinaryConsts::CustomSections::BulkMemoryFeature;
+      case FeatureSet::SignExt:
+        return BinaryConsts::CustomSections::SignExtFeature;
+      case FeatureSet::ExceptionHandling:
+        return BinaryConsts::CustomSections::ExceptionHandlingFeature;
+      case FeatureSet::TailCall:
+        return BinaryConsts::CustomSections::TailCallFeature;
+      case FeatureSet::ReferenceTypes:
+        return BinaryConsts::CustomSections::ReferenceTypesFeature;
+      case FeatureSet::Multivalue:
+        return BinaryConsts::CustomSections::MultivalueFeature;
+      case FeatureSet::GC:
+        return BinaryConsts::CustomSections::GCFeature;
+      case FeatureSet::Memory64:
+        return BinaryConsts::CustomSections::Memory64Feature;
+      case FeatureSet::RelaxedSIMD:
+        return BinaryConsts::CustomSections::RelaxedSIMDFeature;
+      case FeatureSet::ExtendedConst:
+        return BinaryConsts::CustomSections::ExtendedConstFeature;
+      case FeatureSet::Strings:
+        return BinaryConsts::CustomSections::StringsFeature;
+      case FeatureSet::MultiMemories:
+        return BinaryConsts::CustomSections::MultiMemoriesFeature;
+      default:
+        WASM_UNREACHABLE("unexpected feature flag");
+    }
+  };
+
+  std::vector<const char*> features;
+  wasm->features.iterFeatures(
+    [&](FeatureSet::Feature f) { features.push_back(toString(f)); });
+
+  auto start = startSection(BinaryConsts::Custom);
+  writeInlineString(BinaryConsts::CustomSections::TargetFeatures);
+  o << U32LEB(features.size());
+  for (auto& f : features) {
+    o << uint8_t
