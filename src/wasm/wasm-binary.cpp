@@ -1241,4 +1241,378 @@ void WasmBinaryWriter::writeFeaturesSection() {
   writeInlineString(BinaryConsts::CustomSections::TargetFeatures);
   o << U32LEB(features.size());
   for (auto& f : features) {
-    o << uint8_t
+    o << uint8_t(BinaryConsts::FeatureUsed);
+    writeInlineString(f);
+  }
+  finishSection(start);
+}
+
+void WasmBinaryWriter::writeLegacyDylinkSection() {
+  if (!wasm->dylinkSection) {
+    return;
+  }
+
+  auto start = startSection(BinaryConsts::Custom);
+  writeInlineString(BinaryConsts::CustomSections::Dylink);
+  o << U32LEB(wasm->dylinkSection->memorySize);
+  o << U32LEB(wasm->dylinkSection->memoryAlignment);
+  o << U32LEB(wasm->dylinkSection->tableSize);
+  o << U32LEB(wasm->dylinkSection->tableAlignment);
+  o << U32LEB(wasm->dylinkSection->neededDynlibs.size());
+  for (auto& neededDynlib : wasm->dylinkSection->neededDynlibs) {
+    writeInlineString(neededDynlib.str);
+  }
+  finishSection(start);
+}
+
+void WasmBinaryWriter::writeDylinkSection() {
+  if (!wasm->dylinkSection) {
+    return;
+  }
+
+  if (wasm->dylinkSection->isLegacy) {
+    writeLegacyDylinkSection();
+    return;
+  }
+
+  auto start = startSection(BinaryConsts::Custom);
+  writeInlineString(BinaryConsts::CustomSections::Dylink0);
+
+  auto substart =
+    startSubsection(BinaryConsts::CustomSections::Subsection::DylinkMemInfo);
+  o << U32LEB(wasm->dylinkSection->memorySize);
+  o << U32LEB(wasm->dylinkSection->memoryAlignment);
+  o << U32LEB(wasm->dylinkSection->tableSize);
+  o << U32LEB(wasm->dylinkSection->tableAlignment);
+  finishSubsection(substart);
+
+  if (wasm->dylinkSection->neededDynlibs.size()) {
+    substart =
+      startSubsection(BinaryConsts::CustomSections::Subsection::DylinkNeeded);
+    o << U32LEB(wasm->dylinkSection->neededDynlibs.size());
+    for (auto& neededDynlib : wasm->dylinkSection->neededDynlibs) {
+      writeInlineString(neededDynlib.str);
+    }
+    finishSubsection(substart);
+  }
+
+  writeData(wasm->dylinkSection->tail.data(), wasm->dylinkSection->tail.size());
+  finishSection(start);
+}
+
+void WasmBinaryWriter::writeDebugLocation(const Function::DebugLocation& loc) {
+  if (loc == lastDebugLocation) {
+    return;
+  }
+  auto offset = o.size();
+  sourceMapLocations.emplace_back(offset, &loc);
+  lastDebugLocation = loc;
+}
+
+void WasmBinaryWriter::writeDebugLocation(Expression* curr, Function* func) {
+  if (sourceMap) {
+    auto& debugLocations = func->debugLocations;
+    auto iter = debugLocations.find(curr);
+    if (iter != debugLocations.end()) {
+      writeDebugLocation(iter->second);
+    }
+  }
+  // If this is an instruction in a function, and if the original wasm had
+  // binary locations tracked, then track it in the output as well.
+  if (func && !func->expressionLocations.empty()) {
+    binaryLocations.expressions[curr] =
+      BinaryLocations::Span{BinaryLocation(o.size()), 0};
+    binaryLocationTrackedExpressionsForFunc.push_back(curr);
+  }
+}
+
+void WasmBinaryWriter::writeDebugLocationEnd(Expression* curr, Function* func) {
+  if (func && !func->expressionLocations.empty()) {
+    auto& span = binaryLocations.expressions.at(curr);
+    span.end = o.size();
+  }
+}
+
+void WasmBinaryWriter::writeExtraDebugLocation(Expression* curr,
+                                               Function* func,
+                                               size_t id) {
+  if (func && !func->expressionLocations.empty()) {
+    binaryLocations.delimiters[curr][id] = o.size();
+  }
+}
+
+void WasmBinaryWriter::writeData(const char* data, size_t size) {
+  for (size_t i = 0; i < size; i++) {
+    o << int8_t(data[i]);
+  }
+}
+
+void WasmBinaryWriter::writeInlineString(std::string_view name) {
+  o << U32LEB(name.size());
+  writeData(name.data(), name.size());
+}
+
+static bool isHexDigit(char ch) {
+  return (ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') ||
+         (ch >= 'A' && ch <= 'F');
+}
+
+static int decodeHexNibble(char ch) {
+  return ch <= '9' ? ch & 15 : (ch & 15) + 9;
+}
+
+void WasmBinaryWriter::writeEscapedName(std::string_view name) {
+  if (name.find('\\') == std::string_view::npos) {
+    writeInlineString(name);
+    return;
+  }
+  // decode escaped by escapeName (see below) function names
+  std::string unescaped;
+  for (size_t i = 0; i < name.size();) {
+    char ch = name[i++];
+    // support only `\xx` escapes; ignore invalid or unsupported escapes
+    if (ch != '\\' || i + 1 >= name.size() || !isHexDigit(name[i]) ||
+        !isHexDigit(name[i + 1])) {
+      unescaped.push_back(ch);
+      continue;
+    }
+    unescaped.push_back(
+      char((decodeHexNibble(name[i]) << 4) | decodeHexNibble(name[i + 1])));
+    i += 2;
+  }
+  writeInlineString({unescaped.data(), unescaped.size()});
+}
+
+void WasmBinaryWriter::writeInlineBuffer(const char* data, size_t size) {
+  o << U32LEB(size);
+  writeData(data, size);
+}
+
+void WasmBinaryWriter::writeType(Type type) {
+  if (type.isRef()) {
+    auto heapType = type.getHeapType();
+    if (heapType.isBasic() && type.isNullable()) {
+      switch (heapType.getBasic()) {
+        case HeapType::ext:
+          o << S32LEB(BinaryConsts::EncodedType::externref);
+          return;
+        case HeapType::any:
+          o << S32LEB(BinaryConsts::EncodedType::anyref);
+          return;
+        case HeapType::func:
+          o << S32LEB(BinaryConsts::EncodedType::funcref);
+          return;
+        case HeapType::eq:
+          o << S32LEB(BinaryConsts::EncodedType::eqref);
+          return;
+        case HeapType::i31:
+          o << S32LEB(BinaryConsts::EncodedType::i31ref);
+          return;
+        case HeapType::struct_:
+          o << S32LEB(BinaryConsts::EncodedType::structref);
+          return;
+        case HeapType::array:
+          o << S32LEB(BinaryConsts::EncodedType::arrayref);
+          return;
+        case HeapType::string:
+          o << S32LEB(BinaryConsts::EncodedType::stringref);
+          return;
+        case HeapType::stringview_wtf8:
+          o << S32LEB(BinaryConsts::EncodedType::stringview_wtf8);
+          return;
+        case HeapType::stringview_wtf16:
+          o << S32LEB(BinaryConsts::EncodedType::stringview_wtf16);
+          return;
+        case HeapType::stringview_iter:
+          o << S32LEB(BinaryConsts::EncodedType::stringview_iter);
+          return;
+        case HeapType::none:
+          o << S32LEB(BinaryConsts::EncodedType::nullref);
+          return;
+        case HeapType::noext:
+          // See comment on writeHeapType.
+          if (!wasm->features.hasGC()) {
+            o << S32LEB(BinaryConsts::EncodedType::externref);
+          } else {
+            o << S32LEB(BinaryConsts::EncodedType::nullexternref);
+          }
+          return;
+        case HeapType::nofunc:
+          // See comment on writeHeapType.
+          if (!wasm->features.hasGC()) {
+            o << S32LEB(BinaryConsts::EncodedType::funcref);
+          } else {
+            o << S32LEB(BinaryConsts::EncodedType::nullfuncref);
+          }
+          return;
+      }
+    }
+    if (type.isNullable()) {
+      o << S32LEB(BinaryConsts::EncodedType::nullable);
+    } else {
+      o << S32LEB(BinaryConsts::EncodedType::nonnullable);
+    }
+    writeHeapType(type.getHeapType());
+    return;
+  }
+  int ret = 0;
+  TODO_SINGLE_COMPOUND(type);
+  switch (type.getBasic()) {
+    // None only used for block signatures. TODO: Separate out?
+    case Type::none:
+      ret = BinaryConsts::EncodedType::Empty;
+      break;
+    case Type::i32:
+      ret = BinaryConsts::EncodedType::i32;
+      break;
+    case Type::i64:
+      ret = BinaryConsts::EncodedType::i64;
+      break;
+    case Type::f32:
+      ret = BinaryConsts::EncodedType::f32;
+      break;
+    case Type::f64:
+      ret = BinaryConsts::EncodedType::f64;
+      break;
+    case Type::v128:
+      ret = BinaryConsts::EncodedType::v128;
+      break;
+    default:
+      WASM_UNREACHABLE("unexpected type");
+  }
+  o << S32LEB(ret);
+}
+
+void WasmBinaryWriter::writeHeapType(HeapType type) {
+  // ref.null always has a bottom heap type in Binaryen IR, but those types are
+  // only actually valid with GC enabled. When GC is not enabled, emit the
+  // corresponding valid top types instead.
+  if (!wasm->features.hasGC()) {
+    if (type == HeapType::nofunc || type.isSignature()) {
+      type = HeapType::func;
+    } else if (type == HeapType::noext) {
+      type = HeapType::ext;
+    }
+  }
+
+  if (type.isSignature() || type.isStruct() || type.isArray()) {
+    o << S64LEB(getTypeIndex(type)); // TODO: Actually s33
+    return;
+  }
+  int ret = 0;
+  assert(type.isBasic());
+  switch (type.getBasic()) {
+    case HeapType::ext:
+      ret = BinaryConsts::EncodedHeapType::ext;
+      break;
+    case HeapType::func:
+      ret = BinaryConsts::EncodedHeapType::func;
+      break;
+    case HeapType::any:
+      ret = BinaryConsts::EncodedHeapType::any;
+      break;
+    case HeapType::eq:
+      ret = BinaryConsts::EncodedHeapType::eq;
+      break;
+    case HeapType::i31:
+      ret = BinaryConsts::EncodedHeapType::i31;
+      break;
+    case HeapType::struct_:
+      ret = BinaryConsts::EncodedHeapType::struct_;
+      break;
+    case HeapType::array:
+      ret = BinaryConsts::EncodedHeapType::array;
+      break;
+    case HeapType::string:
+      ret = BinaryConsts::EncodedHeapType::string;
+      break;
+    case HeapType::stringview_wtf8:
+      ret = BinaryConsts::EncodedHeapType::stringview_wtf8_heap;
+      break;
+    case HeapType::stringview_wtf16:
+      ret = BinaryConsts::EncodedHeapType::stringview_wtf16_heap;
+      break;
+    case HeapType::stringview_iter:
+      ret = BinaryConsts::EncodedHeapType::stringview_iter_heap;
+      break;
+    case HeapType::none:
+      ret = BinaryConsts::EncodedHeapType::none;
+      break;
+    case HeapType::noext:
+      ret = BinaryConsts::EncodedHeapType::noext;
+      break;
+    case HeapType::nofunc:
+      ret = BinaryConsts::EncodedHeapType::nofunc;
+      break;
+  }
+  o << S64LEB(ret); // TODO: Actually s33
+}
+
+void WasmBinaryWriter::writeIndexedHeapType(HeapType type) {
+  o << U32LEB(getTypeIndex(type));
+}
+
+void WasmBinaryWriter::writeField(const Field& field) {
+  if (field.type == Type::i32 && field.packedType != Field::not_packed) {
+    if (field.packedType == Field::i8) {
+      o << S32LEB(BinaryConsts::EncodedType::i8);
+    } else if (field.packedType == Field::i16) {
+      o << S32LEB(BinaryConsts::EncodedType::i16);
+    } else {
+      WASM_UNREACHABLE("invalid packed type");
+    }
+  } else {
+    writeType(field.type);
+  }
+  o << U32LEB(field.mutable_);
+}
+
+// reader
+
+WasmBinaryBuilder::WasmBinaryBuilder(Module& wasm,
+                                     FeatureSet features,
+                                     const std::vector<char>& input)
+  : wasm(wasm), allocator(wasm.allocator), input(input),
+    sourceMap(nullptr), nextDebugLocation{0, 0, {0, 0, 0}}, debugLocation() {
+  wasm.features = features;
+}
+
+bool WasmBinaryBuilder::hasDWARFSections() {
+  assert(pos == 0);
+  getInt32(); // magic
+  getInt32(); // version
+  bool has = false;
+  while (more()) {
+    uint8_t sectionCode = getInt8();
+    uint32_t payloadLen = getU32LEB();
+    if (uint64_t(pos) + uint64_t(payloadLen) > input.size()) {
+      throwError("Section extends beyond end of input");
+    }
+    auto oldPos = pos;
+    if (sectionCode == BinaryConsts::Section::Custom) {
+      auto sectionName = getInlineString();
+      if (Debug::isDWARFSection(sectionName)) {
+        has = true;
+        break;
+      }
+    }
+    pos = oldPos + payloadLen;
+  }
+  pos = 0;
+  return has;
+}
+
+void WasmBinaryBuilder::read() {
+  if (DWARF) {
+    // In order to update dwarf, we must store info about each IR node's
+    // binary position. This has noticeable memory overhead, so we don't do it
+    // by default: the user must request it by setting "DWARF", and even if so
+    // we scan ahead to see that there actually *are* DWARF sections, so that
+    // we don't do unnecessary work.
+    if (!hasDWARFSections()) {
+      DWARF = false;
+    }
+  }
+
+  readHeader();
+  read
