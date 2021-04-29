@@ -2012,4 +2012,383 @@ HeapType WasmBinaryBuilder::getHeapType() {
   WASM_UNREACHABLE("unexpected type");
 }
 
-HeapType WasmBinaryBuilde
+HeapType WasmBinaryBuilder::getIndexedHeapType() {
+  auto index = getU32LEB();
+  if (index >= types.size()) {
+    throwError("invalid heap type index: " + std::to_string(index));
+  }
+  return types[index];
+}
+
+Type WasmBinaryBuilder::getConcreteType() {
+  auto type = getType();
+  if (!type.isConcrete()) {
+    throw ParseException("non-concrete type when one expected");
+  }
+  return type;
+}
+
+Name WasmBinaryBuilder::getInlineString() {
+  BYN_TRACE("<==\n");
+  auto len = getU32LEB();
+  auto data = getByteView(len);
+
+  BYN_TRACE("getInlineString: " << data << " ==>\n");
+  return Name(data);
+}
+
+void WasmBinaryBuilder::verifyInt8(int8_t x) {
+  int8_t y = getInt8();
+  if (x != y) {
+    throwError("surprising value");
+  }
+}
+
+void WasmBinaryBuilder::verifyInt16(int16_t x) {
+  int16_t y = getInt16();
+  if (x != y) {
+    throwError("surprising value");
+  }
+}
+
+void WasmBinaryBuilder::verifyInt32(int32_t x) {
+  int32_t y = getInt32();
+  if (x != y) {
+    throwError("surprising value");
+  }
+}
+
+void WasmBinaryBuilder::verifyInt64(int64_t x) {
+  int64_t y = getInt64();
+  if (x != y) {
+    throwError("surprising value");
+  }
+}
+
+void WasmBinaryBuilder::readHeader() {
+  BYN_TRACE("== readHeader\n");
+  verifyInt32(BinaryConsts::Magic);
+  verifyInt32(BinaryConsts::Version);
+}
+
+void WasmBinaryBuilder::readStart() {
+  BYN_TRACE("== readStart\n");
+  startIndex = getU32LEB();
+}
+
+void WasmBinaryBuilder::readMemories() {
+  BYN_TRACE("== readMemories\n");
+  auto num = getU32LEB();
+  BYN_TRACE("num: " << num << std::endl);
+  for (size_t i = 0; i < num; i++) {
+    BYN_TRACE("read one\n");
+    auto memory = Builder::makeMemory(Name::fromInt(i));
+    getResizableLimits(memory->initial,
+                       memory->max,
+                       memory->shared,
+                       memory->indexType,
+                       Memory::kUnlimitedSize);
+    wasm.addMemory(std::move(memory));
+  }
+}
+
+void WasmBinaryBuilder::readTypes() {
+  BYN_TRACE("== readTypes\n");
+  TypeBuilder builder(getU32LEB());
+  BYN_TRACE("num: " << builder.size() << std::endl);
+
+  auto makeType = [&](int32_t typeCode) {
+    Type type;
+    if (getBasicType(typeCode, type)) {
+      return type;
+    }
+
+    switch (typeCode) {
+      case BinaryConsts::EncodedType::nullable:
+      case BinaryConsts::EncodedType::nonnullable: {
+        auto nullability = typeCode == BinaryConsts::EncodedType::nullable
+                             ? Nullable
+                             : NonNullable;
+        int64_t htCode = getS64LEB(); // TODO: Actually s33
+        HeapType ht;
+        if (getBasicHeapType(htCode, ht)) {
+          return Type(ht, nullability);
+        }
+        if (size_t(htCode) >= builder.size()) {
+          throwError("invalid type index: " + std::to_string(htCode));
+        }
+        return builder.getTempRefType(builder[size_t(htCode)], nullability);
+      }
+      default:
+        throwError("unexpected type index: " + std::to_string(typeCode));
+    }
+    WASM_UNREACHABLE("unexpected type");
+  };
+
+  auto readType = [&]() { return makeType(getS32LEB()); };
+
+  auto readSignatureDef = [&]() {
+    std::vector<Type> params;
+    std::vector<Type> results;
+    size_t numParams = getU32LEB();
+    BYN_TRACE("num params: " << numParams << std::endl);
+    for (size_t j = 0; j < numParams; j++) {
+      params.push_back(readType());
+    }
+    auto numResults = getU32LEB();
+    BYN_TRACE("num results: " << numResults << std::endl);
+    for (size_t j = 0; j < numResults; j++) {
+      results.push_back(readType());
+    }
+    return Signature(builder.getTempTupleType(params),
+                     builder.getTempTupleType(results));
+  };
+
+  auto readMutability = [&]() {
+    switch (getU32LEB()) {
+      case 0:
+        return Immutable;
+      case 1:
+        return Mutable;
+      default:
+        throw ParseException("Expected 0 or 1 for mutability");
+    }
+  };
+
+  auto readFieldDef = [&]() {
+    // The value may be a general wasm type, or one of the types only possible
+    // in a field.
+    auto typeCode = getS32LEB();
+    if (typeCode == BinaryConsts::EncodedType::i8) {
+      auto mutable_ = readMutability();
+      return Field(Field::i8, mutable_);
+    }
+    if (typeCode == BinaryConsts::EncodedType::i16) {
+      auto mutable_ = readMutability();
+      return Field(Field::i16, mutable_);
+    }
+    // It's a regular wasm value.
+    auto type = makeType(typeCode);
+    auto mutable_ = readMutability();
+    return Field(type, mutable_);
+  };
+
+  auto readStructDef = [&]() {
+    FieldList fields;
+    size_t numFields = getU32LEB();
+    BYN_TRACE("num fields: " << numFields << std::endl);
+    for (size_t j = 0; j < numFields; j++) {
+      fields.push_back(readFieldDef());
+    }
+    return Struct(std::move(fields));
+  };
+
+  for (size_t i = 0; i < builder.size(); i++) {
+    BYN_TRACE("read one\n");
+    auto form = getS32LEB();
+    if (form == BinaryConsts::EncodedType::Rec) {
+      uint32_t groupSize = getU32LEB();
+      if (groupSize == 0u) {
+        // TODO: Support groups of size zero by shrinking the builder.
+        throwError("Recursion groups of size zero not supported");
+      }
+      // The group counts as one element in the type section, so we have to
+      // allocate space for the extra types.
+      builder.grow(groupSize - 1);
+      builder.createRecGroup(i, groupSize);
+      form = getS32LEB();
+    }
+    std::optional<uint32_t> superIndex;
+    if (form == BinaryConsts::EncodedType::Sub) {
+      uint32_t supers = getU32LEB();
+      if (supers > 0) {
+        if (supers != 1) {
+          throwError("Invalid type definition with " + std::to_string(supers) +
+                     " supertypes");
+        }
+        superIndex = getU32LEB();
+      }
+      form = getS32LEB();
+    }
+    if (form == BinaryConsts::EncodedType::Func ||
+        form == BinaryConsts::EncodedType::FuncSubtype) {
+      builder[i] = readSignatureDef();
+    } else if (form == BinaryConsts::EncodedType::Struct ||
+               form == BinaryConsts::EncodedType::StructSubtype) {
+      builder[i] = readStructDef();
+    } else if (form == BinaryConsts::EncodedType::Array ||
+               form == BinaryConsts::EncodedType::ArraySubtype) {
+      builder[i] = Array(readFieldDef());
+    } else {
+      throwError("Bad type form " + std::to_string(form));
+    }
+    if (form == BinaryConsts::EncodedType::FuncSubtype ||
+        form == BinaryConsts::EncodedType::StructSubtype ||
+        form == BinaryConsts::EncodedType::ArraySubtype) {
+      int64_t super = getS64LEB(); // TODO: Actually s33
+      if (super >= 0) {
+        superIndex = (uint32_t)super;
+      } else {
+        // Validate but otherwise ignore trivial supertypes.
+        HeapType basicSuper;
+        if (!getBasicHeapType(super, basicSuper)) {
+          throwError("Unrecognized supertype " + std::to_string(super));
+        }
+        if (form == BinaryConsts::EncodedType::FuncSubtype) {
+          if (basicSuper != HeapType::func) {
+            throwError(
+              "The only allowed trivial supertype for functions is func");
+          }
+        } else {
+          // Check for "struct" here even if we are parsing an array definition.
+          // This is the old nonstandard "struct_subtype" or "array_subtype"
+          // form of type definitions that used the old "data" type as the
+          // supertype placeholder when there was no nontrivial supertype.
+          // "data" no longer exists, but "struct" has the same encoding it used
+          // to have.
+          if (basicSuper != HeapType::struct_) {
+            throwError("The only allowed trivial supertype for structs and "
+                       "arrays is data");
+          }
+        }
+      }
+    }
+    if (superIndex) {
+      if (*superIndex > builder.size()) {
+        throwError("Out of bounds supertype index " +
+                   std::to_string(*superIndex));
+      }
+      builder[i].subTypeOf(builder[*superIndex]);
+    }
+  }
+
+  auto result = builder.build();
+  if (auto* err = result.getError()) {
+    Fatal() << "Invalid type: " << err->reason << " at index " << err->index;
+  }
+  types = *result;
+}
+
+Name WasmBinaryBuilder::getFunctionName(Index index) {
+  if (index >= wasm.functions.size()) {
+    throwError("invalid function index");
+  }
+  return wasm.functions[index]->name;
+}
+
+Name WasmBinaryBuilder::getTableName(Index index) {
+  if (index >= wasm.tables.size()) {
+    throwError("invalid table index");
+  }
+  return wasm.tables[index]->name;
+}
+
+Name WasmBinaryBuilder::getMemoryName(Index index) {
+  if (index >= wasm.memories.size()) {
+    throwError("invalid memory index");
+  }
+  return wasm.memories[index]->name;
+}
+
+Name WasmBinaryBuilder::getGlobalName(Index index) {
+  if (index >= wasm.globals.size()) {
+    throwError("invalid global index");
+  }
+  return wasm.globals[index]->name;
+}
+
+Name WasmBinaryBuilder::getTagName(Index index) {
+  if (index >= wasm.tags.size()) {
+    throwError("invalid tag index");
+  }
+  return wasm.tags[index]->name;
+}
+
+Memory* WasmBinaryBuilder::getMemory(Index index) {
+  if (index < wasm.memories.size()) {
+    return wasm.memories[index].get();
+  }
+  throwError("Memory index out of range.");
+}
+
+void WasmBinaryBuilder::getResizableLimits(Address& initial,
+                                           Address& max,
+                                           bool& shared,
+                                           Type& indexType,
+                                           Address defaultIfNoMax) {
+  auto flags = getU32LEB();
+  bool hasMax = (flags & BinaryConsts::HasMaximum) != 0;
+  bool isShared = (flags & BinaryConsts::IsShared) != 0;
+  bool is64 = (flags & BinaryConsts::Is64) != 0;
+  initial = is64 ? getU64LEB() : getU32LEB();
+  if (isShared && !hasMax) {
+    throwError("shared memory must have max size");
+  }
+  shared = isShared;
+  indexType = is64 ? Type::i64 : Type::i32;
+  if (hasMax) {
+    max = is64 ? getU64LEB() : getU32LEB();
+  } else {
+    max = defaultIfNoMax;
+  }
+}
+
+void WasmBinaryBuilder::readImports() {
+  BYN_TRACE("== readImports\n");
+  size_t num = getU32LEB();
+  BYN_TRACE("num: " << num << std::endl);
+  Builder builder(wasm);
+  size_t tableCounter = 0;
+  size_t memoryCounter = 0;
+  size_t functionCounter = 0;
+  size_t globalCounter = 0;
+  size_t tagCounter = 0;
+  for (size_t i = 0; i < num; i++) {
+    BYN_TRACE("read one\n");
+    auto module = getInlineString();
+    auto base = getInlineString();
+    auto kind = (ExternalKind)getU32LEB();
+    // We set a unique prefix for the name based on the kind. This ensures no
+    // collisions between them, which can't occur here (due to the index i) but
+    // could occur later due to the names section.
+    switch (kind) {
+      case ExternalKind::Function: {
+        Name name(std::string("fimport$") + std::to_string(functionCounter++));
+        auto index = getU32LEB();
+        functionTypes.push_back(getTypeByIndex(index));
+        auto type = getTypeByIndex(index);
+        if (!type.isSignature()) {
+          throwError(std::string("Imported function ") + module.toString() +
+                     '.' + base.toString() +
+                     "'s type must be a signature. Given: " + type.toString());
+        }
+        auto curr = builder.makeFunction(name, type, {});
+        curr->module = module;
+        curr->base = base;
+        wasm.addFunction(std::move(curr));
+        break;
+      }
+      case ExternalKind::Table: {
+        Name name(std::string("timport$") + std::to_string(tableCounter++));
+        auto table = builder.makeTable(name);
+        table->module = module;
+        table->base = base;
+        table->type = getType();
+
+        bool is_shared;
+        Type indexType;
+        getResizableLimits(table->initial,
+                           table->max,
+                           is_shared,
+                           indexType,
+                           Table::kUnlimitedSize);
+        if (is_shared) {
+          throwError("Tables may not be shared");
+        }
+        if (indexType == Type::i64) {
+          throwError("Tables may not be 64-bit");
+        }
+
+        wasm.addTable(std::move(table));
+        break;
+    
