@@ -1615,4 +1615,401 @@ void WasmBinaryBuilder::read() {
   }
 
   readHeader();
-  read
+  readSourceMapHeader();
+
+  // read sections until the end
+  while (more()) {
+    uint8_t sectionCode = getInt8();
+    uint32_t payloadLen = getU32LEB();
+    if (uint64_t(pos) + uint64_t(payloadLen) > input.size()) {
+      throwError("Section extends beyond end of input");
+    }
+
+    auto oldPos = pos;
+
+    // note the section in the list of seen sections, as almost no sections can
+    // appear more than once, and verify those that shouldn't do not.
+    if (sectionCode != BinaryConsts::Section::Custom &&
+        sectionCode != BinaryConsts::Section::Code) {
+      if (!seenSections.insert(BinaryConsts::Section(sectionCode)).second) {
+        throwError("section seen more than once: " +
+                   std::to_string(sectionCode));
+      }
+    }
+
+    switch (sectionCode) {
+      case BinaryConsts::Section::Start:
+        readStart();
+        break;
+      case BinaryConsts::Section::Memory:
+        readMemories();
+        break;
+      case BinaryConsts::Section::Type:
+        readTypes();
+        break;
+      case BinaryConsts::Section::Import:
+        readImports();
+        break;
+      case BinaryConsts::Section::Function:
+        readFunctionSignatures();
+        break;
+      case BinaryConsts::Section::Code:
+        if (DWARF) {
+          codeSectionLocation = pos;
+        }
+        readFunctions();
+        break;
+      case BinaryConsts::Section::Export:
+        readExports();
+        break;
+      case BinaryConsts::Section::Element:
+        readElementSegments();
+        break;
+      case BinaryConsts::Section::Strings:
+        readStrings();
+        break;
+      case BinaryConsts::Section::Global:
+        readGlobals();
+        break;
+      case BinaryConsts::Section::Data:
+        readDataSegments();
+        break;
+      case BinaryConsts::Section::DataCount:
+        readDataSegmentCount();
+        break;
+      case BinaryConsts::Section::Table:
+        readTableDeclarations();
+        break;
+      case BinaryConsts::Section::Tag:
+        readTags();
+        break;
+      default: {
+        readCustomSection(payloadLen);
+        if (pos > oldPos + payloadLen) {
+          throwError("bad user section size, started at " +
+                     std::to_string(oldPos) + " plus payload " +
+                     std::to_string(payloadLen) +
+                     " not being equal to new position " + std::to_string(pos));
+        }
+        pos = oldPos + payloadLen;
+      }
+    }
+
+    // make sure we advanced exactly past this section
+    if (pos != oldPos + payloadLen) {
+      throwError("bad section size, started at " + std::to_string(oldPos) +
+                 " plus payload " + std::to_string(payloadLen) +
+                 " not being equal to new position " + std::to_string(pos));
+    }
+  }
+
+  validateBinary();
+  processNames();
+}
+
+void WasmBinaryBuilder::readCustomSection(size_t payloadLen) {
+  BYN_TRACE("== readCustomSection\n");
+  auto oldPos = pos;
+  Name sectionName = getInlineString();
+  size_t read = pos - oldPos;
+  if (read > payloadLen) {
+    throwError("bad user section size");
+  }
+  payloadLen -= read;
+  if (sectionName.equals(BinaryConsts::CustomSections::Name)) {
+    if (debugInfo) {
+      readNames(payloadLen);
+    } else {
+      pos += payloadLen;
+    }
+  } else if (sectionName.equals(BinaryConsts::CustomSections::TargetFeatures)) {
+    readFeatures(payloadLen);
+  } else if (sectionName.equals(BinaryConsts::CustomSections::Dylink)) {
+    readDylink(payloadLen);
+  } else if (sectionName.equals(BinaryConsts::CustomSections::Dylink0)) {
+    readDylink0(payloadLen);
+  } else {
+    // an unfamiliar custom section
+    if (sectionName.equals(BinaryConsts::CustomSections::Linking)) {
+      std::cerr
+        << "warning: linking section is present, so this is not a standard "
+           "wasm file - binaryen cannot handle this properly!\n";
+    }
+    wasm.customSections.resize(wasm.customSections.size() + 1);
+    auto& section = wasm.customSections.back();
+    section.name = sectionName.str;
+    auto data = getByteView(payloadLen);
+    section.data = {data.begin(), data.end()};
+  }
+}
+
+std::string_view WasmBinaryBuilder::getByteView(size_t size) {
+  if (size > input.size() || pos > input.size() - size) {
+    throwError("unexpected end of input");
+  }
+  pos += size;
+  return {input.data() + (pos - size), size};
+}
+
+uint8_t WasmBinaryBuilder::getInt8() {
+  if (!more()) {
+    throwError("unexpected end of input");
+  }
+  BYN_TRACE("getInt8: " << (int)(uint8_t)input[pos] << " (at " << pos << ")\n");
+  return input[pos++];
+}
+
+uint16_t WasmBinaryBuilder::getInt16() {
+  BYN_TRACE("<==\n");
+  auto ret = uint16_t(getInt8());
+  ret |= uint16_t(getInt8()) << 8;
+  BYN_TRACE("getInt16: " << ret << "/0x" << std::hex << ret << std::dec
+                         << " ==>\n");
+  return ret;
+}
+
+uint32_t WasmBinaryBuilder::getInt32() {
+  BYN_TRACE("<==\n");
+  auto ret = uint32_t(getInt16());
+  ret |= uint32_t(getInt16()) << 16;
+  BYN_TRACE("getInt32: " << ret << "/0x" << std::hex << ret << std::dec
+                         << " ==>\n");
+  return ret;
+}
+
+uint64_t WasmBinaryBuilder::getInt64() {
+  BYN_TRACE("<==\n");
+  auto ret = uint64_t(getInt32());
+  ret |= uint64_t(getInt32()) << 32;
+  BYN_TRACE("getInt64: " << ret << "/0x" << std::hex << ret << std::dec
+                         << " ==>\n");
+  return ret;
+}
+
+uint8_t WasmBinaryBuilder::getLaneIndex(size_t lanes) {
+  BYN_TRACE("<==\n");
+  auto ret = getInt8();
+  if (ret >= lanes) {
+    throwError("Illegal lane index");
+  }
+  BYN_TRACE("getLaneIndex(" << lanes << "): " << ret << " ==>" << std::endl);
+  return ret;
+}
+
+Literal WasmBinaryBuilder::getFloat32Literal() {
+  BYN_TRACE("<==\n");
+  auto ret = Literal(getInt32());
+  ret = ret.castToF32();
+  BYN_TRACE("getFloat32: " << ret << " ==>\n");
+  return ret;
+}
+
+Literal WasmBinaryBuilder::getFloat64Literal() {
+  BYN_TRACE("<==\n");
+  auto ret = Literal(getInt64());
+  ret = ret.castToF64();
+  BYN_TRACE("getFloat64: " << ret << " ==>\n");
+  return ret;
+}
+
+Literal WasmBinaryBuilder::getVec128Literal() {
+  BYN_TRACE("<==\n");
+  std::array<uint8_t, 16> bytes;
+  for (auto i = 0; i < 16; ++i) {
+    bytes[i] = getInt8();
+  }
+  auto ret = Literal(bytes.data());
+  BYN_TRACE("getVec128: " << ret << " ==>\n");
+  return ret;
+}
+
+uint32_t WasmBinaryBuilder::getU32LEB() {
+  BYN_TRACE("<==\n");
+  U32LEB ret;
+  ret.read([&]() { return getInt8(); });
+  BYN_TRACE("getU32LEB: " << ret.value << " ==>\n");
+  return ret.value;
+}
+
+uint64_t WasmBinaryBuilder::getU64LEB() {
+  BYN_TRACE("<==\n");
+  U64LEB ret;
+  ret.read([&]() { return getInt8(); });
+  BYN_TRACE("getU64LEB: " << ret.value << " ==>\n");
+  return ret.value;
+}
+
+int32_t WasmBinaryBuilder::getS32LEB() {
+  BYN_TRACE("<==\n");
+  S32LEB ret;
+  ret.read([&]() { return (int8_t)getInt8(); });
+  BYN_TRACE("getS32LEB: " << ret.value << " ==>\n");
+  return ret.value;
+}
+
+int64_t WasmBinaryBuilder::getS64LEB() {
+  BYN_TRACE("<==\n");
+  S64LEB ret;
+  ret.read([&]() { return (int8_t)getInt8(); });
+  BYN_TRACE("getS64LEB: " << ret.value << " ==>\n");
+  return ret.value;
+}
+
+bool WasmBinaryBuilder::getBasicType(int32_t code, Type& out) {
+  switch (code) {
+    case BinaryConsts::EncodedType::i32:
+      out = Type::i32;
+      return true;
+    case BinaryConsts::EncodedType::i64:
+      out = Type::i64;
+      return true;
+    case BinaryConsts::EncodedType::f32:
+      out = Type::f32;
+      return true;
+    case BinaryConsts::EncodedType::f64:
+      out = Type::f64;
+      return true;
+    case BinaryConsts::EncodedType::v128:
+      out = Type::v128;
+      return true;
+    case BinaryConsts::EncodedType::funcref:
+      out = Type(HeapType::func, Nullable);
+      return true;
+    case BinaryConsts::EncodedType::externref:
+      out = Type(HeapType::ext, Nullable);
+      return true;
+    case BinaryConsts::EncodedType::anyref:
+      out = Type(HeapType::any, Nullable);
+      return true;
+    case BinaryConsts::EncodedType::eqref:
+      out = Type(HeapType::eq, Nullable);
+      return true;
+    case BinaryConsts::EncodedType::i31ref:
+      out = Type(HeapType::i31, Nullable);
+      return true;
+    case BinaryConsts::EncodedType::structref:
+      out = Type(HeapType::struct_, Nullable);
+      return true;
+    case BinaryConsts::EncodedType::arrayref:
+      out = Type(HeapType::array, Nullable);
+      return true;
+    case BinaryConsts::EncodedType::stringref:
+      out = Type(HeapType::string, Nullable);
+      return true;
+    case BinaryConsts::EncodedType::stringview_wtf8:
+      out = Type(HeapType::stringview_wtf8, Nullable);
+      return true;
+    case BinaryConsts::EncodedType::stringview_wtf16:
+      out = Type(HeapType::stringview_wtf16, Nullable);
+      return true;
+    case BinaryConsts::EncodedType::stringview_iter:
+      out = Type(HeapType::stringview_iter, Nullable);
+      return true;
+    case BinaryConsts::EncodedType::nullref:
+      out = Type(HeapType::none, Nullable);
+      return true;
+    case BinaryConsts::EncodedType::nullexternref:
+      out = Type(HeapType::noext, Nullable);
+      return true;
+    case BinaryConsts::EncodedType::nullfuncref:
+      out = Type(HeapType::nofunc, Nullable);
+      return true;
+    default:
+      return false;
+  }
+}
+
+bool WasmBinaryBuilder::getBasicHeapType(int64_t code, HeapType& out) {
+  switch (code) {
+    case BinaryConsts::EncodedHeapType::func:
+      out = HeapType::func;
+      return true;
+    case BinaryConsts::EncodedHeapType::ext:
+      out = HeapType::ext;
+      return true;
+    case BinaryConsts::EncodedHeapType::any:
+      out = HeapType::any;
+      return true;
+    case BinaryConsts::EncodedHeapType::eq:
+      out = HeapType::eq;
+      return true;
+    case BinaryConsts::EncodedHeapType::i31:
+      out = HeapType::i31;
+      return true;
+    case BinaryConsts::EncodedHeapType::struct_:
+      out = HeapType::struct_;
+      return true;
+    case BinaryConsts::EncodedHeapType::array:
+      out = HeapType::array;
+      return true;
+    case BinaryConsts::EncodedHeapType::string:
+      out = HeapType::string;
+      return true;
+    case BinaryConsts::EncodedHeapType::stringview_wtf8_heap:
+      out = HeapType::stringview_wtf8;
+      return true;
+    case BinaryConsts::EncodedHeapType::stringview_wtf16_heap:
+      out = HeapType::stringview_wtf16;
+      return true;
+    case BinaryConsts::EncodedHeapType::stringview_iter_heap:
+      out = HeapType::stringview_iter;
+      return true;
+    case BinaryConsts::EncodedHeapType::none:
+      out = HeapType::none;
+      return true;
+    case BinaryConsts::EncodedHeapType::noext:
+      out = HeapType::noext;
+      return true;
+    case BinaryConsts::EncodedHeapType::nofunc:
+      out = HeapType::nofunc;
+      return true;
+    default:
+      return false;
+  }
+}
+
+Type WasmBinaryBuilder::getType(int initial) {
+  // Single value types are negative; signature indices are non-negative
+  if (initial >= 0) {
+    // TODO: Handle block input types properly.
+    return getSignatureByTypeIndex(initial).results;
+  }
+  Type type;
+  if (getBasicType(initial, type)) {
+    return type;
+  }
+  switch (initial) {
+    // None only used for block signatures. TODO: Separate out?
+    case BinaryConsts::EncodedType::Empty:
+      return Type::none;
+    case BinaryConsts::EncodedType::nullable:
+      return Type(getHeapType(), Nullable);
+    case BinaryConsts::EncodedType::nonnullable:
+      return Type(getHeapType(), NonNullable);
+    default:
+      throwError("invalid wasm type: " + std::to_string(initial));
+  }
+  WASM_UNREACHABLE("unexpected type");
+}
+
+Type WasmBinaryBuilder::getType() { return getType(getS32LEB()); }
+
+HeapType WasmBinaryBuilder::getHeapType() {
+  auto type = getS64LEB(); // TODO: Actually s33
+  // Single heap types are negative; heap type indices are non-negative
+  if (type >= 0) {
+    if (size_t(type) >= types.size()) {
+      throwError("invalid signature index: " + std::to_string(type));
+    }
+    return types[type];
+  }
+  HeapType ht;
+  if (getBasicHeapType(type, ht)) {
+    return ht;
+  } else {
+    throwError("invalid wasm heap type: " + std::to_string(type));
+  }
+  WASM_UNREACHABLE("unexpected type");
+}
+
+HeapType WasmBinaryBuilde
