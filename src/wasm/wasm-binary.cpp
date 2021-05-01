@@ -2789,4 +2789,382 @@ void WasmBinaryBuilder::readNextDebugLocation() {
     uint32_t position = nextDebugLocation.availablePos + positionDelta;
     int32_t fileIndexDelta = readBase64VLQ(*sourceMap);
     uint32_t fileIndex = nextDebugLocation.next.fileIndex + fileIndexDelta;
-    int32_t lineNumberDelta = readBase64VLQ
+    int32_t lineNumberDelta = readBase64VLQ(*sourceMap);
+    uint32_t lineNumber = nextDebugLocation.next.lineNumber + lineNumberDelta;
+    int32_t columnNumberDelta = readBase64VLQ(*sourceMap);
+    uint32_t columnNumber =
+      nextDebugLocation.next.columnNumber + columnNumberDelta;
+
+    nextDebugLocation = {position,
+                         nextDebugLocation.availablePos,
+                         {fileIndex, lineNumber, columnNumber}};
+  }
+}
+
+Expression* WasmBinaryBuilder::readExpression() {
+  assert(depth == 0);
+  processExpressions();
+  if (expressionStack.size() != 1) {
+    throwError("expected to read a single expression");
+  }
+  auto* ret = popExpression();
+  assert(depth == 0);
+  return ret;
+}
+
+void WasmBinaryBuilder::readStrings() {
+  auto reserved = getU32LEB();
+  if (reserved != 0) {
+    throwError("unexpected reserved value in strings");
+  }
+  size_t num = getU32LEB();
+  for (size_t i = 0; i < num; i++) {
+    auto string = getInlineString();
+    strings.push_back(string);
+  }
+}
+
+void WasmBinaryBuilder::readGlobals() {
+  BYN_TRACE("== readGlobals\n");
+  size_t num = getU32LEB();
+  BYN_TRACE("num: " << num << std::endl);
+  for (size_t i = 0; i < num; i++) {
+    BYN_TRACE("read one\n");
+    auto type = getConcreteType();
+    auto mutable_ = getU32LEB();
+    if (mutable_ & ~1) {
+      throwError("Global mutability must be 0 or 1");
+    }
+    auto* init = readExpression();
+    wasm.addGlobal(
+      Builder::makeGlobal("global$" + std::to_string(i),
+                          type,
+                          init,
+                          mutable_ ? Builder::Mutable : Builder::Immutable));
+  }
+}
+
+void WasmBinaryBuilder::processExpressions() {
+  BYN_TRACE("== processExpressions\n");
+  unreachableInTheWasmSense = false;
+  while (1) {
+    Expression* curr;
+    auto ret = readExpression(curr);
+    if (!curr) {
+      lastSeparator = ret;
+      BYN_TRACE("== processExpressions finished\n");
+      return;
+    }
+    pushExpression(curr);
+    if (curr->type == Type::unreachable) {
+      // Once we see something unreachable, we don't want to add anything else
+      // to the stack, as it could be stacky code that is non-representable in
+      // our AST. but we do need to skip it.
+      // If there is nothing else here, just stop. Otherwise, go into
+      // unreachable mode. peek to see what to do.
+      if (pos == endOfFunction) {
+        throwError("Reached function end without seeing End opcode");
+      }
+      if (!more()) {
+        throwError("unexpected end of input");
+      }
+      auto peek = input[pos];
+      if (peek == BinaryConsts::End || peek == BinaryConsts::Else ||
+          peek == BinaryConsts::Catch || peek == BinaryConsts::CatchAll ||
+          peek == BinaryConsts::Delegate) {
+        BYN_TRACE("== processExpressions finished with unreachable"
+                  << std::endl);
+        lastSeparator = BinaryConsts::ASTNodes(peek);
+        // Read the byte we peeked at. No new instruction is generated for it.
+        Expression* dummy = nullptr;
+        readExpression(dummy);
+        assert(!dummy);
+        return;
+      } else {
+        skipUnreachableCode();
+        return;
+      }
+    }
+  }
+}
+
+void WasmBinaryBuilder::skipUnreachableCode() {
+  BYN_TRACE("== skipUnreachableCode\n");
+  // preserve the stack, and restore it. it contains the instruction that made
+  // us unreachable, and we can ignore anything after it. things after it may
+  // pop, we want to undo that
+  auto savedStack = expressionStack;
+  // note we are entering unreachable code, and note what the state as before so
+  // we can restore it
+  auto before = willBeIgnored;
+  willBeIgnored = true;
+  // clear the stack. nothing should be popped from there anyhow, just stuff
+  // can be pushed and then popped. Popping past the top of the stack will
+  // result in uneachables being returned
+  expressionStack.clear();
+  while (1) {
+    // set the unreachableInTheWasmSense flag each time, as sub-blocks may set
+    // and unset it
+    unreachableInTheWasmSense = true;
+    Expression* curr;
+    auto ret = readExpression(curr);
+    if (!curr) {
+      BYN_TRACE("== skipUnreachableCode finished\n");
+      lastSeparator = ret;
+      unreachableInTheWasmSense = false;
+      willBeIgnored = before;
+      expressionStack = savedStack;
+      return;
+    }
+    if (curr->type == Type::unreachable) {
+      // Nothing before this unreachable should be available to future
+      // expressions. They will get `(unreachable)`s if they try to pop past
+      // this point.
+      expressionStack.clear();
+    } else {
+      pushExpression(curr);
+    }
+  }
+}
+
+void WasmBinaryBuilder::pushExpression(Expression* curr) {
+  auto type = curr->type;
+  if (type.isTuple()) {
+    // Store tuple to local and push individual extracted values
+    Builder builder(wasm);
+    // Non-nullable types require special handling as they cannot be stored to
+    // a local, so we may need to use a different local type than the original.
+    auto localType = type;
+    if (!wasm.features.hasGCNNLocals()) {
+      std::vector<Type> finalTypes;
+      for (auto t : type) {
+        if (t.isNonNullable()) {
+          t = Type(t.getHeapType(), Nullable);
+        }
+        finalTypes.push_back(t);
+      }
+      localType = Type(Tuple(finalTypes));
+    }
+    requireFunctionContext("pushExpression-tuple");
+    Index tuple = builder.addVar(currFunction, localType);
+    expressionStack.push_back(builder.makeLocalSet(tuple, curr));
+    for (Index i = 0; i < localType.size(); ++i) {
+      Expression* value =
+        builder.makeTupleExtract(builder.makeLocalGet(tuple, localType), i);
+      if (localType[i] != type[i]) {
+        // We modified this to be nullable; undo that.
+        value = builder.makeRefAs(RefAsNonNull, value);
+      }
+      expressionStack.push_back(value);
+    }
+  } else {
+    expressionStack.push_back(curr);
+  }
+}
+
+Expression* WasmBinaryBuilder::popExpression() {
+  BYN_TRACE("== popExpression\n");
+  if (expressionStack.empty()) {
+    if (unreachableInTheWasmSense) {
+      // in unreachable code, trying to pop past the polymorphic stack
+      // area results in receiving unreachables
+      BYN_TRACE("== popping unreachable from polymorphic stack" << std::endl);
+      return allocator.alloc<Unreachable>();
+    }
+    throwError(
+      "attempted pop from empty stack / beyond block start boundary at " +
+      std::to_string(pos));
+  }
+  // the stack is not empty, and we would not be going out of the current block
+  auto ret = expressionStack.back();
+  assert(!ret->type.isTuple());
+  expressionStack.pop_back();
+  return ret;
+}
+
+Expression* WasmBinaryBuilder::popNonVoidExpression() {
+  auto* ret = popExpression();
+  if (ret->type != Type::none) {
+    return ret;
+  }
+  // we found a void, so this is stacky code that we must handle carefully
+  Builder builder(wasm);
+  // add elements until we find a non-void
+  std::vector<Expression*> expressions;
+  expressions.push_back(ret);
+  while (1) {
+    auto* curr = popExpression();
+    expressions.push_back(curr);
+    if (curr->type != Type::none) {
+      break;
+    }
+  }
+  auto* block = builder.makeBlock();
+  while (!expressions.empty()) {
+    block->list.push_back(expressions.back());
+    expressions.pop_back();
+  }
+  requireFunctionContext("popping void where we need a new local");
+  auto type = block->list[0]->type;
+  if (type.isConcrete()) {
+    auto local = builder.addVar(currFunction, type);
+    block->list[0] = builder.makeLocalSet(local, block->list[0]);
+    block->list.push_back(builder.makeLocalGet(local, type));
+  } else {
+    assert(type == Type::unreachable);
+    // nothing to do here - unreachable anyhow
+  }
+  block->finalize();
+  return block;
+}
+
+Expression* WasmBinaryBuilder::popTuple(size_t numElems) {
+  Builder builder(wasm);
+  std::vector<Expression*> elements;
+  elements.resize(numElems);
+  for (size_t i = 0; i < numElems; i++) {
+    auto* elem = popNonVoidExpression();
+    if (elem->type == Type::unreachable) {
+      // All the previously-popped items cannot be reached, so ignore them. We
+      // cannot continue popping because there might not be enough items on the
+      // expression stack after an unreachable expression. Any remaining
+      // elements can stay unperturbed on the stack and will be explicitly
+      // dropped by some parent call to pushBlockElements.
+      return elem;
+    }
+    elements[numElems - i - 1] = elem;
+  }
+  return Builder(wasm).makeTupleMake(std::move(elements));
+}
+
+Expression* WasmBinaryBuilder::popTypedExpression(Type type) {
+  if (type.isSingle()) {
+    return popNonVoidExpression();
+  } else if (type.isTuple()) {
+    return popTuple(type.size());
+  } else {
+    WASM_UNREACHABLE("Invalid popped type");
+  }
+}
+
+void WasmBinaryBuilder::validateBinary() {
+  if (hasDataCount && wasm.dataSegments.size() != dataCount) {
+    throwError("Number of segments does not agree with DataCount section");
+  }
+}
+
+void WasmBinaryBuilder::processNames() {
+  // now that we have names, apply things
+
+  if (startIndex != static_cast<Index>(-1)) {
+    wasm.start = getFunctionName(startIndex);
+  }
+
+  for (auto* curr : exportOrder) {
+    auto index = exportIndices[curr];
+    switch (curr->kind) {
+      case ExternalKind::Function: {
+        curr->value = getFunctionName(index);
+        break;
+      }
+      case ExternalKind::Table:
+        curr->value = getTableName(index);
+        break;
+      case ExternalKind::Memory:
+        curr->value = getMemoryName(index);
+        break;
+      case ExternalKind::Global:
+        curr->value = getGlobalName(index);
+        break;
+      case ExternalKind::Tag:
+        curr->value = getTagName(index);
+        break;
+      default:
+        throwError("bad export kind");
+    }
+    wasm.addExport(curr);
+  }
+
+  for (auto& [index, refs] : functionRefs) {
+    for (auto* ref : refs) {
+      *ref = getFunctionName(index);
+    }
+  }
+  for (auto& [index, refs] : tableRefs) {
+    for (auto* ref : refs) {
+      *ref = getTableName(index);
+    }
+  }
+  for (auto& [index, refs] : memoryRefs) {
+    for (auto ref : refs) {
+      *ref = getMemoryName(index);
+    }
+  }
+  for (auto& [index, refs] : globalRefs) {
+    for (auto* ref : refs) {
+      *ref = getGlobalName(index);
+    }
+  }
+  for (auto& [index, refs] : tagRefs) {
+    for (auto* ref : refs) {
+      *ref = getTagName(index);
+    }
+  }
+
+  // Everything now has its proper name.
+
+  wasm.updateMaps();
+}
+
+void WasmBinaryBuilder::readDataSegmentCount() {
+  BYN_TRACE("== readDataSegmentCount\n");
+  hasDataCount = true;
+  dataCount = getU32LEB();
+}
+
+void WasmBinaryBuilder::readDataSegments() {
+  BYN_TRACE("== readDataSegments\n");
+  auto num = getU32LEB();
+  for (size_t i = 0; i < num; i++) {
+    auto curr = Builder::makeDataSegment();
+    uint32_t flags = getU32LEB();
+    if (flags > 2) {
+      throwError("bad segment flags, must be 0, 1, or 2, not " +
+                 std::to_string(flags));
+    }
+    curr->setName(Name::fromInt(i), false);
+    curr->isPassive = flags & BinaryConsts::IsPassive;
+    if (curr->isPassive) {
+      curr->memory = Name();
+      curr->offset = nullptr;
+    } else {
+      Index memIdx = 0;
+      if (flags & BinaryConsts::HasIndex) {
+        memIdx = getU32LEB();
+      }
+      memoryRefs[memIdx].push_back(&curr->memory);
+      curr->offset = readExpression();
+    }
+    auto size = getU32LEB();
+    auto data = getByteView(size);
+    curr->data = {data.begin(), data.end()};
+    wasm.addDataSegment(std::move(curr));
+  }
+}
+
+void WasmBinaryBuilder::readTableDeclarations() {
+  BYN_TRACE("== readTableDeclarations\n");
+  auto numTables = getU32LEB();
+
+  for (size_t i = 0; i < numTables; i++) {
+    auto elemType = getType();
+    if (!elemType.isRef()) {
+      throwError("Table type must be a reference type");
+    }
+    auto table = Builder::makeTable(Name::fromInt(i), elemType);
+    bool is_shared;
+    Type indexType;
+    getResizableLimits(
+      table->initial, table->max, is_shared, indexType, Table::kUnlimitedSize);
+    if (is_shared) {
+      throwError("Tables may not be shared");
