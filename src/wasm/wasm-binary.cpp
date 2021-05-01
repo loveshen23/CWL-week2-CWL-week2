@@ -3168,3 +3168,340 @@ void WasmBinaryBuilder::readTableDeclarations() {
       table->initial, table->max, is_shared, indexType, Table::kUnlimitedSize);
     if (is_shared) {
       throwError("Tables may not be shared");
+    }
+    if (indexType == Type::i64) {
+      throwError("Tables may not be 64-bit");
+    }
+
+    wasm.addTable(std::move(table));
+  }
+}
+
+void WasmBinaryBuilder::readElementSegments() {
+  BYN_TRACE("== readElementSegments\n");
+  auto numSegments = getU32LEB();
+  if (numSegments >= Table::kMaxSize) {
+    throwError("Too many segments");
+  }
+  for (size_t i = 0; i < numSegments; i++) {
+    auto flags = getU32LEB();
+    bool isPassive = (flags & BinaryConsts::IsPassive) != 0;
+    bool hasTableIdx = !isPassive && ((flags & BinaryConsts::HasIndex) != 0);
+    bool isDeclarative =
+      isPassive && ((flags & BinaryConsts::IsDeclarative) != 0);
+    bool usesExpressions = (flags & BinaryConsts::UsesExpressions) != 0;
+
+    if (isDeclarative) {
+      // Declared segments are needed in wasm text and binary, but not in
+      // Binaryen IR; skip over the segment
+      [[maybe_unused]] auto type = getU32LEB();
+      auto num = getU32LEB();
+      for (Index i = 0; i < num; i++) {
+        getU32LEB();
+      }
+      continue;
+    }
+
+    auto segment = std::make_unique<ElementSegment>();
+    segment->setName(Name::fromInt(i), false);
+
+    if (!isPassive) {
+      Index tableIdx = 0;
+      if (hasTableIdx) {
+        tableIdx = getU32LEB();
+      }
+
+      if (tableIdx >= wasm.tables.size()) {
+        throwError("Table index out of range.");
+      }
+      auto* table = wasm.tables[tableIdx].get();
+      segment->table = table->name;
+      segment->offset = readExpression();
+    }
+
+    if (isPassive || hasTableIdx) {
+      if (usesExpressions) {
+        segment->type = getType();
+        if (!segment->type.isFunction()) {
+          throwError("Invalid type for a usesExpressions element segment");
+        }
+      } else {
+        auto elemKind = getU32LEB();
+        if (elemKind != 0x0) {
+          throwError("Invalid kind (!= funcref(0)) since !usesExpressions.");
+        }
+      }
+    }
+
+    auto& segmentData = segment->data;
+    auto size = getU32LEB();
+    if (usesExpressions) {
+      for (Index j = 0; j < size; j++) {
+        segmentData.push_back(readExpression());
+      }
+    } else {
+      for (Index j = 0; j < size; j++) {
+        Index index = getU32LEB();
+        auto sig = getTypeByFunctionIndex(index);
+        // Use a placeholder name for now
+        auto* refFunc = Builder(wasm).makeRefFunc(Name::fromInt(index), sig);
+        functionRefs[index].push_back(&refFunc->func);
+        segmentData.push_back(refFunc);
+      }
+    }
+
+    wasm.addElementSegment(std::move(segment));
+  }
+}
+
+void WasmBinaryBuilder::readTags() {
+  BYN_TRACE("== readTags\n");
+  size_t numTags = getU32LEB();
+  BYN_TRACE("num: " << numTags << std::endl);
+  for (size_t i = 0; i < numTags; i++) {
+    BYN_TRACE("read one\n");
+    getInt8(); // Reserved 'attribute' field
+    auto typeIndex = getU32LEB();
+    wasm.addTag(Builder::makeTag("tag$" + std::to_string(i),
+                                 getSignatureByTypeIndex(typeIndex)));
+  }
+}
+
+static bool isIdChar(char ch) {
+  return (ch >= '0' && ch <= '9') || (ch >= 'A' && ch <= 'Z') ||
+         (ch >= 'a' && ch <= 'z') || ch == '!' || ch == '#' || ch == '$' ||
+         ch == '%' || ch == '&' || ch == '\'' || ch == '*' || ch == '+' ||
+         ch == '-' || ch == '.' || ch == '/' || ch == ':' || ch == '<' ||
+         ch == '=' || ch == '>' || ch == '?' || ch == '@' || ch == '^' ||
+         ch == '_' || ch == '`' || ch == '|' || ch == '~';
+}
+
+static char formatNibble(int nibble) {
+  return nibble < 10 ? '0' + nibble : 'a' - 10 + nibble;
+}
+
+Name WasmBinaryBuilder::escape(Name name) {
+  bool allIdChars = true;
+  for (char c : name.str) {
+    if (!(allIdChars = isIdChar(c))) {
+      break;
+    }
+  }
+  if (allIdChars) {
+    return name;
+  }
+  // encode name, if at least one non-idchar (per WebAssembly spec) was found
+  std::string escaped;
+  for (char c : name.str) {
+    if (isIdChar(c)) {
+      escaped.push_back(c);
+      continue;
+    }
+    // replace non-idchar with `\xx` escape
+    escaped.push_back('\\');
+    escaped.push_back(formatNibble(c >> 4));
+    escaped.push_back(formatNibble(c & 15));
+  }
+  return escaped;
+}
+
+// Performs necessary processing of names from the name section before using
+// them. Specifically it escapes and deduplicates them.
+class NameProcessor {
+public:
+  Name process(Name name) {
+    return deduplicate(WasmBinaryBuilder::escape(name));
+  }
+
+private:
+  std::unordered_set<Name> usedNames;
+
+  Name deduplicate(Name base) {
+    Name name = base;
+    // De-duplicate names by appending .1, .2, etc.
+    for (int i = 1; !usedNames.insert(name).second; ++i) {
+      name = std::string(base.str) + std::string(".") + std::to_string(i);
+    }
+    return name;
+  }
+};
+
+void WasmBinaryBuilder::readNames(size_t payloadLen) {
+  BYN_TRACE("== readNames\n");
+  auto sectionPos = pos;
+  uint32_t lastType = 0;
+  while (pos < sectionPos + payloadLen) {
+    auto nameType = getU32LEB();
+    if (lastType && nameType <= lastType) {
+      std::cerr << "warning: out-of-order name subsection: " << nameType
+                << std::endl;
+    }
+    lastType = nameType;
+    auto subsectionSize = getU32LEB();
+    auto subsectionPos = pos;
+    using Subsection = BinaryConsts::CustomSections::Subsection;
+    if (nameType == Subsection::NameModule) {
+      wasm.name = getInlineString();
+    } else if (nameType == Subsection::NameFunction) {
+      auto num = getU32LEB();
+      NameProcessor processor;
+      for (size_t i = 0; i < num; i++) {
+        auto index = getU32LEB();
+        auto rawName = getInlineString();
+        auto name = processor.process(rawName);
+        if (index < wasm.functions.size()) {
+          wasm.functions[index]->setExplicitName(name);
+        } else {
+          std::cerr << "warning: function index out of bounds in name section, "
+                       "function subsection: "
+                    << std::string(rawName.str) << " at index "
+                    << std::to_string(index) << std::endl;
+        }
+      }
+    } else if (nameType == Subsection::NameLocal) {
+      auto numFuncs = getU32LEB();
+      for (size_t i = 0; i < numFuncs; i++) {
+        auto funcIndex = getU32LEB();
+        Function* func = nullptr;
+        if (funcIndex < wasm.functions.size()) {
+          func = wasm.functions[funcIndex].get();
+        } else {
+          std::cerr
+            << "warning: function index out of bounds in name section, local "
+               "subsection: "
+            << std::to_string(funcIndex) << std::endl;
+        }
+        auto numLocals = getU32LEB();
+        NameProcessor processor;
+        for (size_t j = 0; j < numLocals; j++) {
+          auto localIndex = getU32LEB();
+          auto rawLocalName = getInlineString();
+          if (!func) {
+            continue; // read and discard in case of prior error
+          }
+          auto localName = processor.process(rawLocalName);
+          if (localName.size() == 0) {
+            std::cerr << "warning: empty local name at index "
+                      << std::to_string(localIndex) << " in function "
+                      << std::string(func->name.str) << std::endl;
+          } else if (localIndex < func->getNumLocals()) {
+            func->localNames[localIndex] = localName;
+          } else {
+            std::cerr << "warning: local index out of bounds in name "
+                         "section, local subsection: "
+                      << std::string(rawLocalName.str) << " at index "
+                      << std::to_string(localIndex) << " in function "
+                      << std::string(func->name.str) << std::endl;
+          }
+        }
+      }
+    } else if (nameType == Subsection::NameType) {
+      auto num = getU32LEB();
+      NameProcessor processor;
+      for (size_t i = 0; i < num; i++) {
+        auto index = getU32LEB();
+        auto rawName = getInlineString();
+        auto name = processor.process(rawName);
+        if (index < types.size()) {
+          wasm.typeNames[types[index]].name = name;
+        } else {
+          std::cerr << "warning: type index out of bounds in name section, "
+                       "type subsection: "
+                    << std::string(rawName.str) << " at index "
+                    << std::to_string(index) << std::endl;
+        }
+      }
+    } else if (nameType == Subsection::NameTable) {
+      auto num = getU32LEB();
+      NameProcessor processor;
+      for (size_t i = 0; i < num; i++) {
+        auto index = getU32LEB();
+        auto rawName = getInlineString();
+        auto name = processor.process(rawName);
+
+        if (index < wasm.tables.size()) {
+          auto* table = wasm.tables[index].get();
+          for (auto& segment : wasm.elementSegments) {
+            if (segment->table == table->name) {
+              segment->table = name;
+            }
+          }
+          table->setExplicitName(name);
+        } else {
+          std::cerr << "warning: table index out of bounds in name section, "
+                       "table subsection: "
+                    << std::string(rawName.str) << " at index "
+                    << std::to_string(index) << std::endl;
+        }
+      }
+    } else if (nameType == Subsection::NameElem) {
+      auto num = getU32LEB();
+      NameProcessor processor;
+      for (size_t i = 0; i < num; i++) {
+        auto index = getU32LEB();
+        auto rawName = getInlineString();
+        auto name = processor.process(rawName);
+
+        if (index < wasm.elementSegments.size()) {
+          wasm.elementSegments[index]->setExplicitName(name);
+        } else {
+          std::cerr << "warning: elem index out of bounds in name section, "
+                       "elem subsection: "
+                    << std::string(rawName.str) << " at index "
+                    << std::to_string(index) << std::endl;
+        }
+      }
+    } else if (nameType == Subsection::NameMemory) {
+      auto num = getU32LEB();
+      NameProcessor processor;
+      for (size_t i = 0; i < num; i++) {
+        auto index = getU32LEB();
+        auto rawName = getInlineString();
+        auto name = processor.process(rawName);
+        if (index < wasm.memories.size()) {
+          wasm.memories[index]->setExplicitName(name);
+        } else {
+          std::cerr << "warning: memory index out of bounds in name section, "
+                       "memory subsection: "
+                    << std::string(rawName.str) << " at index "
+                    << std::to_string(index) << std::endl;
+        }
+      }
+    } else if (nameType == Subsection::NameData) {
+      auto num = getU32LEB();
+      NameProcessor processor;
+      for (size_t i = 0; i < num; i++) {
+        auto index = getU32LEB();
+        auto rawName = getInlineString();
+        auto name = processor.process(rawName);
+        if (index < wasm.dataSegments.size()) {
+          wasm.dataSegments[i]->setExplicitName(name);
+        } else {
+          std::cerr << "warning: data index out of bounds in name section, "
+                       "data subsection: "
+                    << std::string(rawName.str) << " at index "
+                    << std::to_string(index) << std::endl;
+        }
+      }
+    } else if (nameType == Subsection::NameGlobal) {
+      auto num = getU32LEB();
+      NameProcessor processor;
+      for (size_t i = 0; i < num; i++) {
+        auto index = getU32LEB();
+        auto rawName = getInlineString();
+        auto name = processor.process(rawName);
+        if (index < wasm.globals.size()) {
+          wasm.globals[index]->setExplicitName(name);
+        } else {
+          std::cerr << "warning: global index out of bounds in name section, "
+                       "global subsection: "
+                    << std::string(rawName.str) << " at index "
+                    << std::to_string(index) << std::endl;
+        }
+      }
+    } else if (nameType == Subsection::NameField) {
+      auto numTypes = getU32LEB();
+      for (size_t i = 0; i < numTypes; i++) {
+        auto typeIndex = getU32LEB();
+        bool validType =
+          typeIndex < types.size() && types[typeIndex].isStruct
