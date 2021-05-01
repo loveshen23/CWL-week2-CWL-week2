@@ -2391,4 +2391,402 @@ void WasmBinaryBuilder::readImports() {
 
         wasm.addTable(std::move(table));
         break;
-    
+      }
+      case ExternalKind::Memory: {
+        Name name(std::string("mimport$") + std::to_string(memoryCounter++));
+        auto memory = builder.makeMemory(name);
+        memory->module = module;
+        memory->base = base;
+        getResizableLimits(memory->initial,
+                           memory->max,
+                           memory->shared,
+                           memory->indexType,
+                           Memory::kUnlimitedSize);
+        wasm.addMemory(std::move(memory));
+        break;
+      }
+      case ExternalKind::Global: {
+        Name name(std::string("gimport$") + std::to_string(globalCounter++));
+        auto type = getConcreteType();
+        auto mutable_ = getU32LEB();
+        auto curr =
+          builder.makeGlobal(name,
+                             type,
+                             nullptr,
+                             mutable_ ? Builder::Mutable : Builder::Immutable);
+        curr->module = module;
+        curr->base = base;
+        wasm.addGlobal(std::move(curr));
+        break;
+      }
+      case ExternalKind::Tag: {
+        Name name(std::string("eimport$") + std::to_string(tagCounter++));
+        getInt8(); // Reserved 'attribute' field
+        auto index = getU32LEB();
+        auto curr = builder.makeTag(name, getSignatureByTypeIndex(index));
+        curr->module = module;
+        curr->base = base;
+        wasm.addTag(std::move(curr));
+        break;
+      }
+      default: {
+        throwError("bad import kind");
+      }
+    }
+  }
+}
+
+Name WasmBinaryBuilder::getNextLabel() {
+  requireFunctionContext("getting a label");
+  return Name("label$" + std::to_string(nextLabel++));
+}
+
+void WasmBinaryBuilder::requireFunctionContext(const char* error) {
+  if (!currFunction) {
+    throwError(std::string("in a non-function context: ") + error);
+  }
+}
+
+void WasmBinaryBuilder::readFunctionSignatures() {
+  BYN_TRACE("== readFunctionSignatures\n");
+  size_t num = getU32LEB();
+  BYN_TRACE("num: " << num << std::endl);
+  for (size_t i = 0; i < num; i++) {
+    BYN_TRACE("read one\n");
+    auto index = getU32LEB();
+    functionTypes.push_back(getTypeByIndex(index));
+    // Check that the type is a signature.
+    getSignatureByTypeIndex(index);
+  }
+}
+
+HeapType WasmBinaryBuilder::getTypeByIndex(Index index) {
+  if (index >= types.size()) {
+    throwError("invalid type index " + std::to_string(index) + " / " +
+               std::to_string(types.size()));
+  }
+  return types[index];
+}
+
+HeapType WasmBinaryBuilder::getTypeByFunctionIndex(Index index) {
+  if (index >= functionTypes.size()) {
+    throwError("invalid function index");
+  }
+  return functionTypes[index];
+}
+
+Signature WasmBinaryBuilder::getSignatureByTypeIndex(Index index) {
+  auto heapType = getTypeByIndex(index);
+  if (!heapType.isSignature()) {
+    throwError("invalid signature type " + heapType.toString());
+  }
+  return heapType.getSignature();
+}
+
+Signature WasmBinaryBuilder::getSignatureByFunctionIndex(Index index) {
+  auto heapType = getTypeByFunctionIndex(index);
+  if (!heapType.isSignature()) {
+    throwError("invalid signature type " + heapType.toString());
+  }
+  return heapType.getSignature();
+}
+
+void WasmBinaryBuilder::readFunctions() {
+  BYN_TRACE("== readFunctions\n");
+  auto numImports = wasm.functions.size();
+  size_t total = getU32LEB();
+  if (total != functionTypes.size() - numImports) {
+    throwError("invalid function section size, must equal types");
+  }
+  for (size_t i = 0; i < total; i++) {
+    BYN_TRACE("read one at " << pos << std::endl);
+    auto sizePos = pos;
+    size_t size = getU32LEB();
+    if (size == 0) {
+      throwError("empty function size");
+    }
+    endOfFunction = pos + size;
+
+    auto* func = new Function;
+    func->name = Name::fromInt(i);
+    func->type = getTypeByFunctionIndex(numImports + i);
+    currFunction = func;
+
+    if (DWARF) {
+      func->funcLocation = BinaryLocations::FunctionLocations{
+        BinaryLocation(sizePos - codeSectionLocation),
+        BinaryLocation(pos - codeSectionLocation),
+        BinaryLocation(pos - codeSectionLocation + size)};
+    }
+
+    readNextDebugLocation();
+
+    BYN_TRACE("reading " << i << std::endl);
+
+    readVars();
+
+    std::swap(func->prologLocation, debugLocation);
+    {
+      // process the function body
+      BYN_TRACE("processing function: " << i << std::endl);
+      nextLabel = 0;
+      debugLocation.clear();
+      willBeIgnored = false;
+      // process body
+      assert(breakStack.empty());
+      assert(breakTargetNames.empty());
+      assert(exceptionTargetNames.empty());
+      assert(expressionStack.empty());
+      assert(controlFlowStack.empty());
+      assert(depth == 0);
+      // Even if we are skipping function bodies we need to not skip the start
+      // function. That contains important code for wasm-emscripten-finalize in
+      // the form of pthread-related segment initializations. As this is just
+      // one function, it doesn't add significant time, so the optimization of
+      // skipping bodies is still very useful.
+      auto currFunctionIndex = wasm.functions.size();
+      bool isStart = startIndex == currFunctionIndex;
+      if (!skipFunctionBodies || isStart) {
+        func->body = getBlockOrSingleton(func->getResults());
+      } else {
+        // When skipping the function body we need to put something valid in
+        // their place so we validate. An unreachable is always acceptable
+        // there.
+        func->body = Builder(wasm).makeUnreachable();
+
+        // Skip reading the contents.
+        pos = endOfFunction;
+      }
+      assert(depth == 0);
+      assert(breakStack.empty());
+      assert(breakTargetNames.empty());
+      assert(exceptionTargetNames.empty());
+      if (!expressionStack.empty()) {
+        throwError("stack not empty on function exit");
+      }
+      assert(controlFlowStack.empty());
+      if (pos != endOfFunction) {
+        throwError("binary offset at function exit not at expected location");
+      }
+    }
+
+    if (!wasm.features.hasGCNNLocals()) {
+      TypeUpdating::handleNonDefaultableLocals(func, wasm);
+    }
+
+    std::swap(func->epilogLocation, debugLocation);
+    currFunction = nullptr;
+    debugLocation.clear();
+    wasm.addFunction(func);
+  }
+  BYN_TRACE(" end function bodies\n");
+}
+
+void WasmBinaryBuilder::readVars() {
+  size_t numLocalTypes = getU32LEB();
+  for (size_t t = 0; t < numLocalTypes; t++) {
+    auto num = getU32LEB();
+    auto type = getConcreteType();
+    while (num > 0) {
+      currFunction->vars.push_back(type);
+      num--;
+    }
+  }
+}
+
+void WasmBinaryBuilder::readExports() {
+  BYN_TRACE("== readExports\n");
+  size_t num = getU32LEB();
+  BYN_TRACE("num: " << num << std::endl);
+  std::unordered_set<Name> names;
+  for (size_t i = 0; i < num; i++) {
+    BYN_TRACE("read one\n");
+    auto curr = new Export;
+    curr->name = getInlineString();
+    if (!names.emplace(curr->name).second) {
+      throwError("duplicate export name");
+    }
+    curr->kind = (ExternalKind)getU32LEB();
+    auto index = getU32LEB();
+    exportIndices[curr] = index;
+    exportOrder.push_back(curr);
+  }
+}
+
+static int32_t readBase64VLQ(std::istream& in) {
+  uint32_t value = 0;
+  uint32_t shift = 0;
+  while (1) {
+    auto ch = in.get();
+    if (ch == EOF) {
+      throw MapParseException("unexpected EOF in the middle of VLQ");
+    }
+    if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch < 'g')) {
+      // last number digit
+      uint32_t digit = ch < 'a' ? ch - 'A' : ch - 'a' + 26;
+      value |= digit << shift;
+      break;
+    }
+    if (!(ch >= 'g' && ch <= 'z') && !(ch >= '0' && ch <= '9') && ch != '+' &&
+        ch != '/') {
+      throw MapParseException("invalid VLQ digit");
+    }
+    uint32_t digit =
+      ch > '9' ? ch - 'g' : (ch >= '0' ? ch - '0' + 20 : (ch == '+' ? 30 : 31));
+    value |= digit << shift;
+    shift += 5;
+  }
+  return value & 1 ? -int32_t(value >> 1) : int32_t(value >> 1);
+}
+
+void WasmBinaryBuilder::readSourceMapHeader() {
+  if (!sourceMap) {
+    return;
+  }
+
+  auto skipWhitespace = [&]() {
+    while (sourceMap->peek() == ' ' || sourceMap->peek() == '\n') {
+      sourceMap->get();
+    }
+  };
+
+  auto maybeReadChar = [&](char expected) {
+    if (sourceMap->peek() != expected) {
+      return false;
+    }
+    sourceMap->get();
+    return true;
+  };
+
+  auto mustReadChar = [&](char expected) {
+    char c = sourceMap->get();
+    if (c != expected) {
+      throw MapParseException(std::string("Unexpected char: expected '") +
+                              expected + "' got '" + c + "'");
+    }
+  };
+
+  auto findField = [&](const char* name) {
+    bool matching = false;
+    size_t len = strlen(name);
+    size_t pos;
+    while (1) {
+      int ch = sourceMap->get();
+      if (ch == EOF) {
+        return false;
+      }
+      if (ch == '\"') {
+        if (matching) {
+          // we matched a terminating quote.
+          if (pos == len) {
+            break;
+          }
+          matching = false;
+        } else {
+          matching = true;
+          pos = 0;
+        }
+      } else if (matching && name[pos] == ch) {
+        ++pos;
+      } else if (matching) {
+        matching = false;
+      }
+    }
+    skipWhitespace();
+    mustReadChar(':');
+    skipWhitespace();
+    return true;
+  };
+
+  auto readString = [&](std::string& str) {
+    std::vector<char> vec;
+    skipWhitespace();
+    mustReadChar('\"');
+    if (!maybeReadChar('\"')) {
+      while (1) {
+        int ch = sourceMap->get();
+        if (ch == EOF) {
+          throw MapParseException("unexpected EOF in the middle of string");
+        }
+        if (ch == '\"') {
+          break;
+        }
+        vec.push_back(ch);
+      }
+    }
+    skipWhitespace();
+    str = std::string(vec.begin(), vec.end());
+  };
+
+  if (!findField("sources")) {
+    throw MapParseException("cannot find the 'sources' field in map");
+  }
+
+  skipWhitespace();
+  mustReadChar('[');
+  if (!maybeReadChar(']')) {
+    do {
+      std::string file;
+      readString(file);
+      Index index = wasm.debugInfoFileNames.size();
+      wasm.debugInfoFileNames.push_back(file);
+      debugInfoFileIndices[file] = index;
+    } while (maybeReadChar(','));
+    mustReadChar(']');
+  }
+
+  if (!findField("mappings")) {
+    throw MapParseException("cannot find the 'mappings' field in map");
+  }
+
+  mustReadChar('\"');
+  if (maybeReadChar('\"')) { // empty mappings
+    nextDebugLocation.availablePos = 0;
+    return;
+  }
+  // read first debug location
+  uint32_t position = readBase64VLQ(*sourceMap);
+  uint32_t fileIndex = readBase64VLQ(*sourceMap);
+  uint32_t lineNumber =
+    readBase64VLQ(*sourceMap) + 1; // adjust zero-based line number
+  uint32_t columnNumber = readBase64VLQ(*sourceMap);
+  nextDebugLocation = {
+    position, position, {fileIndex, lineNumber, columnNumber}};
+}
+
+void WasmBinaryBuilder::readNextDebugLocation() {
+  if (!sourceMap) {
+    return;
+  }
+
+  if (nextDebugLocation.availablePos == 0 &&
+      nextDebugLocation.previousPos <= pos) {
+    // if source map file had already reached the end and cache position also
+    // cannot cover the pos clear the debug location
+    debugLocation.clear();
+    return;
+  }
+
+  while (nextDebugLocation.availablePos &&
+         nextDebugLocation.availablePos <= pos) {
+    debugLocation.clear();
+    // use debugLocation only for function expressions
+    if (currFunction) {
+      debugLocation.insert(nextDebugLocation.next);
+    }
+
+    char ch;
+    *sourceMap >> ch;
+    if (ch == '\"') { // end of records
+      nextDebugLocation.availablePos = 0;
+      break;
+    }
+    if (ch != ',') {
+      throw MapParseException("Unexpected delimiter");
+    }
+
+    int32_t positionDelta = readBase64VLQ(*sourceMap);
+    uint32_t position = nextDebugLocation.availablePos + positionDelta;
+    int32_t fileIndexDelta = readBase64VLQ(*sourceMap);
+    uint32_t fileIndex = nextDebugLocation.next.fileIndex + fileIndexDelta;
+    int32_t lineNumberDelta = readBase64VLQ
