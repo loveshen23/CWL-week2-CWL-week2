@@ -3830,4 +3830,413 @@ BinaryConsts::ASTNodes WasmBinaryBuilder::readExpression(Expression*& curr) {
     case BinaryConsts::BrOnNonNull:
       maybeVisitBrOn(curr, code);
       break;
-    case BinaryConsts::TableGe
+    case BinaryConsts::TableGet:
+      visitTableGet((curr = allocator.alloc<TableGet>())->cast<TableGet>());
+      break;
+    case BinaryConsts::TableSet:
+      visitTableSet((curr = allocator.alloc<TableSet>())->cast<TableSet>());
+      break;
+    case BinaryConsts::Try:
+      visitTryOrTryInBlock(curr);
+      break;
+    case BinaryConsts::Throw:
+      visitThrow((curr = allocator.alloc<Throw>())->cast<Throw>());
+      break;
+    case BinaryConsts::Rethrow:
+      visitRethrow((curr = allocator.alloc<Rethrow>())->cast<Rethrow>());
+      break;
+    case BinaryConsts::MemorySize: {
+      auto size = allocator.alloc<MemorySize>();
+      curr = size;
+      visitMemorySize(size);
+      break;
+    }
+    case BinaryConsts::MemoryGrow: {
+      auto grow = allocator.alloc<MemoryGrow>();
+      curr = grow;
+      visitMemoryGrow(grow);
+      break;
+    }
+    case BinaryConsts::CallRef:
+    case BinaryConsts::RetCallRef: {
+      auto call = allocator.alloc<CallRef>();
+      call->isReturn = code == BinaryConsts::RetCallRef;
+      curr = call;
+      visitCallRef(call);
+      break;
+    }
+    case BinaryConsts::AtomicPrefix: {
+      code = static_cast<uint8_t>(getU32LEB());
+      if (maybeVisitLoad(curr, code, /*isAtomic=*/true)) {
+        break;
+      }
+      if (maybeVisitStore(curr, code, /*isAtomic=*/true)) {
+        break;
+      }
+      if (maybeVisitAtomicRMW(curr, code)) {
+        break;
+      }
+      if (maybeVisitAtomicCmpxchg(curr, code)) {
+        break;
+      }
+      if (maybeVisitAtomicWait(curr, code)) {
+        break;
+      }
+      if (maybeVisitAtomicNotify(curr, code)) {
+        break;
+      }
+      if (maybeVisitAtomicFence(curr, code)) {
+        break;
+      }
+      throwError("invalid code after atomic prefix: " + std::to_string(code));
+      break;
+    }
+    case BinaryConsts::MiscPrefix: {
+      auto opcode = getU32LEB();
+      if (maybeVisitTruncSat(curr, opcode)) {
+        break;
+      }
+      if (maybeVisitMemoryInit(curr, opcode)) {
+        break;
+      }
+      if (maybeVisitDataDrop(curr, opcode)) {
+        break;
+      }
+      if (maybeVisitMemoryCopy(curr, opcode)) {
+        break;
+      }
+      if (maybeVisitMemoryFill(curr, opcode)) {
+        break;
+      }
+      if (maybeVisitTableSize(curr, opcode)) {
+        break;
+      }
+      if (maybeVisitTableGrow(curr, opcode)) {
+        break;
+      }
+      throwError("invalid code after misc prefix: " + std::to_string(opcode));
+      break;
+    }
+    case BinaryConsts::SIMDPrefix: {
+      auto opcode = getU32LEB();
+      if (maybeVisitSIMDBinary(curr, opcode)) {
+        break;
+      }
+      if (maybeVisitSIMDUnary(curr, opcode)) {
+        break;
+      }
+      if (maybeVisitSIMDConst(curr, opcode)) {
+        break;
+      }
+      if (maybeVisitSIMDStore(curr, opcode)) {
+        break;
+      }
+      if (maybeVisitSIMDExtract(curr, opcode)) {
+        break;
+      }
+      if (maybeVisitSIMDReplace(curr, opcode)) {
+        break;
+      }
+      if (maybeVisitSIMDShuffle(curr, opcode)) {
+        break;
+      }
+      if (maybeVisitSIMDTernary(curr, opcode)) {
+        break;
+      }
+      if (maybeVisitSIMDShift(curr, opcode)) {
+        break;
+      }
+      if (maybeVisitSIMDLoad(curr, opcode)) {
+        break;
+      }
+      if (maybeVisitSIMDLoadStoreLane(curr, opcode)) {
+        break;
+      }
+      throwError("invalid code after SIMD prefix: " + std::to_string(opcode));
+      break;
+    }
+    case BinaryConsts::GCPrefix: {
+      auto opcode = getU32LEB();
+      if (maybeVisitI31New(curr, opcode)) {
+        break;
+      }
+      if (maybeVisitI31Get(curr, opcode)) {
+        break;
+      }
+      if (maybeVisitRefTest(curr, opcode)) {
+        break;
+      }
+      if (maybeVisitRefCast(curr, opcode)) {
+        break;
+      }
+      if (maybeVisitBrOn(curr, opcode)) {
+        break;
+      }
+      if (maybeVisitStructNew(curr, opcode)) {
+        break;
+      }
+      if (maybeVisitStructGet(curr, opcode)) {
+        break;
+      }
+      if (maybeVisitStructSet(curr, opcode)) {
+        break;
+      }
+      if (maybeVisitArrayNew(curr, opcode)) {
+        break;
+      }
+      if (maybeVisitArrayNewSeg(curr, opcode)) {
+        break;
+      }
+      if (maybeVisitArrayNewFixed(curr, opcode)) {
+        break;
+      }
+      if (maybeVisitArrayGet(curr, opcode)) {
+        break;
+      }
+      if (maybeVisitArraySet(curr, opcode)) {
+        break;
+      }
+      if (maybeVisitArrayLen(curr, opcode)) {
+        break;
+      }
+      if (maybeVisitArrayCopy(curr, opcode)) {
+        break;
+      }
+      if (maybeVisitStringNew(curr, opcode)) {
+        break;
+      }
+      if (maybeVisitStringConst(curr, opcode)) {
+        break;
+      }
+      if (maybeVisitStringMeasure(curr, opcode)) {
+        break;
+      }
+      if (maybeVisitStringEncode(curr, opcode)) {
+        break;
+      }
+      if (maybeVisitStringConcat(curr, opcode)) {
+        break;
+      }
+      if (maybeVisitStringEq(curr, opcode)) {
+        break;
+      }
+      if (maybeVisitStringAs(curr, opcode)) {
+        break;
+      }
+      if (maybeVisitStringWTF8Advance(curr, opcode)) {
+        break;
+      }
+      if (maybeVisitStringWTF16Get(curr, opcode)) {
+        break;
+      }
+      if (maybeVisitStringIterNext(curr, opcode)) {
+        break;
+      }
+      if (maybeVisitStringIterMove(curr, opcode)) {
+        break;
+      }
+      if (maybeVisitStringSliceWTF(curr, opcode)) {
+        break;
+      }
+      if (maybeVisitStringSliceIter(curr, opcode)) {
+        break;
+      }
+      if (opcode == BinaryConsts::RefIsFunc ||
+          opcode == BinaryConsts::RefIsI31) {
+        visitRefIs((curr = allocator.alloc<RefTest>())->cast<RefTest>(),
+                   opcode);
+        break;
+      }
+      if (opcode == BinaryConsts::RefAsFunc ||
+          opcode == BinaryConsts::RefAsI31) {
+        visitRefAsCast((curr = allocator.alloc<RefCast>())->cast<RefCast>(),
+                       opcode);
+        break;
+      }
+      if (opcode == BinaryConsts::ExternInternalize ||
+          opcode == BinaryConsts::ExternExternalize) {
+        visitRefAs((curr = allocator.alloc<RefAs>())->cast<RefAs>(), opcode);
+        break;
+      }
+      throwError("invalid code after GC prefix: " + std::to_string(opcode));
+      break;
+    }
+    default: {
+      // otherwise, the code is a subcode TODO: optimize
+      if (maybeVisitBinary(curr, code)) {
+        break;
+      }
+      if (maybeVisitUnary(curr, code)) {
+        break;
+      }
+      if (maybeVisitConst(curr, code)) {
+        break;
+      }
+      if (maybeVisitLoad(curr, code, /*isAtomic=*/false)) {
+        break;
+      }
+      if (maybeVisitStore(curr, code, /*isAtomic=*/false)) {
+        break;
+      }
+      throwError("bad node code " + std::to_string(code));
+      break;
+    }
+  }
+  if (curr) {
+    if (currDebugLocation.size()) {
+      requireFunctionContext("debugLocation");
+      currFunction->debugLocations[curr] = *currDebugLocation.begin();
+    }
+    if (DWARF && currFunction) {
+      currFunction->expressionLocations[curr] =
+        BinaryLocations::Span{BinaryLocation(startPos - codeSectionLocation),
+                              BinaryLocation(pos - codeSectionLocation)};
+    }
+  }
+  BYN_TRACE("zz recurse from " << depth-- << " at " << pos << std::endl);
+  return BinaryConsts::ASTNodes(code);
+}
+
+void WasmBinaryBuilder::startControlFlow(Expression* curr) {
+  if (DWARF && currFunction) {
+    controlFlowStack.push_back(curr);
+  }
+}
+
+void WasmBinaryBuilder::pushBlockElements(Block* curr,
+                                          Type type,
+                                          size_t start) {
+  assert(start <= expressionStack.size());
+  // The results of this block are the last values pushed to the expressionStack
+  Expression* results = nullptr;
+  if (type.isConcrete()) {
+    results = popTypedExpression(type);
+  }
+  if (expressionStack.size() < start) {
+    throwError("Block requires more values than are available");
+  }
+  // Everything else on the stack after `start` is either a none-type expression
+  // or a concretely-type expression that is implicitly dropped due to
+  // unreachability at the end of the block, like this:
+  //
+  //  block i32
+  //   i32.const 1
+  //   i32.const 2
+  //   i32.const 3
+  //   return
+  //  end
+  //
+  // The first two const elements will be emitted as drops in the block (the
+  // optimizer can remove them, of course, but in general we may need dropped
+  // items here as they may have side effects).
+  //
+  for (size_t i = start; i < expressionStack.size(); ++i) {
+    auto* item = expressionStack[i];
+    if (item->type.isConcrete()) {
+      item = Builder(wasm).makeDrop(item);
+    }
+    curr->list.push_back(item);
+  }
+  expressionStack.resize(start);
+  if (results != nullptr) {
+    curr->list.push_back(results);
+  }
+}
+
+void WasmBinaryBuilder::visitBlock(Block* curr) {
+  BYN_TRACE("zz node: Block\n");
+  startControlFlow(curr);
+  // special-case Block and de-recurse nested blocks in their first position, as
+  // that is a common pattern that can be very highly nested.
+  std::vector<Block*> stack;
+  while (1) {
+    curr->type = getType();
+    curr->name = getNextLabel();
+    breakStack.push_back({curr->name, curr->type});
+    stack.push_back(curr);
+    if (more() && input[pos] == BinaryConsts::Block) {
+      // a recursion
+      readNextDebugLocation();
+      curr = allocator.alloc<Block>();
+      startControlFlow(curr);
+      pos++;
+      if (debugLocation.size()) {
+        requireFunctionContext("block-debugLocation");
+        currFunction->debugLocations[curr] = *debugLocation.begin();
+      }
+      continue;
+    } else {
+      // end of recursion
+      break;
+    }
+  }
+  Block* last = nullptr;
+  while (stack.size() > 0) {
+    curr = stack.back();
+    stack.pop_back();
+    // everything after this, that is left when we see the marker, is ours
+    size_t start = expressionStack.size();
+    if (last) {
+      // the previous block is our first-position element
+      pushExpression(last);
+    }
+    last = curr;
+    processExpressions();
+    size_t end = expressionStack.size();
+    if (end < start) {
+      throwError("block cannot pop from outside");
+    }
+    pushBlockElements(curr, curr->type, start);
+    curr->finalize(curr->type,
+                   breakTargetNames.find(curr->name) != breakTargetNames.end()
+                     ? Block::HasBreak
+                     : Block::NoBreak);
+    breakStack.pop_back();
+    breakTargetNames.erase(curr->name);
+  }
+}
+
+// Gets a block of expressions. If it's just one, return that singleton.
+Expression* WasmBinaryBuilder::getBlockOrSingleton(Type type) {
+  Name label = getNextLabel();
+  breakStack.push_back({label, type});
+  auto start = expressionStack.size();
+
+  processExpressions();
+  size_t end = expressionStack.size();
+  if (end < start) {
+    throwError("block cannot pop from outside");
+  }
+  breakStack.pop_back();
+  auto* block = allocator.alloc<Block>();
+  pushBlockElements(block, type, start);
+  block->name = label;
+  block->finalize(type);
+  // maybe we don't need a block here?
+  if (breakTargetNames.find(block->name) == breakTargetNames.end() &&
+      exceptionTargetNames.find(block->name) == exceptionTargetNames.end()) {
+    block->name = Name();
+    if (block->list.size() == 1) {
+      return block->list[0];
+    }
+  }
+  breakTargetNames.erase(block->name);
+  return block;
+}
+
+void WasmBinaryBuilder::visitIf(If* curr) {
+  BYN_TRACE("zz node: If\n");
+  startControlFlow(curr);
+  curr->type = getType();
+  curr->condition = popNonVoidExpression();
+  curr->ifTrue = getBlockOrSingleton(curr->type);
+  if (lastSeparator == BinaryConsts::Else) {
+    curr->ifFalse = getBlockOrSingleton(curr->type);
+  }
+  curr->finalize(curr->type);
+  if (lastSeparator != BinaryConsts::End) {
+    throwError("if should end with End");
+  }
+}
+
+void WasmBina
