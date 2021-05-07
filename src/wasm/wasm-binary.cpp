@@ -3504,4 +3504,330 @@ void WasmBinaryBuilder::readNames(size_t payloadLen) {
       for (size_t i = 0; i < numTypes; i++) {
         auto typeIndex = getU32LEB();
         bool validType =
-          typeIndex < types.size() && types[typeIndex].isStruct
+          typeIndex < types.size() && types[typeIndex].isStruct();
+        if (!validType) {
+          std::cerr << "warning: invalid field index in name field section\n";
+        }
+        auto numFields = getU32LEB();
+        NameProcessor processor;
+        for (size_t i = 0; i < numFields; i++) {
+          auto fieldIndex = getU32LEB();
+          auto rawName = getInlineString();
+          auto name = processor.process(rawName);
+          if (validType) {
+            wasm.typeNames[types[typeIndex]].fieldNames[fieldIndex] = name;
+          }
+        }
+      }
+    } else if (nameType == Subsection::NameTag) {
+      auto num = getU32LEB();
+      NameProcessor processor;
+      for (size_t i = 0; i < num; i++) {
+        auto index = getU32LEB();
+        auto rawName = getInlineString();
+        auto name = processor.process(rawName);
+        if (index < wasm.tags.size()) {
+          wasm.tags[index]->setExplicitName(name);
+        } else {
+          std::cerr << "warning: tag index out of bounds in name section, "
+                       "tag subsection: "
+                    << std::string(rawName.str) << " at index "
+                    << std::to_string(index) << std::endl;
+        }
+      }
+    } else {
+      std::cerr << "warning: unknown name subsection with id "
+                << std::to_string(nameType) << " at " << pos << std::endl;
+      pos = subsectionPos + subsectionSize;
+    }
+    if (pos != subsectionPos + subsectionSize) {
+      throwError("bad names subsection position change");
+    }
+  }
+  if (pos != sectionPos + payloadLen) {
+    throwError("bad names section position change");
+  }
+}
+
+void WasmBinaryBuilder::readFeatures(size_t payloadLen) {
+  wasm.hasFeaturesSection = true;
+
+  auto sectionPos = pos;
+  size_t numFeatures = getU32LEB();
+  for (size_t i = 0; i < numFeatures; ++i) {
+    uint8_t prefix = getInt8();
+
+    bool disallowed = prefix == BinaryConsts::FeatureDisallowed;
+    bool required = prefix == BinaryConsts::FeatureRequired;
+    bool used = prefix == BinaryConsts::FeatureUsed;
+
+    if (!disallowed && !required && !used) {
+      throwError("Unrecognized feature policy prefix");
+    }
+    if (required) {
+      std::cerr << "warning: required features in feature section are ignored";
+    }
+
+    Name name = getInlineString();
+    if (pos > sectionPos + payloadLen) {
+      throwError("ill-formed string extends beyond section");
+    }
+
+    FeatureSet feature;
+    if (name == BinaryConsts::CustomSections::AtomicsFeature) {
+      feature = FeatureSet::Atomics;
+    } else if (name == BinaryConsts::CustomSections::BulkMemoryFeature) {
+      feature = FeatureSet::BulkMemory;
+    } else if (name == BinaryConsts::CustomSections::ExceptionHandlingFeature) {
+      feature = FeatureSet::ExceptionHandling;
+    } else if (name == BinaryConsts::CustomSections::MutableGlobalsFeature) {
+      feature = FeatureSet::MutableGlobals;
+    } else if (name == BinaryConsts::CustomSections::TruncSatFeature) {
+      feature = FeatureSet::TruncSat;
+    } else if (name == BinaryConsts::CustomSections::SignExtFeature) {
+      feature = FeatureSet::SignExt;
+    } else if (name == BinaryConsts::CustomSections::SIMD128Feature) {
+      feature = FeatureSet::SIMD;
+    } else if (name == BinaryConsts::CustomSections::TailCallFeature) {
+      feature = FeatureSet::TailCall;
+    } else if (name == BinaryConsts::CustomSections::ReferenceTypesFeature) {
+      feature = FeatureSet::ReferenceTypes;
+    } else if (name == BinaryConsts::CustomSections::MultivalueFeature) {
+      feature = FeatureSet::Multivalue;
+    } else if (name == BinaryConsts::CustomSections::GCFeature) {
+      feature = FeatureSet::GC;
+    } else if (name == BinaryConsts::CustomSections::Memory64Feature) {
+      feature = FeatureSet::Memory64;
+    } else if (name == BinaryConsts::CustomSections::RelaxedSIMDFeature) {
+      feature = FeatureSet::RelaxedSIMD;
+    } else if (name == BinaryConsts::CustomSections::ExtendedConstFeature) {
+      feature = FeatureSet::ExtendedConst;
+    } else if (name == BinaryConsts::CustomSections::StringsFeature) {
+      feature = FeatureSet::Strings;
+    } else if (name == BinaryConsts::CustomSections::MultiMemoriesFeature) {
+      feature = FeatureSet::MultiMemories;
+    } else {
+      // Silently ignore unknown features (this may be and old binaryen running
+      // on a new wasm).
+    }
+
+    if (disallowed && wasm.features.has(feature)) {
+      std::cerr
+        << "warning: feature " << feature.toString()
+        << " was enabled by the user, but disallowed in the features section.";
+    }
+    if (required || used) {
+      wasm.features.enable(feature);
+    }
+  }
+  if (pos != sectionPos + payloadLen) {
+    throwError("bad features section size");
+  }
+}
+
+void WasmBinaryBuilder::readDylink(size_t payloadLen) {
+  wasm.dylinkSection = make_unique<DylinkSection>();
+
+  auto sectionPos = pos;
+
+  wasm.dylinkSection->isLegacy = true;
+  wasm.dylinkSection->memorySize = getU32LEB();
+  wasm.dylinkSection->memoryAlignment = getU32LEB();
+  wasm.dylinkSection->tableSize = getU32LEB();
+  wasm.dylinkSection->tableAlignment = getU32LEB();
+
+  size_t numNeededDynlibs = getU32LEB();
+  for (size_t i = 0; i < numNeededDynlibs; ++i) {
+    wasm.dylinkSection->neededDynlibs.push_back(getInlineString());
+  }
+
+  if (pos != sectionPos + payloadLen) {
+    throwError("bad dylink section size");
+  }
+}
+
+void WasmBinaryBuilder::readDylink0(size_t payloadLen) {
+  BYN_TRACE("== readDylink0\n");
+  auto sectionPos = pos;
+  uint32_t lastType = 0;
+
+  wasm.dylinkSection = make_unique<DylinkSection>();
+  while (pos < sectionPos + payloadLen) {
+    auto oldPos = pos;
+    auto dylinkType = getU32LEB();
+    if (lastType && dylinkType <= lastType) {
+      std::cerr << "warning: out-of-order dylink.0 subsection: " << dylinkType
+                << std::endl;
+    }
+    lastType = dylinkType;
+    auto subsectionSize = getU32LEB();
+    auto subsectionPos = pos;
+    if (dylinkType == BinaryConsts::CustomSections::Subsection::DylinkMemInfo) {
+      wasm.dylinkSection->memorySize = getU32LEB();
+      wasm.dylinkSection->memoryAlignment = getU32LEB();
+      wasm.dylinkSection->tableSize = getU32LEB();
+      wasm.dylinkSection->tableAlignment = getU32LEB();
+    } else if (dylinkType ==
+               BinaryConsts::CustomSections::Subsection::DylinkNeeded) {
+      size_t numNeededDynlibs = getU32LEB();
+      for (size_t i = 0; i < numNeededDynlibs; ++i) {
+        wasm.dylinkSection->neededDynlibs.push_back(getInlineString());
+      }
+    } else {
+      // Unknown subsection.  Stop parsing now and store the rest of
+      // the section verbatim.
+      pos = oldPos;
+      size_t remaining = (sectionPos + payloadLen) - pos;
+      auto tail = getByteView(remaining);
+      wasm.dylinkSection->tail = {tail.begin(), tail.end()};
+      break;
+    }
+    if (pos != subsectionPos + subsectionSize) {
+      throwError("bad dylink.0 subsection position change");
+    }
+  }
+}
+
+BinaryConsts::ASTNodes WasmBinaryBuilder::readExpression(Expression*& curr) {
+  if (pos == endOfFunction) {
+    throwError("Reached function end without seeing End opcode");
+  }
+  BYN_TRACE("zz recurse into " << ++depth << " at " << pos << std::endl);
+  readNextDebugLocation();
+  std::set<Function::DebugLocation> currDebugLocation;
+  if (debugLocation.size()) {
+    currDebugLocation.insert(*debugLocation.begin());
+  }
+  size_t startPos = pos;
+  uint8_t code = getInt8();
+  BYN_TRACE("readExpression seeing " << (int)code << std::endl);
+  switch (code) {
+    case BinaryConsts::Block:
+      visitBlock((curr = allocator.alloc<Block>())->cast<Block>());
+      break;
+    case BinaryConsts::If:
+      visitIf((curr = allocator.alloc<If>())->cast<If>());
+      break;
+    case BinaryConsts::Loop:
+      visitLoop((curr = allocator.alloc<Loop>())->cast<Loop>());
+      break;
+    case BinaryConsts::Br:
+    case BinaryConsts::BrIf:
+      visitBreak((curr = allocator.alloc<Break>())->cast<Break>(), code);
+      break; // code distinguishes br from br_if
+    case BinaryConsts::BrTable:
+      visitSwitch((curr = allocator.alloc<Switch>())->cast<Switch>());
+      break;
+    case BinaryConsts::CallFunction:
+      visitCall((curr = allocator.alloc<Call>())->cast<Call>());
+      break;
+    case BinaryConsts::CallIndirect:
+      visitCallIndirect(
+        (curr = allocator.alloc<CallIndirect>())->cast<CallIndirect>());
+      break;
+    case BinaryConsts::RetCallFunction: {
+      auto call = allocator.alloc<Call>();
+      call->isReturn = true;
+      curr = call;
+      visitCall(call);
+      break;
+    }
+    case BinaryConsts::RetCallIndirect: {
+      auto call = allocator.alloc<CallIndirect>();
+      call->isReturn = true;
+      curr = call;
+      visitCallIndirect(call);
+      break;
+    }
+    case BinaryConsts::LocalGet:
+      visitLocalGet((curr = allocator.alloc<LocalGet>())->cast<LocalGet>());
+      break;
+    case BinaryConsts::LocalTee:
+    case BinaryConsts::LocalSet:
+      visitLocalSet((curr = allocator.alloc<LocalSet>())->cast<LocalSet>(),
+                    code);
+      break;
+    case BinaryConsts::GlobalGet:
+      visitGlobalGet((curr = allocator.alloc<GlobalGet>())->cast<GlobalGet>());
+      break;
+    case BinaryConsts::GlobalSet:
+      visitGlobalSet((curr = allocator.alloc<GlobalSet>())->cast<GlobalSet>());
+      break;
+    case BinaryConsts::Select:
+    case BinaryConsts::SelectWithType:
+      visitSelect((curr = allocator.alloc<Select>())->cast<Select>(), code);
+      break;
+    case BinaryConsts::Return:
+      visitReturn((curr = allocator.alloc<Return>())->cast<Return>());
+      break;
+    case BinaryConsts::Nop:
+      visitNop((curr = allocator.alloc<Nop>())->cast<Nop>());
+      break;
+    case BinaryConsts::Unreachable:
+      visitUnreachable(
+        (curr = allocator.alloc<Unreachable>())->cast<Unreachable>());
+      break;
+    case BinaryConsts::Drop:
+      visitDrop((curr = allocator.alloc<Drop>())->cast<Drop>());
+      break;
+    case BinaryConsts::End:
+      curr = nullptr;
+      // Pop the current control flow structure off the stack. If there is none
+      // then this is the "end" of the function itself, which also emits an
+      // "end" byte.
+      if (!controlFlowStack.empty()) {
+        controlFlowStack.pop_back();
+      }
+      break;
+    case BinaryConsts::Else:
+    case BinaryConsts::Catch:
+    case BinaryConsts::CatchAll: {
+      curr = nullptr;
+      if (DWARF && currFunction) {
+        assert(!controlFlowStack.empty());
+        auto currControlFlow = controlFlowStack.back();
+        BinaryLocation delimiterId;
+        if (currControlFlow->is<If>()) {
+          delimiterId = BinaryLocations::Else;
+        } else {
+          // Both Catch and CatchAll can simply append to the list as we go, as
+          // we visit them in the right order in the binary, and like the binary
+          // we store the CatchAll at the end.
+          delimiterId =
+            currFunction->delimiterLocations[currControlFlow].size();
+        }
+        currFunction->delimiterLocations[currControlFlow][delimiterId] =
+          startPos - codeSectionLocation;
+      }
+      break;
+    }
+    case BinaryConsts::Delegate: {
+      curr = nullptr;
+      if (DWARF && currFunction) {
+        assert(!controlFlowStack.empty());
+        controlFlowStack.pop_back();
+      }
+      break;
+    }
+    case BinaryConsts::RefNull:
+      visitRefNull((curr = allocator.alloc<RefNull>())->cast<RefNull>());
+      break;
+    case BinaryConsts::RefIsNull:
+      visitRefIsNull((curr = allocator.alloc<RefIsNull>())->cast<RefIsNull>());
+      break;
+    case BinaryConsts::RefFunc:
+      visitRefFunc((curr = allocator.alloc<RefFunc>())->cast<RefFunc>());
+      break;
+    case BinaryConsts::RefEq:
+      visitRefEq((curr = allocator.alloc<RefEq>())->cast<RefEq>());
+      break;
+    case BinaryConsts::RefAsNonNull:
+      visitRefAs((curr = allocator.alloc<RefAs>())->cast<RefAs>(), code);
+      break;
+    case BinaryConsts::BrOnNull:
+      maybeVisitBrOn(curr, code);
+      break;
+    case BinaryConsts::BrOnNonNull:
+      maybeVisitBrOn(curr, code);
+      break;
+    case BinaryConsts::TableGe
