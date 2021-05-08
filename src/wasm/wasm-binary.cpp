@@ -4239,4 +4239,388 @@ void WasmBinaryBuilder::visitIf(If* curr) {
   }
 }
 
-void WasmBina
+void WasmBinaryBuilder::visitLoop(Loop* curr) {
+  BYN_TRACE("zz node: Loop\n");
+  startControlFlow(curr);
+  curr->type = getType();
+  curr->name = getNextLabel();
+  breakStack.push_back({curr->name, Type::none});
+  // find the expressions in the block, and create the body
+  // a loop may have a list of instructions in wasm, much like
+  // a block, but it only has a label at the top of the loop,
+  // so even if we need a block (if there is more than 1
+  // expression) we never need a label on the block.
+  auto start = expressionStack.size();
+  processExpressions();
+  size_t end = expressionStack.size();
+  if (start > end) {
+    throwError("block cannot pop from outside");
+  }
+  if (end - start == 1) {
+    curr->body = popExpression();
+  } else {
+    auto* block = allocator.alloc<Block>();
+    pushBlockElements(block, curr->type, start);
+    block->finalize(curr->type);
+    curr->body = block;
+  }
+  breakStack.pop_back();
+  breakTargetNames.erase(curr->name);
+  curr->finalize(curr->type);
+}
+
+WasmBinaryBuilder::BreakTarget
+WasmBinaryBuilder::getBreakTarget(int32_t offset) {
+  BYN_TRACE("getBreakTarget " << offset << std::endl);
+  if (breakStack.size() < 1 + size_t(offset)) {
+    throwError("bad breakindex (low)");
+  }
+  size_t index = breakStack.size() - 1 - offset;
+  if (index >= breakStack.size()) {
+    throwError("bad breakindex (high)");
+  }
+  BYN_TRACE("breaktarget " << breakStack[index].name << " type "
+                           << breakStack[index].type << std::endl);
+  auto& ret = breakStack[index];
+  // if the break is in literally unreachable code, then we will not emit it
+  // anyhow, so do not note that the target has breaks to it
+  if (!willBeIgnored) {
+    breakTargetNames.insert(ret.name);
+  }
+  return ret;
+}
+
+Name WasmBinaryBuilder::getExceptionTargetName(int32_t offset) {
+  BYN_TRACE("getExceptionTarget " << offset << std::endl);
+  // We always start parsing a function by creating a block label and pushing it
+  // in breakStack in getBlockOrSingleton, so if a 'delegate''s target is that
+  // block, it does not mean it targets that block; it throws to the caller.
+  if (breakStack.size() - 1 == size_t(offset)) {
+    return DELEGATE_CALLER_TARGET;
+  }
+  size_t index = breakStack.size() - 1 - offset;
+  if (index > breakStack.size()) {
+    throwError("bad try index (high)");
+  }
+  BYN_TRACE("exception target " << breakStack[index].name << std::endl);
+  auto& ret = breakStack[index];
+  // if the delegate/rethrow is in literally unreachable code, then we will not
+  // emit it anyhow, so do not note that the target has a reference to it
+  if (!willBeIgnored) {
+    exceptionTargetNames.insert(ret.name);
+  }
+  return ret.name;
+}
+
+void WasmBinaryBuilder::visitBreak(Break* curr, uint8_t code) {
+  BYN_TRACE("zz node: Break, code " << int32_t(code) << std::endl);
+  BreakTarget target = getBreakTarget(getU32LEB());
+  curr->name = target.name;
+  if (code == BinaryConsts::BrIf) {
+    curr->condition = popNonVoidExpression();
+  }
+  if (target.type.isConcrete()) {
+    curr->value = popTypedExpression(target.type);
+  }
+  curr->finalize();
+}
+
+void WasmBinaryBuilder::visitSwitch(Switch* curr) {
+  BYN_TRACE("zz node: Switch\n");
+  curr->condition = popNonVoidExpression();
+  auto numTargets = getU32LEB();
+  BYN_TRACE("targets: " << numTargets << std::endl);
+  for (size_t i = 0; i < numTargets; i++) {
+    curr->targets.push_back(getBreakTarget(getU32LEB()).name);
+  }
+  auto defaultTarget = getBreakTarget(getU32LEB());
+  curr->default_ = defaultTarget.name;
+  BYN_TRACE("default: " << curr->default_ << "\n");
+  if (defaultTarget.type.isConcrete()) {
+    curr->value = popTypedExpression(defaultTarget.type);
+  }
+  curr->finalize();
+}
+
+void WasmBinaryBuilder::visitCall(Call* curr) {
+  BYN_TRACE("zz node: Call\n");
+  auto index = getU32LEB();
+  auto sig = getSignatureByFunctionIndex(index);
+  auto num = sig.params.size();
+  curr->operands.resize(num);
+  for (size_t i = 0; i < num; i++) {
+    curr->operands[num - i - 1] = popNonVoidExpression();
+  }
+  curr->type = sig.results;
+  // We don't know function names yet.
+  functionRefs[index].push_back(&curr->target);
+  curr->finalize();
+}
+
+void WasmBinaryBuilder::visitCallIndirect(CallIndirect* curr) {
+  BYN_TRACE("zz node: CallIndirect\n");
+  auto index = getU32LEB();
+  curr->heapType = getTypeByIndex(index);
+  Index tableIdx = getU32LEB();
+  // TODO: Handle error cases where `heapType` is not a signature?
+  auto num = curr->heapType.getSignature().params.size();
+  curr->operands.resize(num);
+  curr->target = popNonVoidExpression();
+  for (size_t i = 0; i < num; i++) {
+    curr->operands[num - i - 1] = popNonVoidExpression();
+  }
+  // Defer setting the table name for later, when we know it.
+  tableRefs[tableIdx].push_back(&curr->table);
+  curr->finalize();
+}
+
+void WasmBinaryBuilder::visitLocalGet(LocalGet* curr) {
+  BYN_TRACE("zz node: LocalGet " << pos << std::endl);
+  requireFunctionContext("local.get");
+  curr->index = getU32LEB();
+  if (curr->index >= currFunction->getNumLocals()) {
+    throwError("bad local.get index");
+  }
+  curr->type = currFunction->getLocalType(curr->index);
+  curr->finalize();
+}
+
+void WasmBinaryBuilder::visitLocalSet(LocalSet* curr, uint8_t code) {
+  BYN_TRACE("zz node: Set|LocalTee\n");
+  requireFunctionContext("local.set outside of function");
+  curr->index = getU32LEB();
+  if (curr->index >= currFunction->getNumLocals()) {
+    throwError("bad local.set index");
+  }
+  curr->value = popNonVoidExpression();
+  if (code == BinaryConsts::LocalTee) {
+    curr->makeTee(currFunction->getLocalType(curr->index));
+  } else {
+    curr->makeSet();
+  }
+  curr->finalize();
+}
+
+void WasmBinaryBuilder::visitGlobalGet(GlobalGet* curr) {
+  BYN_TRACE("zz node: GlobalGet " << pos << std::endl);
+  auto index = getU32LEB();
+  if (index >= wasm.globals.size()) {
+    throwError("invalid global index");
+  }
+  auto* global = wasm.globals[index].get();
+  curr->name = global->name;
+  curr->type = global->type;
+  globalRefs[index].push_back(&curr->name); // we don't know the final name yet
+}
+
+void WasmBinaryBuilder::visitGlobalSet(GlobalSet* curr) {
+  BYN_TRACE("zz node: GlobalSet\n");
+  auto index = getU32LEB();
+  if (index >= wasm.globals.size()) {
+    throwError("invalid global index");
+  }
+  curr->name = wasm.globals[index]->name;
+  curr->value = popNonVoidExpression();
+  globalRefs[index].push_back(&curr->name); // we don't know the final name yet
+  curr->finalize();
+}
+
+Index WasmBinaryBuilder::readMemoryAccess(Address& alignment, Address& offset) {
+  auto rawAlignment = getU32LEB();
+  bool hasMemIdx = false;
+  Index memIdx = 0;
+  // Check bit 6 in the alignment to know whether a memory index is present per:
+  // https://github.com/WebAssembly/multi-memory/blob/main/proposals/multi-memory/Overview.md
+  if (rawAlignment & (1 << (6))) {
+    hasMemIdx = true;
+    // Clear the bit before we parse alignment
+    rawAlignment = rawAlignment & ~(1 << 6);
+  }
+
+  if (rawAlignment > 8) {
+    throwError("Alignment must be of a reasonable size");
+  }
+
+  alignment = Bits::pow2(rawAlignment);
+  if (hasMemIdx) {
+    memIdx = getU32LEB();
+  }
+  if (memIdx >= wasm.memories.size()) {
+    throwError("Memory index out of range while reading memory alignment.");
+  }
+  auto* memory = wasm.memories[memIdx].get();
+  offset = memory->indexType == Type::i32 ? getU32LEB() : getU64LEB();
+
+  return memIdx;
+}
+
+bool WasmBinaryBuilder::maybeVisitLoad(Expression*& out,
+                                       uint8_t code,
+                                       bool isAtomic) {
+  Load* curr;
+  auto allocate = [&]() {
+    curr = allocator.alloc<Load>();
+  };
+  if (!isAtomic) {
+    switch (code) {
+      case BinaryConsts::I32LoadMem8S:
+        allocate();
+        curr->bytes = 1;
+        curr->type = Type::i32;
+        curr->signed_ = true;
+        break;
+      case BinaryConsts::I32LoadMem8U:
+        allocate();
+        curr->bytes = 1;
+        curr->type = Type::i32;
+        break;
+      case BinaryConsts::I32LoadMem16S:
+        allocate();
+        curr->bytes = 2;
+        curr->type = Type::i32;
+        curr->signed_ = true;
+        break;
+      case BinaryConsts::I32LoadMem16U:
+        allocate();
+        curr->bytes = 2;
+        curr->type = Type::i32;
+        break;
+      case BinaryConsts::I32LoadMem:
+        allocate();
+        curr->bytes = 4;
+        curr->type = Type::i32;
+        break;
+      case BinaryConsts::I64LoadMem8S:
+        allocate();
+        curr->bytes = 1;
+        curr->type = Type::i64;
+        curr->signed_ = true;
+        break;
+      case BinaryConsts::I64LoadMem8U:
+        allocate();
+        curr->bytes = 1;
+        curr->type = Type::i64;
+        break;
+      case BinaryConsts::I64LoadMem16S:
+        allocate();
+        curr->bytes = 2;
+        curr->type = Type::i64;
+        curr->signed_ = true;
+        break;
+      case BinaryConsts::I64LoadMem16U:
+        allocate();
+        curr->bytes = 2;
+        curr->type = Type::i64;
+        break;
+      case BinaryConsts::I64LoadMem32S:
+        allocate();
+        curr->bytes = 4;
+        curr->type = Type::i64;
+        curr->signed_ = true;
+        break;
+      case BinaryConsts::I64LoadMem32U:
+        allocate();
+        curr->bytes = 4;
+        curr->type = Type::i64;
+        break;
+      case BinaryConsts::I64LoadMem:
+        allocate();
+        curr->bytes = 8;
+        curr->type = Type::i64;
+        break;
+      case BinaryConsts::F32LoadMem:
+        allocate();
+        curr->bytes = 4;
+        curr->type = Type::f32;
+        break;
+      case BinaryConsts::F64LoadMem:
+        allocate();
+        curr->bytes = 8;
+        curr->type = Type::f64;
+        break;
+      default:
+        return false;
+    }
+    BYN_TRACE("zz node: Load\n");
+  } else {
+    switch (code) {
+      case BinaryConsts::I32AtomicLoad8U:
+        allocate();
+        curr->bytes = 1;
+        curr->type = Type::i32;
+        break;
+      case BinaryConsts::I32AtomicLoad16U:
+        allocate();
+        curr->bytes = 2;
+        curr->type = Type::i32;
+        break;
+      case BinaryConsts::I32AtomicLoad:
+        allocate();
+        curr->bytes = 4;
+        curr->type = Type::i32;
+        break;
+      case BinaryConsts::I64AtomicLoad8U:
+        allocate();
+        curr->bytes = 1;
+        curr->type = Type::i64;
+        break;
+      case BinaryConsts::I64AtomicLoad16U:
+        allocate();
+        curr->bytes = 2;
+        curr->type = Type::i64;
+        break;
+      case BinaryConsts::I64AtomicLoad32U:
+        allocate();
+        curr->bytes = 4;
+        curr->type = Type::i64;
+        break;
+      case BinaryConsts::I64AtomicLoad:
+        allocate();
+        curr->bytes = 8;
+        curr->type = Type::i64;
+        break;
+      default:
+        return false;
+    }
+    BYN_TRACE("zz node: AtomicLoad\n");
+  }
+
+  curr->isAtomic = isAtomic;
+  Index memIdx = readMemoryAccess(curr->align, curr->offset);
+  memoryRefs[memIdx].push_back(&curr->memory);
+  curr->ptr = popNonVoidExpression();
+  curr->finalize();
+  out = curr;
+  return true;
+}
+
+bool WasmBinaryBuilder::maybeVisitStore(Expression*& out,
+                                        uint8_t code,
+                                        bool isAtomic) {
+  Store* curr;
+  if (!isAtomic) {
+    switch (code) {
+      case BinaryConsts::I32StoreMem8:
+        curr = allocator.alloc<Store>();
+        curr->bytes = 1;
+        curr->valueType = Type::i32;
+        break;
+      case BinaryConsts::I32StoreMem16:
+        curr = allocator.alloc<Store>();
+        curr->bytes = 2;
+        curr->valueType = Type::i32;
+        break;
+      case BinaryConsts::I32StoreMem:
+        curr = allocator.alloc<Store>();
+        curr->bytes = 4;
+        curr->valueType = Type::i32;
+        break;
+      case BinaryConsts::I64StoreMem8:
+        curr = allocator.alloc<Store>();
+        curr->bytes = 1;
+        curr->valueType = Type::i64;
+        break;
+      case BinaryConsts::I64StoreMem16:
+        curr = allocator.alloc<Store>();
+        curr->bytes = 2;
+   
