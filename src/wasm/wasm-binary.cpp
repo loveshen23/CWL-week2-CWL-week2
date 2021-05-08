@@ -4623,4 +4623,378 @@ bool WasmBinaryBuilder::maybeVisitStore(Expression*& out,
       case BinaryConsts::I64StoreMem16:
         curr = allocator.alloc<Store>();
         curr->bytes = 2;
-   
+        curr->valueType = Type::i64;
+        break;
+      case BinaryConsts::I64StoreMem32:
+        curr = allocator.alloc<Store>();
+        curr->bytes = 4;
+        curr->valueType = Type::i64;
+        break;
+      case BinaryConsts::I64StoreMem:
+        curr = allocator.alloc<Store>();
+        curr->bytes = 8;
+        curr->valueType = Type::i64;
+        break;
+      case BinaryConsts::F32StoreMem:
+        curr = allocator.alloc<Store>();
+        curr->bytes = 4;
+        curr->valueType = Type::f32;
+        break;
+      case BinaryConsts::F64StoreMem:
+        curr = allocator.alloc<Store>();
+        curr->bytes = 8;
+        curr->valueType = Type::f64;
+        break;
+      default:
+        return false;
+    }
+  } else {
+    switch (code) {
+      case BinaryConsts::I32AtomicStore8:
+        curr = allocator.alloc<Store>();
+        curr->bytes = 1;
+        curr->valueType = Type::i32;
+        break;
+      case BinaryConsts::I32AtomicStore16:
+        curr = allocator.alloc<Store>();
+        curr->bytes = 2;
+        curr->valueType = Type::i32;
+        break;
+      case BinaryConsts::I32AtomicStore:
+        curr = allocator.alloc<Store>();
+        curr->bytes = 4;
+        curr->valueType = Type::i32;
+        break;
+      case BinaryConsts::I64AtomicStore8:
+        curr = allocator.alloc<Store>();
+        curr->bytes = 1;
+        curr->valueType = Type::i64;
+        break;
+      case BinaryConsts::I64AtomicStore16:
+        curr = allocator.alloc<Store>();
+        curr->bytes = 2;
+        curr->valueType = Type::i64;
+        break;
+      case BinaryConsts::I64AtomicStore32:
+        curr = allocator.alloc<Store>();
+        curr->bytes = 4;
+        curr->valueType = Type::i64;
+        break;
+      case BinaryConsts::I64AtomicStore:
+        curr = allocator.alloc<Store>();
+        curr->bytes = 8;
+        curr->valueType = Type::i64;
+        break;
+      default:
+        return false;
+    }
+  }
+
+  curr->isAtomic = isAtomic;
+  BYN_TRACE("zz node: Store\n");
+  Index memIdx = readMemoryAccess(curr->align, curr->offset);
+  memoryRefs[memIdx].push_back(&curr->memory);
+  curr->value = popNonVoidExpression();
+  curr->ptr = popNonVoidExpression();
+  curr->finalize();
+  out = curr;
+  return true;
+}
+
+bool WasmBinaryBuilder::maybeVisitAtomicRMW(Expression*& out, uint8_t code) {
+  if (code < BinaryConsts::AtomicRMWOps_Begin ||
+      code > BinaryConsts::AtomicRMWOps_End) {
+    return false;
+  }
+  auto* curr = allocator.alloc<AtomicRMW>();
+
+  // Set curr to the given opcode, type and size.
+#define SET(opcode, optype, size)                                              \
+  curr->op = RMW##opcode;                                                      \
+  curr->type = optype;                                                         \
+  curr->bytes = size
+
+  // Handle the cases for all the valid types for a particular opcode
+#define SET_FOR_OP(Op)                                                         \
+  case BinaryConsts::I32AtomicRMW##Op:                                         \
+    SET(Op, Type::i32, 4);                                                     \
+    break;                                                                     \
+  case BinaryConsts::I32AtomicRMW##Op##8U:                                     \
+    SET(Op, Type::i32, 1);                                                     \
+    break;                                                                     \
+  case BinaryConsts::I32AtomicRMW##Op##16U:                                    \
+    SET(Op, Type::i32, 2);                                                     \
+    break;                                                                     \
+  case BinaryConsts::I64AtomicRMW##Op:                                         \
+    SET(Op, Type::i64, 8);                                                     \
+    break;                                                                     \
+  case BinaryConsts::I64AtomicRMW##Op##8U:                                     \
+    SET(Op, Type::i64, 1);                                                     \
+    break;                                                                     \
+  case BinaryConsts::I64AtomicRMW##Op##16U:                                    \
+    SET(Op, Type::i64, 2);                                                     \
+    break;                                                                     \
+  case BinaryConsts::I64AtomicRMW##Op##32U:                                    \
+    SET(Op, Type::i64, 4);                                                     \
+    break;
+
+  switch (code) {
+    SET_FOR_OP(Add);
+    SET_FOR_OP(Sub);
+    SET_FOR_OP(And);
+    SET_FOR_OP(Or);
+    SET_FOR_OP(Xor);
+    SET_FOR_OP(Xchg);
+    default:
+      WASM_UNREACHABLE("unexpected opcode");
+  }
+#undef SET_FOR_OP
+#undef SET
+
+  BYN_TRACE("zz node: AtomicRMW\n");
+  Address readAlign;
+  Index memIdx = readMemoryAccess(readAlign, curr->offset);
+  memoryRefs[memIdx].push_back(&curr->memory);
+  if (readAlign != curr->bytes) {
+    throwError("Align of AtomicRMW must match size");
+  }
+  curr->value = popNonVoidExpression();
+  curr->ptr = popNonVoidExpression();
+  curr->finalize();
+  out = curr;
+  return true;
+}
+
+bool WasmBinaryBuilder::maybeVisitAtomicCmpxchg(Expression*& out,
+                                                uint8_t code) {
+  if (code < BinaryConsts::AtomicCmpxchgOps_Begin ||
+      code > BinaryConsts::AtomicCmpxchgOps_End) {
+    return false;
+  }
+  auto* curr = allocator.alloc<AtomicCmpxchg>();
+
+  // Set curr to the given type and size.
+#define SET(optype, size)                                                      \
+  curr->type = optype;                                                         \
+  curr->bytes = size
+
+  switch (code) {
+    case BinaryConsts::I32AtomicCmpxchg:
+      SET(Type::i32, 4);
+      break;
+    case BinaryConsts::I64AtomicCmpxchg:
+      SET(Type::i64, 8);
+      break;
+    case BinaryConsts::I32AtomicCmpxchg8U:
+      SET(Type::i32, 1);
+      break;
+    case BinaryConsts::I32AtomicCmpxchg16U:
+      SET(Type::i32, 2);
+      break;
+    case BinaryConsts::I64AtomicCmpxchg8U:
+      SET(Type::i64, 1);
+      break;
+    case BinaryConsts::I64AtomicCmpxchg16U:
+      SET(Type::i64, 2);
+      break;
+    case BinaryConsts::I64AtomicCmpxchg32U:
+      SET(Type::i64, 4);
+      break;
+    default:
+      WASM_UNREACHABLE("unexpected opcode");
+  }
+
+  BYN_TRACE("zz node: AtomicCmpxchg\n");
+  Address readAlign;
+  Index memIdx = readMemoryAccess(readAlign, curr->offset);
+  memoryRefs[memIdx].push_back(&curr->memory);
+  if (readAlign != curr->bytes) {
+    throwError("Align of AtomicCpxchg must match size");
+  }
+  curr->replacement = popNonVoidExpression();
+  curr->expected = popNonVoidExpression();
+  curr->ptr = popNonVoidExpression();
+  curr->finalize();
+  out = curr;
+  return true;
+}
+
+bool WasmBinaryBuilder::maybeVisitAtomicWait(Expression*& out, uint8_t code) {
+  if (code < BinaryConsts::I32AtomicWait ||
+      code > BinaryConsts::I64AtomicWait) {
+    return false;
+  }
+  auto* curr = allocator.alloc<AtomicWait>();
+
+  switch (code) {
+    case BinaryConsts::I32AtomicWait:
+      curr->expectedType = Type::i32;
+      break;
+    case BinaryConsts::I64AtomicWait:
+      curr->expectedType = Type::i64;
+      break;
+    default:
+      WASM_UNREACHABLE("unexpected opcode");
+  }
+  curr->type = Type::i32;
+  BYN_TRACE("zz node: AtomicWait\n");
+  curr->timeout = popNonVoidExpression();
+  curr->expected = popNonVoidExpression();
+  curr->ptr = popNonVoidExpression();
+  Address readAlign;
+  Index memIdx = readMemoryAccess(readAlign, curr->offset);
+  memoryRefs[memIdx].push_back(&curr->memory);
+  if (readAlign != curr->expectedType.getByteSize()) {
+    throwError("Align of AtomicWait must match size");
+  }
+  curr->finalize();
+  out = curr;
+  return true;
+}
+
+bool WasmBinaryBuilder::maybeVisitAtomicNotify(Expression*& out, uint8_t code) {
+  if (code != BinaryConsts::AtomicNotify) {
+    return false;
+  }
+  auto* curr = allocator.alloc<AtomicNotify>();
+  BYN_TRACE("zz node: AtomicNotify\n");
+
+  curr->type = Type::i32;
+  curr->notifyCount = popNonVoidExpression();
+  curr->ptr = popNonVoidExpression();
+  Address readAlign;
+  Index memIdx = readMemoryAccess(readAlign, curr->offset);
+  memoryRefs[memIdx].push_back(&curr->memory);
+  if (readAlign != curr->type.getByteSize()) {
+    throwError("Align of AtomicNotify must match size");
+  }
+  curr->finalize();
+  out = curr;
+  return true;
+}
+
+bool WasmBinaryBuilder::maybeVisitAtomicFence(Expression*& out, uint8_t code) {
+  if (code != BinaryConsts::AtomicFence) {
+    return false;
+  }
+  auto* curr = allocator.alloc<AtomicFence>();
+  BYN_TRACE("zz node: AtomicFence\n");
+  curr->order = getU32LEB();
+  curr->finalize();
+  out = curr;
+  return true;
+}
+
+bool WasmBinaryBuilder::maybeVisitConst(Expression*& out, uint8_t code) {
+  Const* curr;
+  BYN_TRACE("zz node: Const, code " << code << std::endl);
+  switch (code) {
+    case BinaryConsts::I32Const:
+      curr = allocator.alloc<Const>();
+      curr->value = Literal(getS32LEB());
+      break;
+    case BinaryConsts::I64Const:
+      curr = allocator.alloc<Const>();
+      curr->value = Literal(getS64LEB());
+      break;
+    case BinaryConsts::F32Const:
+      curr = allocator.alloc<Const>();
+      curr->value = getFloat32Literal();
+      break;
+    case BinaryConsts::F64Const:
+      curr = allocator.alloc<Const>();
+      curr->value = getFloat64Literal();
+      break;
+    default:
+      return false;
+  }
+  curr->type = curr->value.type;
+  out = curr;
+
+  return true;
+}
+
+bool WasmBinaryBuilder::maybeVisitUnary(Expression*& out, uint8_t code) {
+  Unary* curr;
+  switch (code) {
+    case BinaryConsts::I32Clz:
+      curr = allocator.alloc<Unary>();
+      curr->op = ClzInt32;
+      break;
+    case BinaryConsts::I64Clz:
+      curr = allocator.alloc<Unary>();
+      curr->op = ClzInt64;
+      break;
+    case BinaryConsts::I32Ctz:
+      curr = allocator.alloc<Unary>();
+      curr->op = CtzInt32;
+      break;
+    case BinaryConsts::I64Ctz:
+      curr = allocator.alloc<Unary>();
+      curr->op = CtzInt64;
+      break;
+    case BinaryConsts::I32Popcnt:
+      curr = allocator.alloc<Unary>();
+      curr->op = PopcntInt32;
+      break;
+    case BinaryConsts::I64Popcnt:
+      curr = allocator.alloc<Unary>();
+      curr->op = PopcntInt64;
+      break;
+    case BinaryConsts::I32EqZ:
+      curr = allocator.alloc<Unary>();
+      curr->op = EqZInt32;
+      break;
+    case BinaryConsts::I64EqZ:
+      curr = allocator.alloc<Unary>();
+      curr->op = EqZInt64;
+      break;
+    case BinaryConsts::F32Neg:
+      curr = allocator.alloc<Unary>();
+      curr->op = NegFloat32;
+      break;
+    case BinaryConsts::F64Neg:
+      curr = allocator.alloc<Unary>();
+      curr->op = NegFloat64;
+      break;
+    case BinaryConsts::F32Abs:
+      curr = allocator.alloc<Unary>();
+      curr->op = AbsFloat32;
+      break;
+    case BinaryConsts::F64Abs:
+      curr = allocator.alloc<Unary>();
+      curr->op = AbsFloat64;
+      break;
+    case BinaryConsts::F32Ceil:
+      curr = allocator.alloc<Unary>();
+      curr->op = CeilFloat32;
+      break;
+    case BinaryConsts::F64Ceil:
+      curr = allocator.alloc<Unary>();
+      curr->op = CeilFloat64;
+      break;
+    case BinaryConsts::F32Floor:
+      curr = allocator.alloc<Unary>();
+      curr->op = FloorFloat32;
+      break;
+    case BinaryConsts::F64Floor:
+      curr = allocator.alloc<Unary>();
+      curr->op = FloorFloat64;
+      break;
+    case BinaryConsts::F32NearestInt:
+      curr = allocator.alloc<Unary>();
+      curr->op = NearestFloat32;
+      break;
+    case BinaryConsts::F64NearestInt:
+      curr = allocator.alloc<Unary>();
+      curr->op = NearestFloat64;
+      break;
+    case BinaryConsts::F32Sqrt:
+      curr = allocator.alloc<Unary>();
+      curr->op = SqrtFloat32;
+      break;
+    case BinaryConsts::F64Sqrt:
+      curr = allocator.alloc<Unary>();
+      curr->op = SqrtFloat64;
+      break;
+    case Bi
