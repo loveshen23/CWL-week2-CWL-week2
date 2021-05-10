@@ -4997,4 +4997,373 @@ bool WasmBinaryBuilder::maybeVisitUnary(Expression*& out, uint8_t code) {
       curr = allocator.alloc<Unary>();
       curr->op = SqrtFloat64;
       break;
-    case Bi
+    case BinaryConsts::F32UConvertI32:
+      curr = allocator.alloc<Unary>();
+      curr->op = ConvertUInt32ToFloat32;
+      break;
+    case BinaryConsts::F64UConvertI32:
+      curr = allocator.alloc<Unary>();
+      curr->op = ConvertUInt32ToFloat64;
+      break;
+    case BinaryConsts::F32SConvertI32:
+      curr = allocator.alloc<Unary>();
+      curr->op = ConvertSInt32ToFloat32;
+      break;
+    case BinaryConsts::F64SConvertI32:
+      curr = allocator.alloc<Unary>();
+      curr->op = ConvertSInt32ToFloat64;
+      break;
+    case BinaryConsts::F32UConvertI64:
+      curr = allocator.alloc<Unary>();
+      curr->op = ConvertUInt64ToFloat32;
+      break;
+    case BinaryConsts::F64UConvertI64:
+      curr = allocator.alloc<Unary>();
+      curr->op = ConvertUInt64ToFloat64;
+      break;
+    case BinaryConsts::F32SConvertI64:
+      curr = allocator.alloc<Unary>();
+      curr->op = ConvertSInt64ToFloat32;
+      break;
+    case BinaryConsts::F64SConvertI64:
+      curr = allocator.alloc<Unary>();
+      curr->op = ConvertSInt64ToFloat64;
+      break;
+
+    case BinaryConsts::I64SExtendI32:
+      curr = allocator.alloc<Unary>();
+      curr->op = ExtendSInt32;
+      break;
+    case BinaryConsts::I64UExtendI32:
+      curr = allocator.alloc<Unary>();
+      curr->op = ExtendUInt32;
+      break;
+    case BinaryConsts::I32WrapI64:
+      curr = allocator.alloc<Unary>();
+      curr->op = WrapInt64;
+      break;
+
+    case BinaryConsts::I32UTruncF32:
+      curr = allocator.alloc<Unary>();
+      curr->op = TruncUFloat32ToInt32;
+      break;
+    case BinaryConsts::I32UTruncF64:
+      curr = allocator.alloc<Unary>();
+      curr->op = TruncUFloat64ToInt32;
+      break;
+    case BinaryConsts::I32STruncF32:
+      curr = allocator.alloc<Unary>();
+      curr->op = TruncSFloat32ToInt32;
+      break;
+    case BinaryConsts::I32STruncF64:
+      curr = allocator.alloc<Unary>();
+      curr->op = TruncSFloat64ToInt32;
+      break;
+    case BinaryConsts::I64UTruncF32:
+      curr = allocator.alloc<Unary>();
+      curr->op = TruncUFloat32ToInt64;
+      break;
+    case BinaryConsts::I64UTruncF64:
+      curr = allocator.alloc<Unary>();
+      curr->op = TruncUFloat64ToInt64;
+      break;
+    case BinaryConsts::I64STruncF32:
+      curr = allocator.alloc<Unary>();
+      curr->op = TruncSFloat32ToInt64;
+      break;
+    case BinaryConsts::I64STruncF64:
+      curr = allocator.alloc<Unary>();
+      curr->op = TruncSFloat64ToInt64;
+      break;
+
+    case BinaryConsts::F32Trunc:
+      curr = allocator.alloc<Unary>();
+      curr->op = TruncFloat32;
+      break;
+    case BinaryConsts::F64Trunc:
+      curr = allocator.alloc<Unary>();
+      curr->op = TruncFloat64;
+      break;
+
+    case BinaryConsts::F32DemoteI64:
+      curr = allocator.alloc<Unary>();
+      curr->op = DemoteFloat64;
+      break;
+    case BinaryConsts::F64PromoteF32:
+      curr = allocator.alloc<Unary>();
+      curr->op = PromoteFloat32;
+      break;
+    case BinaryConsts::I32ReinterpretF32:
+      curr = allocator.alloc<Unary>();
+      curr->op = ReinterpretFloat32;
+      break;
+    case BinaryConsts::I64ReinterpretF64:
+      curr = allocator.alloc<Unary>();
+      curr->op = ReinterpretFloat64;
+      break;
+    case BinaryConsts::F32ReinterpretI32:
+      curr = allocator.alloc<Unary>();
+      curr->op = ReinterpretInt32;
+      break;
+    case BinaryConsts::F64ReinterpretI64:
+      curr = allocator.alloc<Unary>();
+      curr->op = ReinterpretInt64;
+      break;
+
+    case BinaryConsts::I32ExtendS8:
+      curr = allocator.alloc<Unary>();
+      curr->op = ExtendS8Int32;
+      break;
+    case BinaryConsts::I32ExtendS16:
+      curr = allocator.alloc<Unary>();
+      curr->op = ExtendS16Int32;
+      break;
+    case BinaryConsts::I64ExtendS8:
+      curr = allocator.alloc<Unary>();
+      curr->op = ExtendS8Int64;
+      break;
+    case BinaryConsts::I64ExtendS16:
+      curr = allocator.alloc<Unary>();
+      curr->op = ExtendS16Int64;
+      break;
+    case BinaryConsts::I64ExtendS32:
+      curr = allocator.alloc<Unary>();
+      curr->op = ExtendS32Int64;
+      break;
+
+    default:
+      return false;
+  }
+  BYN_TRACE("zz node: Unary\n");
+  curr->value = popNonVoidExpression();
+  curr->finalize();
+  out = curr;
+  return true;
+}
+
+bool WasmBinaryBuilder::maybeVisitTruncSat(Expression*& out, uint32_t code) {
+  Unary* curr;
+  switch (code) {
+    case BinaryConsts::I32STruncSatF32:
+      curr = allocator.alloc<Unary>();
+      curr->op = TruncSatSFloat32ToInt32;
+      break;
+    case BinaryConsts::I32UTruncSatF32:
+      curr = allocator.alloc<Unary>();
+      curr->op = TruncSatUFloat32ToInt32;
+      break;
+    case BinaryConsts::I32STruncSatF64:
+      curr = allocator.alloc<Unary>();
+      curr->op = TruncSatSFloat64ToInt32;
+      break;
+    case BinaryConsts::I32UTruncSatF64:
+      curr = allocator.alloc<Unary>();
+      curr->op = TruncSatUFloat64ToInt32;
+      break;
+    case BinaryConsts::I64STruncSatF32:
+      curr = allocator.alloc<Unary>();
+      curr->op = TruncSatSFloat32ToInt64;
+      break;
+    case BinaryConsts::I64UTruncSatF32:
+      curr = allocator.alloc<Unary>();
+      curr->op = TruncSatUFloat32ToInt64;
+      break;
+    case BinaryConsts::I64STruncSatF64:
+      curr = allocator.alloc<Unary>();
+      curr->op = TruncSatSFloat64ToInt64;
+      break;
+    case BinaryConsts::I64UTruncSatF64:
+      curr = allocator.alloc<Unary>();
+      curr->op = TruncSatUFloat64ToInt64;
+      break;
+    default:
+      return false;
+  }
+  BYN_TRACE("zz node: Unary (nontrapping float-to-int)\n");
+  curr->value = popNonVoidExpression();
+  curr->finalize();
+  out = curr;
+  return true;
+}
+
+bool WasmBinaryBuilder::maybeVisitMemoryInit(Expression*& out, uint32_t code) {
+  if (code != BinaryConsts::MemoryInit) {
+    return false;
+  }
+  auto* curr = allocator.alloc<MemoryInit>();
+  curr->size = popNonVoidExpression();
+  curr->offset = popNonVoidExpression();
+  curr->dest = popNonVoidExpression();
+  curr->segment = getU32LEB();
+  Index memIdx = getU32LEB();
+  curr->finalize();
+  memoryRefs[memIdx].push_back(&curr->memory);
+  out = curr;
+  return true;
+}
+
+bool WasmBinaryBuilder::maybeVisitDataDrop(Expression*& out, uint32_t code) {
+  if (code != BinaryConsts::DataDrop) {
+    return false;
+  }
+  auto* curr = allocator.alloc<DataDrop>();
+  curr->segment = getU32LEB();
+  curr->finalize();
+  out = curr;
+  return true;
+}
+
+bool WasmBinaryBuilder::maybeVisitMemoryCopy(Expression*& out, uint32_t code) {
+  if (code != BinaryConsts::MemoryCopy) {
+    return false;
+  }
+  auto* curr = allocator.alloc<MemoryCopy>();
+  curr->size = popNonVoidExpression();
+  curr->source = popNonVoidExpression();
+  curr->dest = popNonVoidExpression();
+  Index destIdx = getU32LEB();
+  Index sourceIdx = getU32LEB();
+  curr->finalize();
+  memoryRefs[destIdx].push_back(&curr->destMemory);
+  memoryRefs[sourceIdx].push_back(&curr->sourceMemory);
+  out = curr;
+  return true;
+}
+
+bool WasmBinaryBuilder::maybeVisitMemoryFill(Expression*& out, uint32_t code) {
+  if (code != BinaryConsts::MemoryFill) {
+    return false;
+  }
+  auto* curr = allocator.alloc<MemoryFill>();
+  curr->size = popNonVoidExpression();
+  curr->value = popNonVoidExpression();
+  curr->dest = popNonVoidExpression();
+  Index memIdx = getU32LEB();
+  curr->finalize();
+  memoryRefs[memIdx].push_back(&curr->memory);
+  out = curr;
+  return true;
+}
+
+bool WasmBinaryBuilder::maybeVisitTableSize(Expression*& out, uint32_t code) {
+  if (code != BinaryConsts::TableSize) {
+    return false;
+  }
+  Index tableIdx = getU32LEB();
+  if (tableIdx >= wasm.tables.size()) {
+    throwError("bad table index");
+  }
+  auto* curr = allocator.alloc<TableSize>();
+  curr->finalize();
+  // Defer setting the table name for later, when we know it.
+  tableRefs[tableIdx].push_back(&curr->table);
+  out = curr;
+  return true;
+}
+
+bool WasmBinaryBuilder::maybeVisitTableGrow(Expression*& out, uint32_t code) {
+  if (code != BinaryConsts::TableGrow) {
+    return false;
+  }
+  Index tableIdx = getU32LEB();
+  if (tableIdx >= wasm.tables.size()) {
+    throwError("bad table index");
+  }
+  auto* curr = allocator.alloc<TableGrow>();
+  curr->delta = popNonVoidExpression();
+  curr->value = popNonVoidExpression();
+  curr->finalize();
+  // Defer setting the table name for later, when we know it.
+  tableRefs[tableIdx].push_back(&curr->table);
+  out = curr;
+  return true;
+}
+
+bool WasmBinaryBuilder::maybeVisitBinary(Expression*& out, uint8_t code) {
+  Binary* curr;
+#define INT_TYPED_CODE(code)                                                   \
+  {                                                                            \
+    case BinaryConsts::I32##code:                                              \
+      curr = allocator.alloc<Binary>();                                        \
+      curr->op = code##Int32;                                                  \
+      break;                                                                   \
+    case BinaryConsts::I64##code:                                              \
+      curr = allocator.alloc<Binary>();                                        \
+      curr->op = code##Int64;                                                  \
+      break;                                                                   \
+  }
+#define FLOAT_TYPED_CODE(code)                                                 \
+  {                                                                            \
+    case BinaryConsts::F32##code:                                              \
+      curr = allocator.alloc<Binary>();                                        \
+      curr->op = code##Float32;                                                \
+      break;                                                                   \
+    case BinaryConsts::F64##code:                                              \
+      curr = allocator.alloc<Binary>();                                        \
+      curr->op = code##Float64;                                                \
+      break;                                                                   \
+  }
+#define TYPED_CODE(code)                                                       \
+  {                                                                            \
+    INT_TYPED_CODE(code)                                                       \
+    FLOAT_TYPED_CODE(code)                                                     \
+  }
+
+  switch (code) {
+    TYPED_CODE(Add);
+    TYPED_CODE(Sub);
+    TYPED_CODE(Mul);
+    INT_TYPED_CODE(DivS);
+    INT_TYPED_CODE(DivU);
+    INT_TYPED_CODE(RemS);
+    INT_TYPED_CODE(RemU);
+    INT_TYPED_CODE(And);
+    INT_TYPED_CODE(Or);
+    INT_TYPED_CODE(Xor);
+    INT_TYPED_CODE(Shl);
+    INT_TYPED_CODE(ShrU);
+    INT_TYPED_CODE(ShrS);
+    INT_TYPED_CODE(RotL);
+    INT_TYPED_CODE(RotR);
+    FLOAT_TYPED_CODE(Div);
+    FLOAT_TYPED_CODE(CopySign);
+    FLOAT_TYPED_CODE(Min);
+    FLOAT_TYPED_CODE(Max);
+    TYPED_CODE(Eq);
+    TYPED_CODE(Ne);
+    INT_TYPED_CODE(LtS);
+    INT_TYPED_CODE(LtU);
+    INT_TYPED_CODE(LeS);
+    INT_TYPED_CODE(LeU);
+    INT_TYPED_CODE(GtS);
+    INT_TYPED_CODE(GtU);
+    INT_TYPED_CODE(GeS);
+    INT_TYPED_CODE(GeU);
+    FLOAT_TYPED_CODE(Lt);
+    FLOAT_TYPED_CODE(Le);
+    FLOAT_TYPED_CODE(Gt);
+    FLOAT_TYPED_CODE(Ge);
+    default:
+      return false;
+  }
+  BYN_TRACE("zz node: Binary\n");
+  curr->right = popNonVoidExpression();
+  curr->left = popNonVoidExpression();
+  curr->finalize();
+  out = curr;
+  return true;
+#undef TYPED_CODE
+#undef INT_TYPED_CODE
+#undef FLOAT_TYPED_CODE
+}
+
+bool WasmBinaryBuilder::maybeVisitSIMDBinary(Expression*& out, uint32_t code) {
+  Binary* curr;
+  switch (code) {
+    case BinaryConsts::I8x16Eq:
+      curr = allocator.alloc<Binary>();
+      curr->op = EqVecI8x16;
+      break;
+    case BinaryConsts::I8x16Ne:
+      curr = allocator.alloc<Binary>();
+      curr->op = NeV
