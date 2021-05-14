@@ -6147,3 +6147,407 @@ bool WasmBinaryBuilder::maybeVisitSIMDUnary(Expression*& out, uint32_t code) {
       break;
     case BinaryConsts::I32x4RelaxedTruncF32x4U:
       curr = allocator.alloc<Unary>();
+      curr->op = RelaxedTruncUVecF32x4ToVecI32x4;
+      break;
+    case BinaryConsts::I32x4RelaxedTruncF64x2SZero:
+      curr = allocator.alloc<Unary>();
+      curr->op = RelaxedTruncZeroSVecF64x2ToVecI32x4;
+      break;
+    case BinaryConsts::I32x4RelaxedTruncF64x2UZero:
+      curr = allocator.alloc<Unary>();
+      curr->op = RelaxedTruncZeroUVecF64x2ToVecI32x4;
+      break;
+    default:
+      return false;
+  }
+  curr->value = popNonVoidExpression();
+  curr->finalize();
+  out = curr;
+  return true;
+}
+
+bool WasmBinaryBuilder::maybeVisitSIMDConst(Expression*& out, uint32_t code) {
+  if (code != BinaryConsts::V128Const) {
+    return false;
+  }
+  auto* curr = allocator.alloc<Const>();
+  curr->value = getVec128Literal();
+  curr->finalize();
+  out = curr;
+  return true;
+}
+
+bool WasmBinaryBuilder::maybeVisitSIMDStore(Expression*& out, uint32_t code) {
+  if (code != BinaryConsts::V128Store) {
+    return false;
+  }
+  auto* curr = allocator.alloc<Store>();
+  curr->bytes = 16;
+  curr->valueType = Type::v128;
+  Index memIdx = readMemoryAccess(curr->align, curr->offset);
+  memoryRefs[memIdx].push_back(&curr->memory);
+  curr->isAtomic = false;
+  curr->value = popNonVoidExpression();
+  curr->ptr = popNonVoidExpression();
+  curr->finalize();
+  out = curr;
+  return true;
+}
+
+bool WasmBinaryBuilder::maybeVisitSIMDExtract(Expression*& out, uint32_t code) {
+  SIMDExtract* curr;
+  switch (code) {
+    case BinaryConsts::I8x16ExtractLaneS:
+      curr = allocator.alloc<SIMDExtract>();
+      curr->op = ExtractLaneSVecI8x16;
+      curr->index = getLaneIndex(16);
+      break;
+    case BinaryConsts::I8x16ExtractLaneU:
+      curr = allocator.alloc<SIMDExtract>();
+      curr->op = ExtractLaneUVecI8x16;
+      curr->index = getLaneIndex(16);
+      break;
+    case BinaryConsts::I16x8ExtractLaneS:
+      curr = allocator.alloc<SIMDExtract>();
+      curr->op = ExtractLaneSVecI16x8;
+      curr->index = getLaneIndex(8);
+      break;
+    case BinaryConsts::I16x8ExtractLaneU:
+      curr = allocator.alloc<SIMDExtract>();
+      curr->op = ExtractLaneUVecI16x8;
+      curr->index = getLaneIndex(8);
+      break;
+    case BinaryConsts::I32x4ExtractLane:
+      curr = allocator.alloc<SIMDExtract>();
+      curr->op = ExtractLaneVecI32x4;
+      curr->index = getLaneIndex(4);
+      break;
+    case BinaryConsts::I64x2ExtractLane:
+      curr = allocator.alloc<SIMDExtract>();
+      curr->op = ExtractLaneVecI64x2;
+      curr->index = getLaneIndex(2);
+      break;
+    case BinaryConsts::F32x4ExtractLane:
+      curr = allocator.alloc<SIMDExtract>();
+      curr->op = ExtractLaneVecF32x4;
+      curr->index = getLaneIndex(4);
+      break;
+    case BinaryConsts::F64x2ExtractLane:
+      curr = allocator.alloc<SIMDExtract>();
+      curr->op = ExtractLaneVecF64x2;
+      curr->index = getLaneIndex(2);
+      break;
+    default:
+      return false;
+  }
+  curr->vec = popNonVoidExpression();
+  curr->finalize();
+  out = curr;
+  return true;
+}
+
+bool WasmBinaryBuilder::maybeVisitSIMDReplace(Expression*& out, uint32_t code) {
+  SIMDReplace* curr;
+  switch (code) {
+    case BinaryConsts::I8x16ReplaceLane:
+      curr = allocator.alloc<SIMDReplace>();
+      curr->op = ReplaceLaneVecI8x16;
+      curr->index = getLaneIndex(16);
+      break;
+    case BinaryConsts::I16x8ReplaceLane:
+      curr = allocator.alloc<SIMDReplace>();
+      curr->op = ReplaceLaneVecI16x8;
+      curr->index = getLaneIndex(8);
+      break;
+    case BinaryConsts::I32x4ReplaceLane:
+      curr = allocator.alloc<SIMDReplace>();
+      curr->op = ReplaceLaneVecI32x4;
+      curr->index = getLaneIndex(4);
+      break;
+    case BinaryConsts::I64x2ReplaceLane:
+      curr = allocator.alloc<SIMDReplace>();
+      curr->op = ReplaceLaneVecI64x2;
+      curr->index = getLaneIndex(2);
+      break;
+    case BinaryConsts::F32x4ReplaceLane:
+      curr = allocator.alloc<SIMDReplace>();
+      curr->op = ReplaceLaneVecF32x4;
+      curr->index = getLaneIndex(4);
+      break;
+    case BinaryConsts::F64x2ReplaceLane:
+      curr = allocator.alloc<SIMDReplace>();
+      curr->op = ReplaceLaneVecF64x2;
+      curr->index = getLaneIndex(2);
+      break;
+    default:
+      return false;
+  }
+  curr->value = popNonVoidExpression();
+  curr->vec = popNonVoidExpression();
+  curr->finalize();
+  out = curr;
+  return true;
+}
+
+bool WasmBinaryBuilder::maybeVisitSIMDShuffle(Expression*& out, uint32_t code) {
+  if (code != BinaryConsts::I8x16Shuffle) {
+    return false;
+  }
+  auto* curr = allocator.alloc<SIMDShuffle>();
+  for (auto i = 0; i < 16; ++i) {
+    curr->mask[i] = getLaneIndex(32);
+  }
+  curr->right = popNonVoidExpression();
+  curr->left = popNonVoidExpression();
+  curr->finalize();
+  out = curr;
+  return true;
+}
+
+bool WasmBinaryBuilder::maybeVisitSIMDTernary(Expression*& out, uint32_t code) {
+  SIMDTernary* curr;
+  switch (code) {
+    case BinaryConsts::V128Bitselect:
+      curr = allocator.alloc<SIMDTernary>();
+      curr->op = Bitselect;
+      break;
+    case BinaryConsts::I8x16Laneselect:
+      curr = allocator.alloc<SIMDTernary>();
+      curr->op = LaneselectI8x16;
+      break;
+    case BinaryConsts::I16x8Laneselect:
+      curr = allocator.alloc<SIMDTernary>();
+      curr->op = LaneselectI16x8;
+      break;
+    case BinaryConsts::I32x4Laneselect:
+      curr = allocator.alloc<SIMDTernary>();
+      curr->op = LaneselectI32x4;
+      break;
+    case BinaryConsts::I64x2Laneselect:
+      curr = allocator.alloc<SIMDTernary>();
+      curr->op = LaneselectI64x2;
+      break;
+    case BinaryConsts::F32x4RelaxedFma:
+      curr = allocator.alloc<SIMDTernary>();
+      curr->op = RelaxedFmaVecF32x4;
+      break;
+    case BinaryConsts::F32x4RelaxedFms:
+      curr = allocator.alloc<SIMDTernary>();
+      curr->op = RelaxedFmsVecF32x4;
+      break;
+    case BinaryConsts::F64x2RelaxedFma:
+      curr = allocator.alloc<SIMDTernary>();
+      curr->op = RelaxedFmaVecF64x2;
+      break;
+    case BinaryConsts::F64x2RelaxedFms:
+      curr = allocator.alloc<SIMDTernary>();
+      curr->op = RelaxedFmsVecF64x2;
+      break;
+    case BinaryConsts::I32x4DotI8x16I7x16AddS:
+      curr = allocator.alloc<SIMDTernary>();
+      curr->op = DotI8x16I7x16AddSToVecI32x4;
+      break;
+    default:
+      return false;
+  }
+  curr->c = popNonVoidExpression();
+  curr->b = popNonVoidExpression();
+  curr->a = popNonVoidExpression();
+  curr->finalize();
+  out = curr;
+  return true;
+}
+
+bool WasmBinaryBuilder::maybeVisitSIMDShift(Expression*& out, uint32_t code) {
+  SIMDShift* curr;
+  switch (code) {
+    case BinaryConsts::I8x16Shl:
+      curr = allocator.alloc<SIMDShift>();
+      curr->op = ShlVecI8x16;
+      break;
+    case BinaryConsts::I8x16ShrS:
+      curr = allocator.alloc<SIMDShift>();
+      curr->op = ShrSVecI8x16;
+      break;
+    case BinaryConsts::I8x16ShrU:
+      curr = allocator.alloc<SIMDShift>();
+      curr->op = ShrUVecI8x16;
+      break;
+    case BinaryConsts::I16x8Shl:
+      curr = allocator.alloc<SIMDShift>();
+      curr->op = ShlVecI16x8;
+      break;
+    case BinaryConsts::I16x8ShrS:
+      curr = allocator.alloc<SIMDShift>();
+      curr->op = ShrSVecI16x8;
+      break;
+    case BinaryConsts::I16x8ShrU:
+      curr = allocator.alloc<SIMDShift>();
+      curr->op = ShrUVecI16x8;
+      break;
+    case BinaryConsts::I32x4Shl:
+      curr = allocator.alloc<SIMDShift>();
+      curr->op = ShlVecI32x4;
+      break;
+    case BinaryConsts::I32x4ShrS:
+      curr = allocator.alloc<SIMDShift>();
+      curr->op = ShrSVecI32x4;
+      break;
+    case BinaryConsts::I32x4ShrU:
+      curr = allocator.alloc<SIMDShift>();
+      curr->op = ShrUVecI32x4;
+      break;
+    case BinaryConsts::I64x2Shl:
+      curr = allocator.alloc<SIMDShift>();
+      curr->op = ShlVecI64x2;
+      break;
+    case BinaryConsts::I64x2ShrS:
+      curr = allocator.alloc<SIMDShift>();
+      curr->op = ShrSVecI64x2;
+      break;
+    case BinaryConsts::I64x2ShrU:
+      curr = allocator.alloc<SIMDShift>();
+      curr->op = ShrUVecI64x2;
+      break;
+    default:
+      return false;
+  }
+  curr->shift = popNonVoidExpression();
+  curr->vec = popNonVoidExpression();
+  curr->finalize();
+  out = curr;
+  return true;
+}
+
+bool WasmBinaryBuilder::maybeVisitSIMDLoad(Expression*& out, uint32_t code) {
+  if (code == BinaryConsts::V128Load) {
+    auto* curr = allocator.alloc<Load>();
+    curr->type = Type::v128;
+    curr->bytes = 16;
+    Index memIdx = readMemoryAccess(curr->align, curr->offset);
+    memoryRefs[memIdx].push_back(&curr->memory);
+    curr->isAtomic = false;
+    curr->ptr = popNonVoidExpression();
+    curr->finalize();
+    out = curr;
+    return true;
+  }
+  SIMDLoad* curr;
+  switch (code) {
+    case BinaryConsts::V128Load8Splat:
+      curr = allocator.alloc<SIMDLoad>();
+      curr->op = Load8SplatVec128;
+      break;
+    case BinaryConsts::V128Load16Splat:
+      curr = allocator.alloc<SIMDLoad>();
+      curr->op = Load16SplatVec128;
+      break;
+    case BinaryConsts::V128Load32Splat:
+      curr = allocator.alloc<SIMDLoad>();
+      curr->op = Load32SplatVec128;
+      break;
+    case BinaryConsts::V128Load64Splat:
+      curr = allocator.alloc<SIMDLoad>();
+      curr->op = Load64SplatVec128;
+      break;
+    case BinaryConsts::V128Load8x8S:
+      curr = allocator.alloc<SIMDLoad>();
+      curr->op = Load8x8SVec128;
+      break;
+    case BinaryConsts::V128Load8x8U:
+      curr = allocator.alloc<SIMDLoad>();
+      curr->op = Load8x8UVec128;
+      break;
+    case BinaryConsts::V128Load16x4S:
+      curr = allocator.alloc<SIMDLoad>();
+      curr->op = Load16x4SVec128;
+      break;
+    case BinaryConsts::V128Load16x4U:
+      curr = allocator.alloc<SIMDLoad>();
+      curr->op = Load16x4UVec128;
+      break;
+    case BinaryConsts::V128Load32x2S:
+      curr = allocator.alloc<SIMDLoad>();
+      curr->op = Load32x2SVec128;
+      break;
+    case BinaryConsts::V128Load32x2U:
+      curr = allocator.alloc<SIMDLoad>();
+      curr->op = Load32x2UVec128;
+      break;
+    case BinaryConsts::V128Load32Zero:
+      curr = allocator.alloc<SIMDLoad>();
+      curr->op = Load32ZeroVec128;
+      break;
+    case BinaryConsts::V128Load64Zero:
+      curr = allocator.alloc<SIMDLoad>();
+      curr->op = Load64ZeroVec128;
+      break;
+    default:
+      return false;
+  }
+  Index memIdx = readMemoryAccess(curr->align, curr->offset);
+  memoryRefs[memIdx].push_back(&curr->memory);
+  curr->ptr = popNonVoidExpression();
+  curr->finalize();
+  out = curr;
+  return true;
+}
+
+bool WasmBinaryBuilder::maybeVisitSIMDLoadStoreLane(Expression*& out,
+                                                    uint32_t code) {
+  SIMDLoadStoreLaneOp op;
+  size_t lanes;
+  switch (code) {
+    case BinaryConsts::V128Load8Lane:
+      op = Load8LaneVec128;
+      lanes = 16;
+      break;
+    case BinaryConsts::V128Load16Lane:
+      op = Load16LaneVec128;
+      lanes = 8;
+      break;
+    case BinaryConsts::V128Load32Lane:
+      op = Load32LaneVec128;
+      lanes = 4;
+      break;
+    case BinaryConsts::V128Load64Lane:
+      op = Load64LaneVec128;
+      lanes = 2;
+      break;
+    case BinaryConsts::V128Store8Lane:
+      op = Store8LaneVec128;
+      lanes = 16;
+      break;
+    case BinaryConsts::V128Store16Lane:
+      op = Store16LaneVec128;
+      lanes = 8;
+      break;
+    case BinaryConsts::V128Store32Lane:
+      op = Store32LaneVec128;
+      lanes = 4;
+      break;
+    case BinaryConsts::V128Store64Lane:
+      op = Store64LaneVec128;
+      lanes = 2;
+      break;
+    default:
+      return false;
+  }
+  auto* curr = allocator.alloc<SIMDLoadStoreLane>();
+  curr->op = op;
+  Index memIdx = readMemoryAccess(curr->align, curr->offset);
+  memoryRefs[memIdx].push_back(&curr->memory);
+  curr->index = getLaneIndex(lanes);
+  curr->vec = popNonVoidExpression();
+  curr->ptr = popNonVoidExpression();
+  curr->finalize();
+  out = curr;
+  return true;
+}
+
+void WasmBinaryBuilder::visitSelect(Select* curr, uint8_t code) {
+  BYN_TRACE("zz node: Select, code " << int32_t(code) << std::endl);
+  if (code == BinaryConsts::SelectWithType) {
+    size_t numTypes = getU32LEB();
+    std::vector<Type> types;
+    for (size_t i = 0; i <
