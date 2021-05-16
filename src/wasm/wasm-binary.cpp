@@ -7295,4 +7295,225 @@ bool WasmBinaryBuilder::maybeVisitStringMeasure(Expression*& out,
     }
   } else if (code == BinaryConsts::StringMeasureWTF16) {
     op = StringMeasureWTF16;
-  } else if (code == BinaryConsts:
+  } else if (code == BinaryConsts::StringIsUSV) {
+    op = StringMeasureIsUSV;
+  } else if (code == BinaryConsts::StringViewWTF16Length) {
+    op = StringMeasureWTF16View;
+  } else if (code == BinaryConsts::StringHash) {
+    op = StringMeasureHash;
+  } else {
+    return false;
+  }
+  auto* ref = popNonVoidExpression();
+  out = Builder(wasm).makeStringMeasure(op, ref);
+  return true;
+}
+
+bool WasmBinaryBuilder::maybeVisitStringEncode(Expression*& out,
+                                               uint32_t code) {
+  StringEncodeOp op;
+  Expression* start = nullptr;
+  // TODO: share this code with string.measure?
+  if (code == BinaryConsts::StringEncodeWTF8) {
+    if (getInt8() != 0) {
+      throwError("Unexpected nonzero memory index");
+    }
+    auto policy = getU32LEB();
+    switch (policy) {
+      case BinaryConsts::StringPolicy::UTF8:
+        op = StringEncodeUTF8;
+        break;
+      case BinaryConsts::StringPolicy::WTF8:
+        op = StringEncodeWTF8;
+        break;
+      default:
+        throwError("bad policy for string.encode");
+    }
+  } else if (code == BinaryConsts::StringEncodeWTF16) {
+    if (getInt8() != 0) {
+      throwError("Unexpected nonzero memory index");
+    }
+    op = StringEncodeWTF16;
+  } else if (code == BinaryConsts::StringEncodeWTF8Array) {
+    auto policy = getU32LEB();
+    switch (policy) {
+      case BinaryConsts::StringPolicy::UTF8:
+        op = StringEncodeUTF8Array;
+        break;
+      case BinaryConsts::StringPolicy::WTF8:
+        op = StringEncodeWTF8Array;
+        break;
+      default:
+        throwError("bad policy for string.encode");
+    }
+    start = popNonVoidExpression();
+  } else if (code == BinaryConsts::StringEncodeWTF16Array) {
+    op = StringEncodeWTF16Array;
+    start = popNonVoidExpression();
+  } else {
+    return false;
+  }
+  auto* ptr = popNonVoidExpression();
+  auto* ref = popNonVoidExpression();
+  out = Builder(wasm).makeStringEncode(op, ref, ptr, start);
+  return true;
+}
+
+bool WasmBinaryBuilder::maybeVisitStringConcat(Expression*& out,
+                                               uint32_t code) {
+  if (code != BinaryConsts::StringConcat) {
+    return false;
+  }
+  auto* right = popNonVoidExpression();
+  auto* left = popNonVoidExpression();
+  out = Builder(wasm).makeStringConcat(left, right);
+  return true;
+}
+
+bool WasmBinaryBuilder::maybeVisitStringEq(Expression*& out, uint32_t code) {
+  StringEqOp op;
+  if (code == BinaryConsts::StringEq) {
+    op = StringEqEqual;
+  } else if (code == BinaryConsts::StringCompare) {
+    op = StringEqCompare;
+  } else {
+    return false;
+  }
+  auto* right = popNonVoidExpression();
+  auto* left = popNonVoidExpression();
+  out = Builder(wasm).makeStringEq(op, left, right);
+  return true;
+}
+
+bool WasmBinaryBuilder::maybeVisitStringAs(Expression*& out, uint32_t code) {
+  StringAsOp op;
+  if (code == BinaryConsts::StringAsWTF8) {
+    op = StringAsWTF8;
+  } else if (code == BinaryConsts::StringAsWTF16) {
+    op = StringAsWTF16;
+  } else if (code == BinaryConsts::StringAsIter) {
+    op = StringAsIter;
+  } else {
+    return false;
+  }
+  auto* ref = popNonVoidExpression();
+  out = Builder(wasm).makeStringAs(op, ref);
+  return true;
+}
+
+bool WasmBinaryBuilder::maybeVisitStringWTF8Advance(Expression*& out,
+                                                    uint32_t code) {
+  if (code != BinaryConsts::StringViewWTF8Advance) {
+    return false;
+  }
+  auto* bytes = popNonVoidExpression();
+  auto* pos = popNonVoidExpression();
+  auto* ref = popNonVoidExpression();
+  out = Builder(wasm).makeStringWTF8Advance(ref, pos, bytes);
+  return true;
+}
+
+bool WasmBinaryBuilder::maybeVisitStringWTF16Get(Expression*& out,
+                                                 uint32_t code) {
+  if (code != BinaryConsts::StringViewWTF16GetCodePoint) {
+    return false;
+  }
+  auto* pos = popNonVoidExpression();
+  auto* ref = popNonVoidExpression();
+  out = Builder(wasm).makeStringWTF16Get(ref, pos);
+  return true;
+}
+
+bool WasmBinaryBuilder::maybeVisitStringIterNext(Expression*& out,
+                                                 uint32_t code) {
+  if (code != BinaryConsts::StringViewIterNext) {
+    return false;
+  }
+  auto* ref = popNonVoidExpression();
+  out = Builder(wasm).makeStringIterNext(ref);
+  return true;
+}
+
+bool WasmBinaryBuilder::maybeVisitStringIterMove(Expression*& out,
+                                                 uint32_t code) {
+  StringIterMoveOp op;
+  if (code == BinaryConsts::StringViewIterAdvance) {
+    op = StringIterMoveAdvance;
+  } else if (code == BinaryConsts::StringViewIterRewind) {
+    op = StringIterMoveRewind;
+  } else {
+    return false;
+  }
+  auto* num = popNonVoidExpression();
+  auto* ref = popNonVoidExpression();
+  out = Builder(wasm).makeStringIterMove(op, ref, num);
+  return true;
+}
+
+bool WasmBinaryBuilder::maybeVisitStringSliceWTF(Expression*& out,
+                                                 uint32_t code) {
+  StringSliceWTFOp op;
+  if (code == BinaryConsts::StringViewWTF8Slice) {
+    op = StringSliceWTF8;
+  } else if (code == BinaryConsts::StringViewWTF16Slice) {
+    op = StringSliceWTF16;
+  } else {
+    return false;
+  }
+  auto* end = popNonVoidExpression();
+  auto* start = popNonVoidExpression();
+  auto* ref = popNonVoidExpression();
+  out = Builder(wasm).makeStringSliceWTF(op, ref, start, end);
+  return true;
+}
+
+bool WasmBinaryBuilder::maybeVisitStringSliceIter(Expression*& out,
+                                                  uint32_t code) {
+  if (code != BinaryConsts::StringViewIterSlice) {
+    return false;
+  }
+  auto* num = popNonVoidExpression();
+  auto* ref = popNonVoidExpression();
+  out = Builder(wasm).makeStringSliceIter(ref, num);
+  return true;
+}
+
+void WasmBinaryBuilder::visitRefAs(RefAs* curr, uint8_t code) {
+  BYN_TRACE("zz node: RefAs\n");
+  switch (code) {
+    case BinaryConsts::RefAsNonNull:
+      curr->op = RefAsNonNull;
+      break;
+    case BinaryConsts::ExternInternalize:
+      curr->op = ExternInternalize;
+      break;
+    case BinaryConsts::ExternExternalize:
+      curr->op = ExternExternalize;
+      break;
+    default:
+      WASM_UNREACHABLE("invalid code for ref.as_*");
+  }
+  curr->value = popNonVoidExpression();
+  if (!curr->value->type.isRef() && curr->value->type != Type::unreachable) {
+    throwError("bad input type for ref.as: " + curr->value->type.toString());
+  }
+  curr->finalize();
+}
+
+void WasmBinaryBuilder::throwError(std::string text) {
+  throw ParseException(text, 0, pos);
+}
+
+void WasmBinaryBuilder::validateHeapTypeUsingChild(Expression* child,
+                                                   HeapType heapType) {
+  if (child->type == Type::unreachable) {
+    return;
+  }
+  if (!child->type.isRef() ||
+      !HeapType::isSubType(child->type.getHeapType(), heapType)) {
+    throwError("bad heap type: expected " + heapType.toString() +
+               " but found " + child->type.toString());
+  }
+}
+
+} // namespace wasm
