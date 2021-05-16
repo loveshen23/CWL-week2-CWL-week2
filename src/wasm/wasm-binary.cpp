@@ -6550,4 +6550,375 @@ void WasmBinaryBuilder::visitSelect(Select* curr, uint8_t code) {
   if (code == BinaryConsts::SelectWithType) {
     size_t numTypes = getU32LEB();
     std::vector<Type> types;
-    for (size_t i = 0; i <
+    for (size_t i = 0; i < numTypes; i++) {
+      types.push_back(getType());
+    }
+    curr->type = Type(types);
+  }
+  curr->condition = popNonVoidExpression();
+  curr->ifFalse = popNonVoidExpression();
+  curr->ifTrue = popNonVoidExpression();
+  if (code == BinaryConsts::SelectWithType) {
+    curr->finalize(curr->type);
+  } else {
+    curr->finalize();
+  }
+}
+
+void WasmBinaryBuilder::visitReturn(Return* curr) {
+  BYN_TRACE("zz node: Return\n");
+  requireFunctionContext("return");
+  Type type = currFunction->getResults();
+  if (type.isConcrete()) {
+    curr->value = popTypedExpression(type);
+  }
+  curr->finalize();
+}
+
+void WasmBinaryBuilder::visitMemorySize(MemorySize* curr) {
+  BYN_TRACE("zz node: MemorySize\n");
+  Index index = getU32LEB();
+  if (getMemory(index)->is64()) {
+    curr->make64();
+  }
+  curr->finalize();
+  memoryRefs[index].push_back(&curr->memory);
+}
+
+void WasmBinaryBuilder::visitMemoryGrow(MemoryGrow* curr) {
+  BYN_TRACE("zz node: MemoryGrow\n");
+  curr->delta = popNonVoidExpression();
+  Index index = getU32LEB();
+  if (getMemory(index)->is64()) {
+    curr->make64();
+  }
+  memoryRefs[index].push_back(&curr->memory);
+}
+
+void WasmBinaryBuilder::visitNop(Nop* curr) { BYN_TRACE("zz node: Nop\n"); }
+
+void WasmBinaryBuilder::visitUnreachable(Unreachable* curr) {
+  BYN_TRACE("zz node: Unreachable\n");
+}
+
+void WasmBinaryBuilder::visitDrop(Drop* curr) {
+  BYN_TRACE("zz node: Drop\n");
+  curr->value = popNonVoidExpression();
+  curr->finalize();
+}
+
+void WasmBinaryBuilder::visitRefNull(RefNull* curr) {
+  BYN_TRACE("zz node: RefNull\n");
+  curr->finalize(getHeapType().getBottom());
+}
+
+void WasmBinaryBuilder::visitRefIsNull(RefIsNull* curr) {
+  BYN_TRACE("zz node: RefIsNull\n");
+  curr->value = popNonVoidExpression();
+  curr->finalize();
+}
+
+void WasmBinaryBuilder::visitRefIs(RefTest* curr, uint8_t code) {
+  BYN_TRACE("zz node: RefIs\n");
+  switch (code) {
+    case BinaryConsts::RefIsFunc:
+      curr->castType = Type(HeapType::func, NonNullable);
+      break;
+    case BinaryConsts::RefIsI31:
+      curr->castType = Type(HeapType::i31, NonNullable);
+      break;
+    default:
+      WASM_UNREACHABLE("invalid code for ref.is_*");
+  }
+  curr->ref = popNonVoidExpression();
+  curr->finalize();
+}
+
+void WasmBinaryBuilder::visitRefFunc(RefFunc* curr) {
+  BYN_TRACE("zz node: RefFunc\n");
+  Index index = getU32LEB();
+  // We don't know function names yet, so record this use to be updated later.
+  // Note that we do not need to check that 'index' is in bounds, as that will
+  // be verified in the next line. (Also, note that functionRefs[index] may
+  // write to an odd place in the functionRefs map if index is invalid, but that
+  // is harmless.)
+  functionRefs[index].push_back(&curr->func);
+  // To support typed function refs, we give the reference not just a general
+  // funcref, but a specific subtype with the actual signature.
+  curr->finalize(Type(getTypeByFunctionIndex(index), NonNullable));
+}
+
+void WasmBinaryBuilder::visitRefEq(RefEq* curr) {
+  BYN_TRACE("zz node: RefEq\n");
+  curr->right = popNonVoidExpression();
+  curr->left = popNonVoidExpression();
+  curr->finalize();
+}
+
+void WasmBinaryBuilder::visitTableGet(TableGet* curr) {
+  BYN_TRACE("zz node: TableGet\n");
+  Index tableIdx = getU32LEB();
+  if (tableIdx >= wasm.tables.size()) {
+    throwError("bad table index");
+  }
+  curr->index = popNonVoidExpression();
+  curr->type = wasm.tables[tableIdx]->type;
+  curr->finalize();
+  // Defer setting the table name for later, when we know it.
+  tableRefs[tableIdx].push_back(&curr->table);
+}
+
+void WasmBinaryBuilder::visitTableSet(TableSet* curr) {
+  BYN_TRACE("zz node: TableSet\n");
+  Index tableIdx = getU32LEB();
+  if (tableIdx >= wasm.tables.size()) {
+    throwError("bad table index");
+  }
+  curr->value = popNonVoidExpression();
+  curr->index = popNonVoidExpression();
+  curr->finalize();
+  // Defer setting the table name for later, when we know it.
+  tableRefs[tableIdx].push_back(&curr->table);
+}
+
+void WasmBinaryBuilder::visitTryOrTryInBlock(Expression*& out) {
+  BYN_TRACE("zz node: Try\n");
+  auto* curr = allocator.alloc<Try>();
+  startControlFlow(curr);
+  // For simplicity of implementation, like if scopes, we create a hidden block
+  // within each try-body and catch-body, and let branches target those inner
+  // blocks instead.
+  curr->type = getType();
+  curr->body = getBlockOrSingleton(curr->type);
+
+  Builder builder(wasm);
+  // A nameless label shared by all catch body blocks
+  Name catchLabel = getNextLabel();
+  breakStack.push_back({catchLabel, curr->type});
+
+  auto readCatchBody = [&](Type tagType) {
+    auto start = expressionStack.size();
+    if (tagType != Type::none) {
+      pushExpression(builder.makePop(tagType));
+    }
+    processExpressions();
+    size_t end = expressionStack.size();
+    if (start > end) {
+      throwError("block cannot pop from outside");
+    }
+    if (end - start == 1) {
+      curr->catchBodies.push_back(popExpression());
+    } else {
+      auto* block = allocator.alloc<Block>();
+      pushBlockElements(block, curr->type, start);
+      block->finalize(curr->type);
+      curr->catchBodies.push_back(block);
+    }
+  };
+
+  // We cannot immediately update tagRefs in the loop below, as catchTags is
+  // being grown, an so references would get invalidated. Store the indexes
+  // here, then do that later.
+  std::vector<Index> tagIndexes;
+
+  while (lastSeparator == BinaryConsts::Catch ||
+         lastSeparator == BinaryConsts::CatchAll) {
+    if (lastSeparator == BinaryConsts::Catch) {
+      auto index = getU32LEB();
+      if (index >= wasm.tags.size()) {
+        throwError("bad tag index");
+      }
+      tagIndexes.push_back(index);
+      auto* tag = wasm.tags[index].get();
+      curr->catchTags.push_back(tag->name);
+      readCatchBody(tag->sig.params);
+    } else { // catch_all
+      if (curr->hasCatchAll()) {
+        throwError("there should be at most one 'catch_all' clause per try");
+      }
+      readCatchBody(Type::none);
+    }
+  }
+  breakStack.pop_back();
+
+  for (Index i = 0; i < tagIndexes.size(); i++) {
+    // We don't know the final name yet.
+    tagRefs[tagIndexes[i]].push_back(&curr->catchTags[i]);
+  }
+
+  if (lastSeparator == BinaryConsts::Delegate) {
+    curr->delegateTarget = getExceptionTargetName(getU32LEB());
+  }
+
+  // For simplicity, we ensure that try's labels can only be targeted by
+  // delegates and rethrows, and delegates/rethrows can only target try's
+  // labels. (If they target blocks or loops, it is a validation failure.)
+  // Because we create an inner block within each try and catch body, if any
+  // delegate/rethrow targets those inner blocks, we should make them target the
+  // try's label instead.
+  curr->name = getNextLabel();
+  if (auto* block = curr->body->dynCast<Block>()) {
+    if (block->name.is()) {
+      if (exceptionTargetNames.find(block->name) !=
+          exceptionTargetNames.end()) {
+        BranchUtils::replaceExceptionTargets(block, block->name, curr->name);
+        exceptionTargetNames.erase(block->name);
+      }
+    }
+  }
+  if (exceptionTargetNames.find(catchLabel) != exceptionTargetNames.end()) {
+    for (auto* catchBody : curr->catchBodies) {
+      BranchUtils::replaceExceptionTargets(catchBody, catchLabel, curr->name);
+    }
+    exceptionTargetNames.erase(catchLabel);
+  }
+
+  // If catch bodies contained stacky code, 'pop's can be nested within a block.
+  // Fix that up.
+  EHUtils::handleBlockNestedPop(curr, currFunction, wasm);
+  curr->finalize(curr->type);
+
+  // For simplicity, we create an inner block within the catch body too, but the
+  // one within the 'catch' *must* be omitted when we write out the binary back
+  // later, because the 'catch' instruction pushes a value onto the stack and
+  // the inner block does not support block input parameters without multivalue
+  // support.
+  // try
+  //   ...
+  // catch $e   ;; Pushes value(s) onto the stack
+  //   block  ;; Inner block. Should be deleted when writing binary!
+  //     use the pushed value
+  //   end
+  // end
+  //
+  // But when input binary code is like
+  // try
+  //   ...
+  // catch $e
+  //   br 0
+  // end
+  //
+  // 'br 0' accidentally happens to target the inner block, creating code like
+  // this in Binaryen IR, making the inner block not deletable, resulting in a
+  // validation error:
+  // (try
+  //   ...
+  //   (catch $e
+  //     (block $label0 ;; Cannot be deleted, because there's a branch to this
+  //       ...
+  //       (br $label0)
+  //     )
+  //   )
+  // )
+  //
+  // When this happens, we fix this by creating a block that wraps the whole
+  // try-catch, and making the branches target that block instead, like this:
+  // (block $label  ;; New enclosing block, new target for the branch
+  //   (try
+  //     ...
+  //     (catch $e
+  //       (block   ;; Now this can be deleted when writing binary
+  //         ...
+  //         (br $label)
+  //       )
+  //     )
+  //   )
+  // )
+  if (breakTargetNames.find(catchLabel) == breakTargetNames.end()) {
+    out = curr;
+  } else {
+    // Create a new block that encloses the whole try-catch
+    auto* block = builder.makeBlock(catchLabel, curr);
+    out = block;
+  }
+  breakTargetNames.erase(catchLabel);
+}
+
+void WasmBinaryBuilder::visitThrow(Throw* curr) {
+  BYN_TRACE("zz node: Throw\n");
+  auto index = getU32LEB();
+  if (index >= wasm.tags.size()) {
+    throwError("bad tag index");
+  }
+  auto* tag = wasm.tags[index].get();
+  curr->tag = tag->name;
+  tagRefs[index].push_back(&curr->tag); // we don't know the final name yet
+  size_t num = tag->sig.params.size();
+  curr->operands.resize(num);
+  for (size_t i = 0; i < num; i++) {
+    curr->operands[num - i - 1] = popNonVoidExpression();
+  }
+  curr->finalize();
+}
+
+void WasmBinaryBuilder::visitRethrow(Rethrow* curr) {
+  BYN_TRACE("zz node: Rethrow\n");
+  curr->target = getExceptionTargetName(getU32LEB());
+  // This special target is valid only for delegates
+  if (curr->target == DELEGATE_CALLER_TARGET) {
+    throwError(std::string("rethrow target cannot use internal name ") +
+               DELEGATE_CALLER_TARGET.toString());
+  }
+  curr->finalize();
+}
+
+void WasmBinaryBuilder::visitCallRef(CallRef* curr) {
+  BYN_TRACE("zz node: CallRef\n");
+  curr->target = popNonVoidExpression();
+  HeapType heapType = getTypeByIndex(getU32LEB());
+  if (!Type::isSubType(curr->target->type, Type(heapType, Nullable))) {
+    throwError("Call target has invalid type: " +
+               curr->target->type.toString());
+  }
+  if (!heapType.isSignature()) {
+    throwError("Invalid reference type for a call_ref: " + heapType.toString());
+  }
+  auto sig = heapType.getSignature();
+  auto num = sig.params.size();
+  curr->operands.resize(num);
+  for (size_t i = 0; i < num; i++) {
+    curr->operands[num - i - 1] = popNonVoidExpression();
+  }
+  curr->finalize(sig.results);
+}
+
+bool WasmBinaryBuilder::maybeVisitI31New(Expression*& out, uint32_t code) {
+  if (code != BinaryConsts::I31New) {
+    return false;
+  }
+  auto* curr = allocator.alloc<I31New>();
+  curr->value = popNonVoidExpression();
+  curr->finalize();
+  out = curr;
+  return true;
+}
+
+bool WasmBinaryBuilder::maybeVisitI31Get(Expression*& out, uint32_t code) {
+  I31Get* curr;
+  switch (code) {
+    case BinaryConsts::I31GetS:
+      curr = allocator.alloc<I31Get>();
+      curr->signed_ = true;
+      break;
+    case BinaryConsts::I31GetU:
+      curr = allocator.alloc<I31Get>();
+      curr->signed_ = false;
+      break;
+    default:
+      return false;
+  }
+  curr->i31 = popNonVoidExpression();
+  curr->finalize();
+  out = curr;
+  return true;
+}
+
+bool WasmBinaryBuilder::maybeVisitRefTest(Expression*& out, uint32_t code) {
+  if (code == BinaryConsts::RefTestStatic || code == BinaryConsts::RefTest ||
+      code == BinaryConsts::RefTestNull) {
+    bool legacy = code == BinaryConsts::RefTestStatic;
+    auto castType = legacy ? getIndexedHeapType() : getHeapType();
+    auto nullability =
+      (code == BinaryConsts::RefTestNull) ? Nullable : NonNullable;
+    auto* ref = popNonVoidExpression();
+ 
