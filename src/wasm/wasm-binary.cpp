@@ -6921,4 +6921,378 @@ bool WasmBinaryBuilder::maybeVisitRefTest(Expression*& out, uint32_t code) {
     auto nullability =
       (code == BinaryConsts::RefTestNull) ? Nullable : NonNullable;
     auto* ref = popNonVoidExpression();
- 
+    out = Builder(wasm).makeRefTest(ref, Type(castType, nullability));
+    return true;
+  }
+  return false;
+}
+
+void WasmBinaryBuilder::visitRefAsCast(RefCast* curr, uint32_t code) {
+  // TODO: These instructions are deprecated. Remove them.
+  switch (code) {
+    case BinaryConsts::RefAsFunc:
+      curr->type = Type(HeapType::func, NonNullable);
+      break;
+    case BinaryConsts::RefAsI31:
+      curr->type = Type(HeapType::i31, NonNullable);
+      break;
+    default:
+      WASM_UNREACHABLE("unexpected ref.as*");
+  }
+  curr->ref = popNonVoidExpression();
+  curr->safety = RefCast::Safe;
+  curr->finalize();
+}
+
+bool WasmBinaryBuilder::maybeVisitRefCast(Expression*& out, uint32_t code) {
+  if (code == BinaryConsts::RefCastStatic || code == BinaryConsts::RefCast ||
+      code == BinaryConsts::RefCastNull || code == BinaryConsts::RefCastNop) {
+    bool legacy = code == BinaryConsts::RefCastStatic;
+    auto heapType = legacy ? getIndexedHeapType() : getHeapType();
+    auto* ref = popNonVoidExpression();
+    Nullability nullability;
+    if (legacy) {
+      // Legacy polymorphic behavior.
+      nullability = ref->type.getNullability();
+    } else {
+      nullability = code == BinaryConsts::RefCast ? NonNullable : Nullable;
+    }
+    auto safety =
+      code == BinaryConsts::RefCastNop ? RefCast::Unsafe : RefCast::Safe;
+    auto type = Type(heapType, nullability);
+    out = Builder(wasm).makeRefCast(ref, type, safety);
+    return true;
+  }
+  return false;
+}
+
+bool WasmBinaryBuilder::maybeVisitBrOn(Expression*& out, uint32_t code) {
+  Type castType = Type::none;
+  BrOnOp op;
+  switch (code) {
+    case BinaryConsts::BrOnNull:
+      op = BrOnNull;
+      break;
+    case BinaryConsts::BrOnNonNull:
+      op = BrOnNonNull;
+      break;
+    case BinaryConsts::BrOnCastStatic:
+    case BinaryConsts::BrOnCast:
+    case BinaryConsts::BrOnCastNull:
+      op = BrOnCast;
+      break;
+    case BinaryConsts::BrOnCastStaticFail:
+    case BinaryConsts::BrOnCastFail:
+    case BinaryConsts::BrOnCastFailNull:
+      op = BrOnCastFail;
+      break;
+    case BinaryConsts::BrOnFunc:
+      op = BrOnCast;
+      castType = Type(HeapType::func, NonNullable);
+      break;
+    case BinaryConsts::BrOnNonFunc:
+      op = BrOnCastFail;
+      castType = Type(HeapType::func, NonNullable);
+      break;
+    case BinaryConsts::BrOnI31:
+      op = BrOnCast;
+      castType = Type(HeapType::i31, NonNullable);
+      break;
+    case BinaryConsts::BrOnNonI31:
+      op = BrOnCastFail;
+      castType = Type(HeapType::i31, NonNullable);
+      break;
+    default:
+      return false;
+  }
+  auto name = getBreakTarget(getU32LEB()).name;
+  if (castType == Type::none && (op == BrOnCast || op == BrOnCastFail)) {
+    auto nullability = (code == BinaryConsts::BrOnCastNull ||
+                        code == BinaryConsts::BrOnCastFailNull)
+                         ? Nullable
+                         : NonNullable;
+    bool legacy = code == BinaryConsts::BrOnCastStatic ||
+                  code == BinaryConsts::BrOnCastStaticFail;
+    auto type = legacy ? getIndexedHeapType() : getHeapType();
+    castType = Type(type, nullability);
+  }
+  auto* ref = popNonVoidExpression();
+  out = Builder(wasm).makeBrOn(op, name, ref, castType);
+  return true;
+}
+
+bool WasmBinaryBuilder::maybeVisitStructNew(Expression*& out, uint32_t code) {
+  if (code == BinaryConsts::StructNew ||
+      code == BinaryConsts::StructNewDefault) {
+    auto heapType = getIndexedHeapType();
+    std::vector<Expression*> operands;
+    if (code == BinaryConsts::StructNew) {
+      auto numOperands = heapType.getStruct().fields.size();
+      operands.resize(numOperands);
+      for (Index i = 0; i < numOperands; i++) {
+        operands[numOperands - i - 1] = popNonVoidExpression();
+      }
+    }
+    out = Builder(wasm).makeStructNew(heapType, operands);
+    return true;
+  }
+  return false;
+}
+
+bool WasmBinaryBuilder::maybeVisitStructGet(Expression*& out, uint32_t code) {
+  bool signed_ = false;
+  switch (code) {
+    case BinaryConsts::StructGet:
+    case BinaryConsts::StructGetU:
+      break;
+    case BinaryConsts::StructGetS:
+      signed_ = true;
+      break;
+    default:
+      return false;
+  }
+  auto heapType = getIndexedHeapType();
+  if (!heapType.isStruct()) {
+    throwError("Expected struct heaptype");
+  }
+  auto index = getU32LEB();
+  if (index >= heapType.getStruct().fields.size()) {
+    throwError("Struct field index out of bounds");
+  }
+  auto type = heapType.getStruct().fields[index].type;
+  auto ref = popNonVoidExpression();
+  validateHeapTypeUsingChild(ref, heapType);
+  out = Builder(wasm).makeStructGet(index, ref, type, signed_);
+  return true;
+}
+
+bool WasmBinaryBuilder::maybeVisitStructSet(Expression*& out, uint32_t code) {
+  if (code != BinaryConsts::StructSet) {
+    return false;
+  }
+  auto* curr = allocator.alloc<StructSet>();
+  auto heapType = getIndexedHeapType();
+  curr->index = getU32LEB();
+  curr->value = popNonVoidExpression();
+  curr->ref = popNonVoidExpression();
+  validateHeapTypeUsingChild(curr->ref, heapType);
+  curr->finalize();
+  out = curr;
+  return true;
+}
+
+bool WasmBinaryBuilder::maybeVisitArrayNew(Expression*& out, uint32_t code) {
+  if (code == BinaryConsts::ArrayNew || code == BinaryConsts::ArrayNewDefault) {
+    auto heapType = getIndexedHeapType();
+    auto* size = popNonVoidExpression();
+    Expression* init = nullptr;
+    if (code == BinaryConsts::ArrayNew) {
+      init = popNonVoidExpression();
+    }
+    out = Builder(wasm).makeArrayNew(heapType, size, init);
+    return true;
+  }
+  return false;
+}
+
+bool WasmBinaryBuilder::maybeVisitArrayNewSeg(Expression*& out, uint32_t code) {
+  if (code == BinaryConsts::ArrayNewData ||
+      code == BinaryConsts::ArrayNewElem) {
+    auto op = code == BinaryConsts::ArrayNewData ? NewData : NewElem;
+    auto heapType = getIndexedHeapType();
+    auto seg = getU32LEB();
+    auto* size = popNonVoidExpression();
+    auto* offset = popNonVoidExpression();
+    out = Builder(wasm).makeArrayNewSeg(op, heapType, seg, offset, size);
+    return true;
+  }
+  return false;
+}
+
+bool WasmBinaryBuilder::maybeVisitArrayNewFixed(Expression*& out,
+                                                uint32_t code) {
+  if (code == BinaryConsts::ArrayNewFixed) {
+    auto heapType = getIndexedHeapType();
+    auto size = getU32LEB();
+    std::vector<Expression*> values(size);
+    for (size_t i = 0; i < size; i++) {
+      values[size - i - 1] = popNonVoidExpression();
+    }
+    out = Builder(wasm).makeArrayNewFixed(heapType, values);
+    return true;
+  }
+  return false;
+}
+
+bool WasmBinaryBuilder::maybeVisitArrayGet(Expression*& out, uint32_t code) {
+  bool signed_ = false;
+  switch (code) {
+    case BinaryConsts::ArrayGet:
+    case BinaryConsts::ArrayGetU:
+      break;
+    case BinaryConsts::ArrayGetS:
+      signed_ = true;
+      break;
+    default:
+      return false;
+  }
+  auto heapType = getIndexedHeapType();
+  if (!heapType.isArray()) {
+    throwError("Expected array heaptype");
+  }
+  auto type = heapType.getArray().element.type;
+  auto* index = popNonVoidExpression();
+  auto* ref = popNonVoidExpression();
+  validateHeapTypeUsingChild(ref, heapType);
+  out = Builder(wasm).makeArrayGet(ref, index, type, signed_);
+  return true;
+}
+
+bool WasmBinaryBuilder::maybeVisitArraySet(Expression*& out, uint32_t code) {
+  if (code != BinaryConsts::ArraySet) {
+    return false;
+  }
+  auto heapType = getIndexedHeapType();
+  auto* value = popNonVoidExpression();
+  auto* index = popNonVoidExpression();
+  auto* ref = popNonVoidExpression();
+  validateHeapTypeUsingChild(ref, heapType);
+  out = Builder(wasm).makeArraySet(ref, index, value);
+  return true;
+}
+
+bool WasmBinaryBuilder::maybeVisitArrayLen(Expression*& out, uint32_t code) {
+  if (code == BinaryConsts::ArrayLenAnnotated) {
+    // Ignore the type annotation and don't bother validating it.
+    getU32LEB();
+  } else if (code != BinaryConsts::ArrayLen) {
+    return false;
+  }
+  auto* ref = popNonVoidExpression();
+  out = Builder(wasm).makeArrayLen(ref);
+  return true;
+}
+
+bool WasmBinaryBuilder::maybeVisitArrayCopy(Expression*& out, uint32_t code) {
+  if (code != BinaryConsts::ArrayCopy) {
+    return false;
+  }
+  auto destHeapType = getIndexedHeapType();
+  auto srcHeapType = getIndexedHeapType();
+  auto* length = popNonVoidExpression();
+  auto* srcIndex = popNonVoidExpression();
+  auto* srcRef = popNonVoidExpression();
+  auto* destIndex = popNonVoidExpression();
+  auto* destRef = popNonVoidExpression();
+  validateHeapTypeUsingChild(destRef, destHeapType);
+  validateHeapTypeUsingChild(srcRef, srcHeapType);
+  out =
+    Builder(wasm).makeArrayCopy(destRef, destIndex, srcRef, srcIndex, length);
+  return true;
+}
+
+bool WasmBinaryBuilder::maybeVisitStringNew(Expression*& out, uint32_t code) {
+  StringNewOp op;
+  Expression* length = nullptr;
+  Expression* start = nullptr;
+  Expression* end = nullptr;
+  bool try_ = false;
+  if (code == BinaryConsts::StringNewWTF8 ||
+      code == BinaryConsts::StringNewUTF8Try) {
+    if (code == BinaryConsts::StringNewUTF8Try) {
+      try_ = true;
+    }
+    // FIXME: the memory index should be an LEB like all other places
+    if (getInt8() != 0) {
+      throwError("Unexpected nonzero memory index");
+    }
+    auto policy = getU32LEB();
+    switch (policy) {
+      case BinaryConsts::StringPolicy::UTF8:
+        op = StringNewUTF8;
+        break;
+      case BinaryConsts::StringPolicy::WTF8:
+        op = StringNewWTF8;
+        break;
+      case BinaryConsts::StringPolicy::Replace:
+        op = StringNewReplace;
+        break;
+      default:
+        throwError("bad policy for string.new");
+    }
+    length = popNonVoidExpression();
+  } else if (code == BinaryConsts::StringNewWTF16) {
+    if (getInt8() != 0) {
+      throwError("Unexpected nonzero memory index");
+    }
+    op = StringNewWTF16;
+    length = popNonVoidExpression();
+  } else if (code == BinaryConsts::StringNewWTF8Array ||
+             code == BinaryConsts::StringNewUTF8ArrayTry) {
+    if (code == BinaryConsts::StringNewUTF8ArrayTry) {
+      try_ = true;
+    }
+    auto policy = getU32LEB();
+    switch (policy) {
+      case BinaryConsts::StringPolicy::UTF8:
+        op = StringNewUTF8Array;
+        break;
+      case BinaryConsts::StringPolicy::WTF8:
+        op = StringNewWTF8Array;
+        break;
+      case BinaryConsts::StringPolicy::Replace:
+        op = StringNewReplaceArray;
+        break;
+      default:
+        throwError("bad policy for string.new");
+    }
+    end = popNonVoidExpression();
+    start = popNonVoidExpression();
+  } else if (code == BinaryConsts::StringNewWTF16Array) {
+    op = StringNewWTF16Array;
+    end = popNonVoidExpression();
+    start = popNonVoidExpression();
+  } else if (code == BinaryConsts::StringFromCodePoint) {
+    op = StringNewFromCodePoint;
+  } else {
+    return false;
+  }
+  auto* ptr = popNonVoidExpression();
+  if (length) {
+    out = Builder(wasm).makeStringNew(op, ptr, length, try_);
+  } else {
+    out = Builder(wasm).makeStringNew(op, ptr, start, end, try_);
+  }
+  return true;
+}
+
+bool WasmBinaryBuilder::maybeVisitStringConst(Expression*& out, uint32_t code) {
+  if (code != BinaryConsts::StringConst) {
+    return false;
+  }
+  auto index = getU32LEB();
+  if (index >= strings.size()) {
+    throwError("bad string index");
+  }
+  out = Builder(wasm).makeStringConst(strings[index]);
+  return true;
+}
+
+bool WasmBinaryBuilder::maybeVisitStringMeasure(Expression*& out,
+                                                uint32_t code) {
+  StringMeasureOp op;
+  if (code == BinaryConsts::StringMeasureWTF8) {
+    auto policy = getU32LEB();
+    switch (policy) {
+      case BinaryConsts::StringPolicy::UTF8:
+        op = StringMeasureUTF8;
+        break;
+      case BinaryConsts::StringPolicy::WTF8:
+        op = StringMeasureWTF8;
+        break;
+      default:
+        throwError("bad policy for string.measure");
+    }
+  } else if (code == BinaryConsts::StringMeasureWTF16) {
+    op = StringMeasureWTF16;
+  } else if (code == BinaryConsts:
