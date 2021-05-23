@@ -497,4 +497,313 @@ struct LocationUpdater {
   // TODO: for memory efficiency, we may want to do this in a streaming manner,
   //       binary to binary, without YAML IR.
 
-  LocationUpdater(Module& was
+  LocationUpdater(Module& wasm, const BinaryLocations& newLocations)
+    : wasm(wasm), newLocations(newLocations), oldExprAddrMap(wasm),
+      oldFuncAddrMap(wasm) {}
+
+  // Updates an expression's address. If there was never an instruction at that
+  // address, or if there was but if that instruction no longer exists, return
+  // 0. Otherwise, return the new updated location.
+  BinaryLocation getNewExprStart(BinaryLocation oldAddr) const {
+    if (auto* expr = oldExprAddrMap.getStart(oldAddr)) {
+      auto iter = newLocations.expressions.find(expr);
+      if (iter != newLocations.expressions.end()) {
+        BinaryLocation newAddr = iter->second.start;
+        return newAddr;
+      }
+    }
+    return 0;
+  }
+
+  bool hasOldExprStart(BinaryLocation oldAddr) const {
+    return oldExprAddrMap.getStart(oldAddr);
+  }
+
+  BinaryLocation getNewExprEnd(BinaryLocation oldAddr) const {
+    if (auto* expr = oldExprAddrMap.getEnd(oldAddr)) {
+      auto iter = newLocations.expressions.find(expr);
+      if (iter != newLocations.expressions.end()) {
+        return iter->second.end;
+      }
+    }
+    return 0;
+  }
+
+  bool hasOldExprEnd(BinaryLocation oldAddr) const {
+    return oldExprAddrMap.getEnd(oldAddr);
+  }
+
+  BinaryLocation getNewFuncStart(BinaryLocation oldAddr) const {
+    if (auto* func = oldFuncAddrMap.getStart(oldAddr)) {
+      // The function might have been optimized away, check.
+      auto iter = newLocations.functions.find(func);
+      if (iter != newLocations.functions.end()) {
+        auto oldLocations = func->funcLocation;
+        auto newLocations = iter->second;
+        if (oldAddr == oldLocations.start) {
+          return newLocations.start;
+        } else if (oldAddr == oldLocations.declarations) {
+          return newLocations.declarations;
+        } else {
+          WASM_UNREACHABLE("invalid func start");
+        }
+      }
+    }
+    return 0;
+  }
+
+  bool hasOldFuncStart(BinaryLocation oldAddr) const {
+    return oldFuncAddrMap.getStart(oldAddr);
+  }
+
+  BinaryLocation getNewFuncEnd(BinaryLocation oldAddr) const {
+    if (auto* func = oldFuncAddrMap.getEnd(oldAddr)) {
+      // The function might have been optimized away, check.
+      auto iter = newLocations.functions.find(func);
+      if (iter != newLocations.functions.end()) {
+        auto oldLocations = func->funcLocation;
+        auto newLocations = iter->second;
+        if (oldAddr == oldLocations.end) {
+          return newLocations.end;
+        } else if (oldAddr == oldLocations.end - 1) {
+          return newLocations.end - 1;
+        } else {
+          WASM_UNREACHABLE("invalid func end");
+        }
+      }
+    }
+    return 0;
+  }
+
+  // Check for either the end opcode, or one past the end.
+  bool hasOldFuncEnd(BinaryLocation oldAddr) const {
+    return oldFuncAddrMap.getEnd(oldAddr);
+  }
+
+  // Check specifically for the end opcode.
+  bool hasOldFuncEndOpcode(BinaryLocation oldAddr) const {
+    if (auto* func = oldFuncAddrMap.getEnd(oldAddr)) {
+      return oldAddr == func->funcLocation.end - 1;
+    }
+    return false;
+  }
+
+  BinaryLocation getNewDelimiter(BinaryLocation oldAddr) const {
+    auto info = oldExprAddrMap.getDelimiter(oldAddr);
+    if (info.expr) {
+      auto iter = newLocations.delimiters.find(info.expr);
+      if (iter != newLocations.delimiters.end()) {
+        return iter->second[info.id];
+      }
+    }
+    return 0;
+  }
+
+  bool hasOldDelimiter(BinaryLocation oldAddr) const {
+    return oldExprAddrMap.getDelimiter(oldAddr).expr;
+  }
+
+  // getNewStart|EndAddr utilities.
+  // TODO: should we track the start and end of delimiters, even though they
+  //       are just one byte?
+  BinaryLocation getNewStart(BinaryLocation oldStart) const {
+    if (hasOldExprStart(oldStart)) {
+      return getNewExprStart(oldStart);
+    } else if (hasOldFuncStart(oldStart)) {
+      return getNewFuncStart(oldStart);
+    } else if (hasOldDelimiter(oldStart)) {
+      return getNewDelimiter(oldStart);
+    }
+    return 0;
+  }
+
+  BinaryLocation getNewEnd(BinaryLocation oldEnd) const {
+    if (hasOldExprEnd(oldEnd)) {
+      return getNewExprEnd(oldEnd);
+    } else if (hasOldFuncEnd(oldEnd)) {
+      return getNewFuncEnd(oldEnd);
+    } else if (hasOldDelimiter(oldEnd)) {
+      return getNewDelimiter(oldEnd);
+    }
+    return 0;
+  }
+
+  BinaryLocation getNewDebugLineLocation(BinaryLocation old) const {
+    return debugLineMap.at(old);
+  }
+
+  // Given an offset in .debug_loc, get the old and new compile unit bases.
+  OldToNew getCompileUnitBasesForLoc(size_t offset) const {
+    if (locToUnitMap.count(offset) == 0) {
+      // There is no compile unit for this loc. It doesn't matter what we set
+      // here.
+      return OldToNew{0, 0};
+    }
+    auto index = locToUnitMap.at(offset);
+    auto iter = compileUnitBases.find(index);
+    if (iter != compileUnitBases.end()) {
+      return iter->second;
+    }
+    return OldToNew{0, 0};
+  }
+};
+
+// A tombstone value is a value that is placed where something used to exist,
+// but no longer does, like a reference to a function that was DCE'd out during
+// linking. In theory the value can be any invalid location, and tools will
+// basically ignore it.
+// Earlier LLVM used to use 0 there, and newer versions use -1 or -2 depending
+// on the DWARF section. For now, support them all, but TODO stop supporting 0,
+// as there are apparently some possible corner cases where 0 is a valid value.
+static bool isTombstone(uint32_t x) {
+  return x == 0 || x == uint32_t(-1) || x == uint32_t(-2);
+}
+
+// Update debug lines, and update the locationUpdater with debug line offset
+// changes so we can update offsets into the debug line section.
+static void updateDebugLines(llvm::DWARFYAML::Data& data,
+                             LocationUpdater& locationUpdater) {
+  for (auto& table : data.DebugLines) {
+    uint32_t sequenceId = 0;
+    // Parse the original opcodes and emit new ones.
+    LineState state(table, sequenceId);
+    // All the addresses we need to write out.
+    std::vector<BinaryLocation> newAddrs;
+    std::unordered_map<BinaryLocation, LineState> newAddrInfo;
+    // If the address was zeroed out, we must omit the entire range (we could
+    // also leave it unchanged, so that the debugger ignores it based on the
+    // initial zero; but it's easier and better to just not emit it at all).
+    bool omittingRange = false;
+    for (auto& opcode : table.Opcodes) {
+      // Update the state, and check if we have a new row to emit.
+      if (state.startsNewRange(opcode)) {
+        omittingRange = false;
+      }
+      if (state.update(opcode, table)) {
+        if (isTombstone(state.addr)) {
+          omittingRange = true;
+        }
+        if (omittingRange) {
+          state = LineState(table, sequenceId);
+          continue;
+        }
+        // An expression may not exist for this line table item, if we optimized
+        // it away.
+        BinaryLocation oldAddr = state.addr;
+        BinaryLocation newAddr = 0;
+        if (locationUpdater.hasOldExprStart(oldAddr)) {
+          newAddr = locationUpdater.getNewExprStart(oldAddr);
+        }
+        // Test for a function's end address first, as LLVM output appears to
+        // use 1-past-the-end-of-the-function as a location in that function,
+        // and not the next (but the first byte of the next function, which is
+        // ambiguously identical to that value, is used at least in low_pc).
+        else if (locationUpdater.hasOldFuncEnd(oldAddr)) {
+          newAddr = locationUpdater.getNewFuncEnd(oldAddr);
+        } else if (locationUpdater.hasOldFuncStart(oldAddr)) {
+          newAddr = locationUpdater.getNewFuncStart(oldAddr);
+        } else if (locationUpdater.hasOldDelimiter(oldAddr)) {
+          newAddr = locationUpdater.getNewDelimiter(oldAddr);
+        } else if (locationUpdater.hasOldExprEnd(oldAddr)) {
+          newAddr = locationUpdater.getNewExprEnd(oldAddr);
+        }
+        if (newAddr && state.needToEmit()) {
+          // LLVM sometimes emits the same address more than once. We should
+          // probably investigate that.
+          if (newAddrInfo.count(newAddr)) {
+            continue;
+          }
+          newAddrs.push_back(newAddr);
+          newAddrInfo.emplace(newAddr, state);
+          auto& updatedState = newAddrInfo.at(newAddr);
+          // The only difference is the address TODO other stuff?
+          updatedState.addr = newAddr;
+          // Reset relevant state.
+          state.resetAfterLine();
+        }
+        if (opcode.Opcode == 0 &&
+            opcode.SubOpcode == llvm::dwarf::DW_LNE_end_sequence) {
+          sequenceId++;
+          // We assume the number of sequences can fit in 32 bits, and -1 is
+          // an invalid value.
+          assert(sequenceId != uint32_t(-1));
+          state = LineState(table, sequenceId);
+        }
+      }
+    }
+    // Sort the new addresses (which may be substantially different from the
+    // original layout after optimization).
+    std::sort(newAddrs.begin(), newAddrs.end());
+    // Emit a new line table.
+    {
+      std::vector<llvm::DWARFYAML::LineTableOpcode> newOpcodes;
+      for (size_t i = 0; i < newAddrs.size(); i++) {
+        LineState state = newAddrInfo.at(newAddrs[i]);
+        assert(state.needToEmit());
+        LineState lastState(table, -1);
+        if (i != 0) {
+          lastState = newAddrInfo.at(newAddrs[i - 1]);
+          // If the last line is in another sequence, clear the old state, as
+          // there is nothing to diff to.
+          if (lastState.sequenceId != state.sequenceId) {
+            lastState = LineState(table, -1);
+          }
+        }
+        // This line ends a sequence if there is no next line after it, or if
+        // the next line is in a different sequence.
+        bool endSequence =
+          i + 1 == newAddrs.size() ||
+          newAddrInfo.at(newAddrs[i + 1]).sequenceId != state.sequenceId;
+        state.emitDiff(lastState, newOpcodes, table, endSequence);
+      }
+      table.Opcodes.swap(newOpcodes);
+    }
+  }
+  // After updating the contents, run the emitter in order to update the
+  // lengths of each section. We will use that to update offsets into the
+  // debug_line section.
+  std::vector<size_t> computedLengths;
+  llvm::DWARFYAML::ComputeDebugLine(data, computedLengths);
+  BinaryLocation newLocation = 0;
+  for (size_t i = 0; i < data.DebugLines.size(); i++) {
+    auto& table = data.DebugLines[i];
+    auto oldLocation = table.Position;
+    locationUpdater.debugLineMap[oldLocation] = newLocation;
+    table.Position = newLocation;
+    newLocation += computedLengths[i] + AddressSize;
+    table.Length.setLength(computedLengths[i]);
+  }
+}
+
+// Iterate in parallel over a DwarfContext representation element and a
+// YAML element, which parallel each other.
+template<typename T, typename U, typename W>
+static void iterContextAndYAML(const T& contextList, U& yamlList, W func) {
+  auto yamlValue = yamlList.begin();
+  for (const auto& contextValue : contextList) {
+    assert(yamlValue != yamlList.end());
+    func(contextValue, *yamlValue);
+    yamlValue++;
+  }
+  assert(yamlValue == yamlList.end());
+}
+
+// Updates a YAML entry from a DWARF DIE. Also updates LocationUpdater
+// associating each .debug_loc entry with the base address of its corresponding
+// compilation unit.
+static void updateDIE(const llvm::DWARFDebugInfoEntry& DIE,
+                      llvm::DWARFYAML::Entry& yamlEntry,
+                      const llvm::DWARFAbbreviationDeclaration* abbrevDecl,
+                      LocationUpdater& locationUpdater,
+                      size_t compileUnitIndex) {
+  auto tag = DIE.getTag();
+  // Pairs of low/high_pc require some special handling, as the high
+  // may be an offset relative to the low. First, process everything but
+  // the high pcs, so we see the low pcs first.
+  BinaryLocation oldLowPC = 0, newLowPC = 0;
+  iterContextAndYAML(
+    abbrevDecl->attributes(),
+    yamlEntry.Values,
+    [&](const llvm::DWARFAbbreviationDeclaration::AttributeSpec& attrSpec,
+        llvm::DWARFYAML::FormValue& yamlValue) {
+      auto attr = attrSpec.Att
