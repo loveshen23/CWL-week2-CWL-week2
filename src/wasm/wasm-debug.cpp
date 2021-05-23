@@ -806,4 +806,270 @@ static void updateDIE(const llvm::DWARFDebugInfoEntry& DIE,
     yamlEntry.Values,
     [&](const llvm::DWARFAbbreviationDeclaration::AttributeSpec& attrSpec,
         llvm::DWARFYAML::FormValue& yamlValue) {
-      auto attr = attrSpec.Att
+      auto attr = attrSpec.Attr;
+      if (attr == llvm::dwarf::DW_AT_low_pc) {
+        // This is an address.
+        BinaryLocation oldValue = yamlValue.Value, newValue = 0;
+        if (tag == llvm::dwarf::DW_TAG_GNU_call_site ||
+            tag == llvm::dwarf::DW_TAG_inlined_subroutine ||
+            tag == llvm::dwarf::DW_TAG_lexical_block ||
+            tag == llvm::dwarf::DW_TAG_label) {
+          newValue = locationUpdater.getNewStart(oldValue);
+        } else if (tag == llvm::dwarf::DW_TAG_compile_unit) {
+          newValue = locationUpdater.getNewFuncStart(oldValue);
+          // Per the DWARF spec, "The base address of a compile unit is
+          // defined as the value of the DW_AT_low_pc attribute, if present."
+          locationUpdater.compileUnitBases[compileUnitIndex] =
+            LocationUpdater::OldToNew{oldValue, newValue};
+        } else if (tag == llvm::dwarf::DW_TAG_subprogram) {
+          newValue = locationUpdater.getNewFuncStart(oldValue);
+        } else {
+          Fatal() << "unknown tag with low_pc "
+                  << llvm::dwarf::TagString(tag).str();
+        }
+        oldLowPC = oldValue;
+        newLowPC = newValue;
+        yamlValue.Value = newValue;
+      } else if (attr == llvm::dwarf::DW_AT_stmt_list) {
+        // This is an offset into the debug line section.
+        yamlValue.Value =
+          locationUpdater.getNewDebugLineLocation(yamlValue.Value);
+      } else if (attr == llvm::dwarf::DW_AT_location &&
+                 attrSpec.Form == llvm::dwarf::DW_FORM_sec_offset) {
+        BinaryLocation locOffset = yamlValue.Value;
+        locationUpdater.locToUnitMap[locOffset] = compileUnitIndex;
+      }
+    });
+  // Next, process the high_pcs.
+  // TODO: do this more efficiently, without a second traversal (but that's a
+  //       little tricky given the special double-traversal we have).
+  iterContextAndYAML(
+    abbrevDecl->attributes(),
+    yamlEntry.Values,
+    [&](const llvm::DWARFAbbreviationDeclaration::AttributeSpec& attrSpec,
+        llvm::DWARFYAML::FormValue& yamlValue) {
+      auto attr = attrSpec.Attr;
+      if (attr != llvm::dwarf::DW_AT_high_pc) {
+        return;
+      }
+      BinaryLocation oldValue = yamlValue.Value, newValue = 0;
+      bool isRelative = attrSpec.Form == llvm::dwarf::DW_FORM_data4;
+      if (isRelative) {
+        oldValue += oldLowPC;
+      }
+      if (tag == llvm::dwarf::DW_TAG_GNU_call_site ||
+          tag == llvm::dwarf::DW_TAG_inlined_subroutine ||
+          tag == llvm::dwarf::DW_TAG_lexical_block ||
+          tag == llvm::dwarf::DW_TAG_label) {
+        newValue = locationUpdater.getNewExprEnd(oldValue);
+      } else if (tag == llvm::dwarf::DW_TAG_compile_unit ||
+                 tag == llvm::dwarf::DW_TAG_subprogram) {
+        newValue = locationUpdater.getNewFuncEnd(oldValue);
+      } else {
+        Fatal() << "unknown tag with low_pc "
+                << llvm::dwarf::TagString(tag).str();
+      }
+      if (isRelative) {
+        newValue -= newLowPC;
+      }
+      yamlValue.Value = newValue;
+    });
+}
+
+static void updateCompileUnits(const BinaryenDWARFInfo& info,
+                               llvm::DWARFYAML::Data& yaml,
+                               LocationUpdater& locationUpdater,
+                               bool is64) {
+  // The context has the high-level information we need, and the YAML is where
+  // we write changes. First, iterate over the compile units.
+  size_t compileUnitIndex = 0;
+  iterContextAndYAML(
+    info.context->compile_units(),
+    yaml.CompileUnits,
+    [&](const std::unique_ptr<llvm::DWARFUnit>& CU,
+        llvm::DWARFYAML::Unit& yamlUnit) {
+      // Our Memory64Lowering pass may change the "architecture" of the DWARF
+      // data. AddrSize will cause all DW_AT_low_pc to be written as 32/64-bit.
+      auto NewAddrSize = is64 ? 8 : 4;
+      if (NewAddrSize != yamlUnit.AddrSize) {
+        yamlUnit.AddrSize = NewAddrSize;
+        yamlUnit.AddrSizeChanged = true;
+      }
+      // Process the DIEs in each compile unit.
+      iterContextAndYAML(
+        CU->dies(),
+        yamlUnit.Entries,
+        [&](const llvm::DWARFDebugInfoEntry& DIE,
+            llvm::DWARFYAML::Entry& yamlEntry) {
+          // Process the entries in each relevant DIE, looking for attributes to
+          // change.
+          auto abbrevDecl = DIE.getAbbreviationDeclarationPtr();
+          if (abbrevDecl) {
+            // This is relevant; look for things to update.
+            updateDIE(
+              DIE, yamlEntry, abbrevDecl, locationUpdater, compileUnitIndex);
+          }
+        });
+      compileUnitIndex++;
+    });
+}
+
+static void updateRanges(llvm::DWARFYAML::Data& yaml,
+                         const LocationUpdater& locationUpdater) {
+  // In each range section, try to update the start and end. If we no longer
+  // have something to map them to, we must skip that part.
+  size_t skip = 0;
+  for (size_t i = 0; i < yaml.Ranges.size(); i++) {
+    auto& range = yaml.Ranges[i];
+    BinaryLocation oldStart = range.Start, oldEnd = range.End, newStart = 0,
+                   newEnd = 0;
+    // If this is an end marker (0, 0), or an invalid range (0, x) or (x, 0)
+    // then just emit it as it is - either to mark the end, or to mark an
+    // invalid entry.
+    if (isTombstone(oldStart) || isTombstone(oldEnd)) {
+      newStart = oldStart;
+      newEnd = oldEnd;
+    } else {
+      // This was a valid entry; update it.
+      newStart = locationUpdater.getNewStart(oldStart);
+      newEnd = locationUpdater.getNewEnd(oldEnd);
+      if (isTombstone(newStart) || isTombstone(newEnd)) {
+        // This part of the range no longer has a mapping, so we must skip it.
+        // Don't use (0, 0) as that would be an end marker; emit something
+        // invalid for the debugger to ignore.
+        newStart = 0;
+        newEnd = 1;
+      }
+      // TODO even if range start and end markers have been preserved,
+      // instructions in the middle may have moved around, making the range no
+      // longer contiguous. We should check that, and possibly split/merge
+      // the range. Or, we may need to have tracking in the IR for this.
+    }
+    auto& writtenRange = yaml.Ranges[i - skip];
+    writtenRange.Start = newStart;
+    writtenRange.End = newEnd;
+  }
+}
+
+// A location that is ignoreable, i.e., not a special value like 0 or -1 (which
+// would indicate an end or a base in .debug_loc).
+static const BinaryLocation IGNOREABLE_LOCATION = 1;
+
+static bool isNewBaseLoc(const llvm::DWARFYAML::Loc& loc) {
+  return loc.Start == BinaryLocation(-1);
+}
+
+static bool isEndMarkerLoc(const llvm::DWARFYAML::Loc& loc) {
+  return isTombstone(loc.Start) && isTombstone(loc.End);
+}
+
+// Update the .debug_loc section.
+static void updateLoc(llvm::DWARFYAML::Data& yaml,
+                      const LocationUpdater& locationUpdater) {
+  // Similar to ranges, try to update the start and end. Note that here we
+  // can't skip since the location description is a variable number of bytes,
+  // so we mark no longer valid addresses as empty.
+  bool atStart = true;
+  // We need to keep positions in the .debug_loc section identical to before
+  // (or else we'd need to update their positions too) and so we need to keep
+  // base entries around (a base entry is added to every entry after it in the
+  // list). However, we may change the base's value as after moving instructions
+  // around the old base may not be smaller than all the values relative to it.
+  BinaryLocation oldBase, newBase;
+  auto& locs = yaml.Locs;
+  for (size_t i = 0; i < locs.size(); i++) {
+    auto& loc = locs[i];
+    if (atStart) {
+      std::tie(oldBase, newBase) =
+        locationUpdater.getCompileUnitBasesForLoc(loc.CompileUnitOffset);
+      atStart = false;
+    }
+    // By default we copy values over, unless we modify them below.
+    BinaryLocation newStart = loc.Start, newEnd = loc.End;
+    if (isNewBaseLoc(loc)) {
+      // This is a new base.
+      // Note that the base is not the address of an instruction, necessarily -
+      // it's just a number (seems like it could always be an instruction, but
+      // that's not what LLVM emits).
+      // We must look forward at everything relative to this base, so that we
+      // can emit a new proper base (as mentioned earlier, the original base may
+      // not be valid if instructions moved to a position before it - they must
+      // be positive offsets from it).
+      oldBase = newBase = newEnd;
+      BinaryLocation smallest = -1;
+      for (size_t j = i + 1; j < locs.size(); j++) {
+        auto& futureLoc = locs[j];
+        if (isNewBaseLoc(futureLoc) || isEndMarkerLoc(futureLoc)) {
+          break;
+        }
+        auto updatedStart =
+          locationUpdater.getNewStart(futureLoc.Start + oldBase);
+        // If we found a valid mapping, this is a relevant value for us. If the
+        // optimizer removed it, it's a 0, and we can ignore it here - we will
+        // emit IGNOREABLE_LOCATION for it later anyhow.
+        if (updatedStart != 0) {
+          smallest = std::min(smallest, updatedStart);
+        }
+      }
+      // If we found no valid values that will be relativized here, just use 0
+      // as the new (never-to-be-used) base, which is less confusing (otherwise
+      // the value looks like it means something).
+      if (smallest == BinaryLocation(-1)) {
+        smallest = 0;
+      }
+      newBase = newEnd = smallest;
+    } else if (isEndMarkerLoc(loc)) {
+      // This is an end marker, this list is done; reset the base.
+      atStart = true;
+    } else {
+      // This is a normal entry, try to find what it should be updated to. First
+      // de-relativize it to the base to get the absolute address, then look for
+      // a new address for it.
+      newStart = locationUpdater.getNewStart(loc.Start + oldBase);
+      newEnd = locationUpdater.getNewEnd(loc.End + oldBase);
+      if (newStart == 0 || newEnd == 0 || newStart > newEnd) {
+        // This part of the loc no longer has a mapping, or after the mapping
+        // it is no longer a proper span, so we must ignore it.
+        newStart = newEnd = IGNOREABLE_LOCATION;
+      } else {
+        // We picked a new base that ensures it is smaller than the values we
+        // will relativize to it.
+        assert(newStart >= newBase && newEnd >= newBase);
+        newStart -= newBase;
+        newEnd -= newBase;
+        if (newStart == 0 && newEnd == 0) {
+          // After mapping to the new positions, and after relativizing to the
+          // base, if we end up with (0, 0) then we must emit something else, as
+          // that would be interpreted as the end of a list. As it is an empty
+          // span, the actual value doesn't matter, it just has to be != 0.
+          // This can happen if the very first span in a compile unit is an
+          // empty span, in which case relative to the base of the compile unit
+          // we would have (0, 0).
+          newStart = newEnd = IGNOREABLE_LOCATION;
+        }
+      }
+      // The loc start and end markers have been preserved. However, TODO
+      // instructions in the middle may have moved around, making the loc no
+      // longer contiguous, we should check that, and possibly split/merge
+      // the loc. Or, we may need to have tracking in the IR for this.
+    }
+    loc.Start = newStart;
+    loc.End = newEnd;
+    // Note how the ".Location" field is unchanged.
+  }
+}
+
+void writeDWARFSections(Module& wasm, const BinaryLocations& newLocations) {
+  BinaryenDWARFInfo info(wasm);
+
+  // Convert to Data representation, which YAML can use to write.
+  llvm::DWARFYAML::Data data;
+  if (dwarf2yaml(*info.context, data)) {
+    Fatal() << "Failed to parse DWARF to YAML";
+  }
+
+  LocationUpdater locationUpdater(wasm, newLocations);
+
+  updateDebugLines(data, locationUpdater);
+
+  bool is64 = wasm.memories.size() > 0 ? wasm.memories[0
