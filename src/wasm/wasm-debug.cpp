@@ -1072,4 +1072,43 @@ void writeDWARFSections(Module& wasm, const BinaryLocations& newLocations) {
 
   updateDebugLines(data, locationUpdater);
 
-  bool is64 = wasm.memories.size() > 0 ? wasm.memories[0
+  bool is64 = wasm.memories.size() > 0 ? wasm.memories[0]->is64() : false;
+  updateCompileUnits(info, data, locationUpdater, is64);
+
+  updateRanges(data, locationUpdater);
+
+  updateLoc(data, locationUpdater);
+
+  // Convert to binary sections.
+  auto newSections =
+    EmitDebugSections(data, false /* EmitFixups for debug_info */);
+
+  // Update the custom sections in the wasm.
+  // TODO: efficiency
+  for (auto& section : wasm.customSections) {
+    if (Name(section.name).startsWith(".debug_")) {
+      auto llvmName = section.name.substr(1);
+      if (newSections.count(llvmName)) {
+        auto llvmData = newSections[llvmName]->getBuffer();
+        section.data.resize(llvmData.size());
+        std::copy(llvmData.begin(), llvmData.end(), section.data.data());
+      }
+    }
+  }
+}
+
+#else // BUILD_LLVM_DWARF
+
+void dumpDWARF(const Module& wasm) {
+  std::cerr << "warning: no DWARF dumping support present\n";
+}
+
+void writeDWARFSections(Module& wasm, const BinaryLocations& newLocations) {
+  std::cerr << "warning: no DWARF updating support present\n";
+}
+
+bool shouldPreserveDWARF(PassOptions& options, Module& wasm) { return false; }
+
+#endif // BUILD_LLVM_DWARF
+
+} // namespace wasm::Debug
