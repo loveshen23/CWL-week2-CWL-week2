@@ -1171,4 +1171,404 @@ Type SExpressionWasmBuilder::stringToType(std::string_view str,
   }
   if (str.size() >= 4) {
     if (str[0] == 'v') {
-      if (str[1] =
+      if (str[1] == '1' && str[2] == '2' && str[3] == '8' &&
+          (prefix || str.size() == 4)) {
+        return Type::v128;
+      }
+    }
+  }
+  if (str.substr(0, 7) == "funcref" && (prefix || str.size() == 7)) {
+    return Type(HeapType::func, Nullable);
+  }
+  if (str.substr(0, 9) == "externref" && (prefix || str.size() == 9)) {
+    return Type(HeapType::ext, Nullable);
+  }
+  if (str.substr(0, 6) == "anyref" && (prefix || str.size() == 6)) {
+    return Type(HeapType::any, Nullable);
+  }
+  if (str.substr(0, 5) == "eqref" && (prefix || str.size() == 5)) {
+    return Type(HeapType::eq, Nullable);
+  }
+  if (str.substr(0, 6) == "i31ref" && (prefix || str.size() == 6)) {
+    return Type(HeapType::i31, Nullable);
+  }
+  if (str.substr(0, 9) == "structref" && (prefix || str.size() == 9)) {
+    return Type(HeapType::struct_, Nullable);
+  }
+  if (str.substr(0, 8) == "arrayref" && (prefix || str.size() == 8)) {
+    return Type(HeapType::array, Nullable);
+  }
+  if (str.substr(0, 9) == "stringref" && (prefix || str.size() == 9)) {
+    return Type(HeapType::string, Nullable);
+  }
+  if (str.substr(0, 15) == "stringview_wtf8" && (prefix || str.size() == 15)) {
+    return Type(HeapType::stringview_wtf8, Nullable);
+  }
+  if (str.substr(0, 16) == "stringview_wtf16" && (prefix || str.size() == 16)) {
+    return Type(HeapType::stringview_wtf16, Nullable);
+  }
+  if (str.substr(0, 15) == "stringview_iter" && (prefix || str.size() == 15)) {
+    return Type(HeapType::stringview_iter, Nullable);
+  }
+  if (str.substr(0, 7) == "nullref" && (prefix || str.size() == 7)) {
+    return Type(HeapType::none, Nullable);
+  }
+  if (str.substr(0, 13) == "nullexternref" && (prefix || str.size() == 13)) {
+    return Type(HeapType::noext, Nullable);
+  }
+  if (str.substr(0, 11) == "nullfuncref" && (prefix || str.size() == 11)) {
+    return Type(HeapType::nofunc, Nullable);
+  }
+  if (allowError) {
+    return Type::none;
+  }
+  throw ParseException(std::string("invalid wasm type: ") +
+                       std::string(str.data(), str.size()));
+}
+
+HeapType SExpressionWasmBuilder::stringToHeapType(std::string_view str,
+                                                  bool prefix) {
+  if (str.substr(0, 4) == "func" && (prefix || str.size() == 4)) {
+    return HeapType::func;
+  }
+  if (str.substr(0, 2) == "eq" && (prefix || str.size() == 2)) {
+    return HeapType::eq;
+  }
+  if (str.substr(0, 6) == "extern" && (prefix || str.size() == 6)) {
+    return HeapType::ext;
+  }
+  if (str.substr(0, 3) == "any" && (prefix || str.size() == 3)) {
+    return HeapType::any;
+  }
+  if (str.substr(0, 3) == "i31" && (prefix || str.size() == 3)) {
+    return HeapType::i31;
+  }
+  if (str.substr(0, 6) == "struct" && (prefix || str.size() == 6)) {
+    return HeapType::struct_;
+  }
+  if (str.substr(0, 5) == "array" && (prefix || str.size() == 5)) {
+    return HeapType::array;
+  }
+  if (str.substr(0, 6) == "string" && (prefix || str.size() == 6)) {
+    return HeapType::string;
+  }
+  if (str.substr(0, 15) == "stringview_wtf8" && (prefix || str.size() == 15)) {
+    return HeapType::stringview_wtf8;
+  }
+  if (str.substr(0, 16) == "stringview_wtf16" && (prefix || str.size() == 16)) {
+    return HeapType::stringview_wtf16;
+  }
+  if (str.substr(0, 15) == "stringview_iter" && (prefix || str.size() == 15)) {
+    return HeapType::stringview_iter;
+  }
+  if (str.substr(0, 4) == "none" && (prefix || str.size() == 4)) {
+    return HeapType::none;
+  }
+  if (str.substr(0, 8) == "noextern" && (prefix || str.size() == 8)) {
+    return HeapType::noext;
+  }
+  if (str.substr(0, 6) == "nofunc" && (prefix || str.size() == 6)) {
+    return HeapType::nofunc;
+  }
+  throw ParseException(std::string("invalid wasm heap type: ") +
+                       std::string(str.data(), str.size()));
+}
+
+Type SExpressionWasmBuilder::elementToType(Element& s) {
+  if (s.isStr()) {
+    return stringToType(s.str());
+  }
+  auto& list = s.list();
+  auto size = list.size();
+  if (elementStartsWith(s, REF)) {
+    // It's a reference. It should be in the form
+    //   (ref $name)
+    // or
+    //   (ref null $name)
+    // and also $name can be the expanded structure of the type and not a name,
+    // so something like (ref (func (result i32))), etc.
+    if (size != 2 && size != 3) {
+      throw ParseException(
+        std::string("invalid reference type size"), s.line, s.col);
+    }
+    if (size == 3 && *list[1] != NULL_) {
+      throw ParseException(
+        std::string("invalid reference type qualifier"), s.line, s.col);
+    }
+    Nullability nullable = NonNullable;
+    size_t i = 1;
+    if (size == 3) {
+      nullable = Nullable;
+      i++;
+    }
+    return Type(parseHeapType(*s[i]), nullable);
+  }
+  // It's a tuple.
+  std::vector<Type> types;
+  for (size_t i = 0; i < s.size(); ++i) {
+    types.push_back(elementToType(*list[i]));
+  }
+  return Type(types);
+}
+
+Type SExpressionWasmBuilder::stringToLaneType(const char* str) {
+  if (strcmp(str, "i8x16") == 0) {
+    return Type::i32;
+  }
+  if (strcmp(str, "i16x8") == 0) {
+    return Type::i32;
+  }
+  if (strcmp(str, "i32x4") == 0) {
+    return Type::i32;
+  }
+  if (strcmp(str, "i64x2") == 0) {
+    return Type::i64;
+  }
+  if (strcmp(str, "f32x4") == 0) {
+    return Type::f32;
+  }
+  if (strcmp(str, "f64x2") == 0) {
+    return Type::f64;
+  }
+  return Type::none;
+}
+
+HeapType SExpressionWasmBuilder::getFunctionType(Name name, Element& s) {
+  auto iter = functionTypes.find(name);
+  if (iter == functionTypes.end()) {
+    throw ParseException(
+      "invalid call target: " + std::string(name.str), s.line, s.col);
+  }
+  return iter->second;
+}
+
+Function::DebugLocation
+SExpressionWasmBuilder::getDebugLocation(const SourceLocation& loc) {
+  IString file = loc.filename;
+  auto& debugInfoFileNames = wasm.debugInfoFileNames;
+  auto iter = debugInfoFileIndices.find(file);
+  if (iter == debugInfoFileIndices.end()) {
+    Index index = debugInfoFileNames.size();
+    debugInfoFileNames.push_back(file.toString());
+    debugInfoFileIndices[file] = index;
+  }
+  uint32_t fileIndex = debugInfoFileIndices[file];
+  return {fileIndex, loc.line, loc.column};
+}
+
+Expression* SExpressionWasmBuilder::parseExpression(Element& s) {
+  Expression* result = makeExpression(s);
+  if (s.startLoc && currFunction) {
+    currFunction->debugLocations[result] = getDebugLocation(*s.startLoc);
+  }
+  return result;
+}
+
+Expression* SExpressionWasmBuilder::makeExpression(Element& s){
+#define INSTRUCTION_PARSER
+#include "gen-s-parser.inc"
+}
+
+Expression* SExpressionWasmBuilder::makeUnreachable() {
+  return allocator.alloc<Unreachable>();
+}
+
+Expression* SExpressionWasmBuilder::makeNop() { return allocator.alloc<Nop>(); }
+
+Expression* SExpressionWasmBuilder::makeBinary(Element& s, BinaryOp op) {
+  auto ret = allocator.alloc<Binary>();
+  ret->op = op;
+  ret->left = parseExpression(s[1]);
+  ret->right = parseExpression(s[2]);
+  ret->finalize();
+  return ret;
+}
+
+Expression* SExpressionWasmBuilder::makeUnary(Element& s, UnaryOp op) {
+  auto ret = allocator.alloc<Unary>();
+  ret->op = op;
+  ret->value = parseExpression(s[1]);
+  ret->finalize();
+  return ret;
+}
+
+Expression* SExpressionWasmBuilder::makeSelect(Element& s) {
+  auto ret = allocator.alloc<Select>();
+  Index i = 1;
+  Type type = parseOptionalResultType(s, i);
+  ret->ifTrue = parseExpression(s[i++]);
+  ret->ifFalse = parseExpression(s[i++]);
+  ret->condition = parseExpression(s[i]);
+  if (type.isConcrete()) {
+    ret->finalize(type);
+  } else {
+    ret->finalize();
+  }
+  return ret;
+}
+
+Expression* SExpressionWasmBuilder::makeDrop(Element& s) {
+  auto ret = allocator.alloc<Drop>();
+  ret->value = parseExpression(s[1]);
+  ret->finalize();
+  return ret;
+}
+
+Expression* SExpressionWasmBuilder::makeMemorySize(Element& s) {
+  auto ret = allocator.alloc<MemorySize>();
+  Index i = 1;
+  Name memory;
+  if (s.size() > 1) {
+    memory = getMemoryName(*s[i++]);
+  } else {
+    memory = getMemoryNameAtIdx(0);
+  }
+  ret->memory = memory;
+  if (isMemory64(memory)) {
+    ret->make64();
+  }
+  ret->finalize();
+  return ret;
+}
+
+Expression* SExpressionWasmBuilder::makeMemoryGrow(Element& s) {
+  auto ret = allocator.alloc<MemoryGrow>();
+  Index i = 1;
+  Name memory;
+  if (s.size() > 2) {
+    memory = getMemoryName(*s[i++]);
+  } else {
+    memory = getMemoryNameAtIdx(0);
+  }
+  ret->memory = memory;
+  if (isMemory64(memory)) {
+    ret->make64();
+  }
+  ret->delta = parseExpression(s[i]);
+  ret->finalize();
+  return ret;
+}
+
+Index SExpressionWasmBuilder::getLocalIndex(Element& s) {
+  if (!currFunction) {
+    throw ParseException("local access in non-function scope", s.line, s.col);
+  }
+  if (s.dollared()) {
+    auto ret = s.str();
+    if (currFunction->localIndices.count(ret) == 0) {
+      throw ParseException("bad local name", s.line, s.col);
+    }
+    return currFunction->getLocalIndex(ret);
+  }
+  // this is a numeric index
+  Index ret = parseIndex(s);
+  if (ret >= currFunction->getNumLocals()) {
+    throw ParseException("bad local index", s.line, s.col);
+  }
+  return ret;
+}
+
+Expression* SExpressionWasmBuilder::makeLocalGet(Element& s) {
+  auto ret = allocator.alloc<LocalGet>();
+  ret->index = getLocalIndex(*s[1]);
+  ret->type = currFunction->getLocalType(ret->index);
+  return ret;
+}
+
+Expression* SExpressionWasmBuilder::makeLocalTee(Element& s) {
+  auto ret = allocator.alloc<LocalSet>();
+  ret->index = getLocalIndex(*s[1]);
+  ret->value = parseExpression(s[2]);
+  ret->makeTee(currFunction->getLocalType(ret->index));
+  ret->finalize();
+  return ret;
+}
+
+Expression* SExpressionWasmBuilder::makeLocalSet(Element& s) {
+  auto ret = allocator.alloc<LocalSet>();
+  ret->index = getLocalIndex(*s[1]);
+  ret->value = parseExpression(s[2]);
+  ret->makeSet();
+  ret->finalize();
+  return ret;
+}
+
+Expression* SExpressionWasmBuilder::makeGlobalGet(Element& s) {
+  auto ret = allocator.alloc<GlobalGet>();
+  ret->name = getGlobalName(*s[1]);
+  auto* global = wasm.getGlobalOrNull(ret->name);
+  if (!global) {
+    throw ParseException("bad global.get name", s.line, s.col);
+  }
+  ret->type = global->type;
+  return ret;
+}
+
+Expression* SExpressionWasmBuilder::makeGlobalSet(Element& s) {
+  auto ret = allocator.alloc<GlobalSet>();
+  ret->name = getGlobalName(*s[1]);
+  if (wasm.getGlobalOrNull(ret->name) &&
+      !wasm.getGlobalOrNull(ret->name)->mutable_) {
+    throw ParseException("global.set of immutable", s.line, s.col);
+  }
+  ret->value = parseExpression(s[2]);
+  ret->finalize();
+  return ret;
+}
+
+Expression* SExpressionWasmBuilder::makeBlock(Element& s) {
+  if (!currFunction) {
+    throw ParseException(
+      "block is unallowed outside of functions", s.line, s.col);
+  }
+  // special-case Block, because Block nesting (in their first element) can be
+  // incredibly deep
+  auto curr = allocator.alloc<Block>();
+  auto* sp = &s;
+  // The information we need for the stack of blocks here is the element we are
+  // converting, the block we are converting it to, and whether it originally
+  // had a name or not (which will be useful later).
+  struct Info {
+    Element* element;
+    Block* block;
+    bool hadName;
+  };
+  std::vector<Info> stack;
+  while (1) {
+    auto& s = *sp;
+    Index i = 1;
+    Name sName;
+    bool hadName = false;
+    if (i < s.size() && s[i]->isStr()) {
+      // could be a name or a type
+      if (s[i]->dollared() ||
+          stringToType(s[i]->str(), true /* allowError */) == Type::none) {
+        sName = s[i++]->str();
+        hadName = true;
+      } else {
+        sName = "block";
+      }
+    } else {
+      sName = "block";
+    }
+    stack.emplace_back(Info{sp, curr, hadName});
+    curr->name = nameMapper.pushLabelName(sName);
+    // block signature
+    curr->type = parseOptionalResultType(s, i);
+    if (i >= s.size()) {
+      break; // empty block
+    }
+    auto& first = *s[i];
+    if (elementStartsWith(first, BLOCK)) {
+      // recurse
+      curr = allocator.alloc<Block>();
+      if (first.startLoc) {
+        currFunction->debugLocations[curr] = getDebugLocation(*first.startLoc);
+      }
+      sp = &first;
+      continue;
+    }
+    break;
+  }
+  // we now have a stack of Blocks, with their labels, but no contents yet
+  for (int t = int(stack.size())
