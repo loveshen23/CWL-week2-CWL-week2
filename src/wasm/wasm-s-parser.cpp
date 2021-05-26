@@ -782,4 +782,393 @@ void SExpressionWasmBuilder::preParseHeapTypes(Element& module) {
     if (referent.dollared()) {
       return builder.getTempRefType(builder[typeIndices[name]], nullable);
     } else if (String::isNumber(name)) {
-      size_t index = parseIndex(ref
+      size_t index = parseIndex(referent);
+      if (index >= numTypes) {
+        throw ParseException("invalid type index", elem.line, elem.col);
+      }
+      return builder.getTempRefType(builder[index], nullable);
+    } else {
+      return Type(stringToHeapType(referent.str()), nullable);
+    }
+  };
+
+  auto parseValType = [&](Element& elem) {
+    if (elem.isStr()) {
+      return stringToType(elem.str());
+    } else if (*elem[0] == REF) {
+      return parseRefType(elem);
+    } else {
+      throw ParseException("unknown valtype kind", elem[0]->line, elem[0]->col);
+    }
+  };
+
+  auto parseParams = [&](Element& elem) {
+    auto it = ++elem.begin();
+    if (it != elem.end() && (*it)->dollared()) {
+      ++it;
+    }
+    std::vector<Type> params;
+    for (auto end = elem.end(); it != end; ++it) {
+      params.push_back(parseValType(**it));
+    }
+    return params;
+  };
+
+  auto parseResults = [&](Element& elem) {
+    std::vector<Type> results;
+    for (auto it = ++elem.begin(); it != elem.end(); ++it) {
+      results.push_back(parseValType(**it));
+    }
+    return results;
+  };
+
+  auto parseSignatureDef = [&](Element& elem, bool nominal) {
+    // '(' 'func' vec(param) vec(result) ')'
+    // param ::= '(' 'param' id? valtype ')'
+    // result ::= '(' 'result' valtype ')'
+    std::vector<Type> params, results;
+    auto end = elem.end() - (nominal ? 1 : 0);
+    for (auto it = ++elem.begin(); it != end; ++it) {
+      Element& curr = **it;
+      if (elementStartsWith(curr, PARAM)) {
+        auto newParams = parseParams(curr);
+        params.insert(params.end(), newParams.begin(), newParams.end());
+      } else if (elementStartsWith(curr, RESULT)) {
+        auto newResults = parseResults(curr);
+        results.insert(results.end(), newResults.begin(), newResults.end());
+      }
+    }
+    return Signature(builder.getTempTupleType(params),
+                     builder.getTempTupleType(results));
+  };
+
+  // Parses a field, and notes the name if one is found.
+  auto parseField = [&](Element* elem, Name& name) {
+    Mutability mutable_ = Immutable;
+    // elem is a list, containing either
+    //   TYPE
+    // or
+    //   (field TYPE)
+    // or
+    //   (field $name TYPE)
+    if (elementStartsWith(elem, FIELD)) {
+      if (elem->size() == 3) {
+        name = (*elem)[1]->str();
+      }
+      elem = (*elem)[elem->size() - 1];
+    }
+    // The element may also be (mut (..)).
+    if (elementStartsWith(elem, MUT)) {
+      mutable_ = Mutable;
+      elem = (*elem)[1];
+    }
+    if (elem->isStr()) {
+      // elem is a simple string name like "i32". It can be a normal wasm
+      // type, or one of the special types only available in fields.
+      if (*elem == I8) {
+        return Field(Field::i8, mutable_);
+      } else if (*elem == I16) {
+        return Field(Field::i16, mutable_);
+      }
+    }
+    // Otherwise it's an arbitrary type.
+    return Field(parseValType(*elem), mutable_);
+  };
+
+  auto parseStructDef = [&](Element& elem, size_t typeIndex, bool nominal) {
+    FieldList fields;
+    Index end = elem.size() - (nominal ? 1 : 0);
+    for (Index i = 1; i < end; i++) {
+      Name name;
+      fields.emplace_back(parseField(elem[i], name));
+      if (name.is()) {
+        // Only add the name to the map if it exists.
+        fieldNames[typeIndex][i - 1] = name;
+      }
+    }
+    return Struct(fields);
+  };
+
+  auto parseArrayDef = [&](Element& elem) {
+    Name unused;
+    return Array(parseField(elem[1], unused));
+  };
+
+  size_t index = 0;
+  forEachType([&](Element& elem, size_t) {
+    Element& def = elem[1]->dollared() ? *elem[2] : *elem[1];
+    Element& kind = *def[0];
+    bool hasSupertype =
+      kind == FUNC_SUBTYPE || kind == STRUCT_SUBTYPE || kind == ARRAY_SUBTYPE;
+    if (kind == FUNC || kind == FUNC_SUBTYPE) {
+      builder[index] = parseSignatureDef(def, hasSupertype);
+    } else if (kind == STRUCT || kind == STRUCT_SUBTYPE) {
+      builder[index] = parseStructDef(def, index, hasSupertype);
+    } else if (kind == ARRAY || kind == ARRAY_SUBTYPE) {
+      builder[index] = parseArrayDef(def);
+    } else {
+      throw ParseException("unknown heaptype kind", kind.line, kind.col);
+    }
+    Element* super = nullptr;
+    if (hasSupertype) {
+      super = def[def.size() - 1];
+      if (super->dollared()) {
+        // OK
+      } else if (kind == FUNC_SUBTYPE && super->str() == FUNC) {
+        // OK; no supertype
+        super = nullptr;
+      } else if ((kind == STRUCT_SUBTYPE || kind == ARRAY_SUBTYPE) &&
+                 super->str() == DATA) {
+        // OK; no supertype
+        super = nullptr;
+      } else {
+        throw ParseException("unknown supertype", super->line, super->col);
+      }
+    } else if (elementStartsWith(elem[elem.size() - 1], EXTENDS)) {
+      // '(' 'extends' $supertype ')'
+      Element& extends = *elem[elem.size() - 1];
+      super = extends[1];
+    }
+    if (super) {
+      auto it = typeIndices.find(super->toString());
+      if (it == typeIndices.end()) {
+        throw ParseException("unknown supertype", super->line, super->col);
+      }
+      builder[index].subTypeOf(builder[it->second]);
+    }
+    ++index;
+  });
+
+  auto result = builder.build();
+  if (auto* err = result.getError()) {
+    // Find the name to provide a better error message.
+    std::stringstream msg;
+    msg << "Invalid type: " << err->reason;
+    for (auto& [name, index] : typeIndices) {
+      if (index == err->index) {
+        Fatal() << msg.str() << " at type $" << name;
+      }
+    }
+    // No name, just report the index.
+    Fatal() << msg.str() << " at index " << err->index;
+  }
+  types = *result;
+
+  for (auto& [name, index] : typeIndices) {
+    auto type = types[index];
+    // A type may appear in the type section more than once, but we canonicalize
+    // types internally, so there will be a single name chosen for that type. Do
+    // so determistically.
+    if (wasm.typeNames.count(type) && wasm.typeNames[type].name.str < name) {
+      continue;
+    }
+    auto& currTypeNames = wasm.typeNames[type];
+    currTypeNames.name = name;
+    if (type.isStruct()) {
+      currTypeNames.fieldNames = fieldNames[index];
+    }
+  }
+}
+
+void SExpressionWasmBuilder::preParseFunctionType(Element& s) {
+  IString id = s[0]->str();
+  if (id != FUNC) {
+    return;
+  }
+  size_t i = 1;
+  Name name, exportName;
+  i = parseFunctionNames(s, name, exportName);
+  if (!name.is()) {
+    // unnamed, use an index
+    name = Name::fromInt(functionCounter);
+  }
+  functionNames.push_back(name);
+  functionCounter++;
+  parseTypeUse(s, i, functionTypes[name]);
+}
+
+size_t SExpressionWasmBuilder::parseFunctionNames(Element& s,
+                                                  Name& name,
+                                                  Name& exportName) {
+  size_t i = 1;
+  while (i < s.size() && i < 3 && s[i]->isStr()) {
+    if (s[i]->quoted()) {
+      // an export name
+      exportName = s[i]->str();
+      i++;
+    } else if (s[i]->dollared()) {
+      name = s[i]->str();
+      i++;
+    } else {
+      break;
+    }
+  }
+  if (i < s.size() && s[i]->isList()) {
+    auto& inner = *s[i];
+    if (elementStartsWith(inner, EXPORT)) {
+      exportName = inner[1]->str();
+      i++;
+    }
+  }
+#if 0
+  if (exportName.is() && !name.is()) {
+    name = exportName; // useful for debugging
+  }
+#endif
+  return i;
+}
+
+void SExpressionWasmBuilder::parseFunction(Element& s, bool preParseImport) {
+  brokeToAutoBlock = false;
+
+  Name name, exportName;
+  size_t i = parseFunctionNames(s, name, exportName);
+  bool hasExplicitName = name.is();
+  if (!preParseImport) {
+    if (!name.is()) {
+      // unnamed, use an index
+      name = Name::fromInt(functionCounter);
+    }
+    functionCounter++;
+  } else {
+    // just preparsing, functionCounter was incremented by preParseFunctionType
+    if (!name.is()) {
+      // unnamed, use an index
+      name = functionNames[functionCounter - 1];
+    }
+  }
+  if (exportName.is()) {
+    auto ex = make_unique<Export>();
+    ex->name = exportName;
+    ex->value = name;
+    ex->kind = ExternalKind::Function;
+    if (wasm.getExportOrNull(ex->name)) {
+      throw ParseException("duplicate export", s.line, s.col);
+    }
+    wasm.addExport(ex.release());
+  }
+
+  // parse import
+  Name importModule, importBase;
+  if (i < s.size() && elementStartsWith(*s[i], IMPORT)) {
+    Element& curr = *s[i];
+    importModule = curr[1]->str();
+    importBase = curr[2]->str();
+    i++;
+  }
+
+  // parse typeuse: type/param/result
+  HeapType type;
+  std::vector<NameType> params;
+  i = parseTypeUse(s, i, type, params);
+
+  // when (import) is inside a (func) element, this is not a function definition
+  // but an import.
+  if (importModule.is()) {
+    if (!importBase.size()) {
+      throw ParseException("module but no base for import", s.line, s.col);
+    }
+    if (!preParseImport) {
+      throw ParseException("!preParseImport in func", s.line, s.col);
+    }
+    auto im = make_unique<Function>();
+    im->setName(name, hasExplicitName);
+    im->module = importModule;
+    im->base = importBase;
+    im->type = type;
+    functionTypes[name] = type;
+    if (wasm.getFunctionOrNull(im->name)) {
+      throw ParseException("duplicate import", s.line, s.col);
+    }
+    wasm.addFunction(std::move(im));
+    if (currFunction) {
+      throw ParseException("import module inside function dec", s.line, s.col);
+    }
+    nameMapper.clear();
+    return;
+  }
+  // at this point this not an import but a real function definition.
+  if (preParseImport) {
+    throw ParseException("preParseImport in func", s.line, s.col);
+  }
+
+  size_t localIndex = params.size(); // local index for params and locals
+
+  // parse locals
+  std::vector<NameType> vars;
+  while (i < s.size() && elementStartsWith(*s[i], LOCAL)) {
+    auto newVars = parseParamOrLocal(*s[i++], localIndex);
+    vars.insert(vars.end(), newVars.begin(), newVars.end());
+  }
+
+  // make a new function
+  currFunction = std::unique_ptr<Function>(
+    Builder(wasm).makeFunction(name, std::move(params), type, std::move(vars)));
+  currFunction->profile = profile;
+
+  // parse body
+  Block* autoBlock = nullptr; // may need to add a block for the very top level
+  auto ensureAutoBlock = [&]() {
+    if (!autoBlock) {
+      autoBlock = allocator.alloc<Block>();
+      autoBlock->list.push_back(currFunction->body);
+      currFunction->body = autoBlock;
+    }
+  };
+  while (i < s.size()) {
+    Expression* ex = parseExpression(*s[i++]);
+    if (!currFunction->body) {
+      currFunction->body = ex;
+    } else {
+      ensureAutoBlock();
+      autoBlock->list.push_back(ex);
+    }
+  }
+
+  if (brokeToAutoBlock) {
+    ensureAutoBlock();
+    autoBlock->name = FAKE_RETURN;
+  }
+  if (autoBlock) {
+    autoBlock->finalize(type.getSignature().results);
+  }
+  if (!currFunction->body) {
+    currFunction->body = allocator.alloc<Nop>();
+  }
+  if (s.startLoc) {
+    currFunction->prologLocation.insert(getDebugLocation(*s.startLoc));
+  }
+  if (s.endLoc) {
+    currFunction->epilogLocation.insert(getDebugLocation(*s.endLoc));
+  }
+  if (wasm.getFunctionOrNull(currFunction->name)) {
+    throw ParseException("duplicate function", s.line, s.col);
+  }
+  wasm.addFunction(currFunction.release());
+  nameMapper.clear();
+}
+
+Type SExpressionWasmBuilder::stringToType(std::string_view str,
+                                          bool allowError,
+                                          bool prefix) {
+  if (str.size() >= 3) {
+    if (str[0] == 'i') {
+      if (str[1] == '3' && str[2] == '2' && (prefix || str.size() == 3)) {
+        return Type::i32;
+      }
+      if (str[1] == '6' && str[2] == '4' && (prefix || str.size() == 3)) {
+        return Type::i64;
+      }
+    }
+    if (str[0] == 'f') {
+      if (str[1] == '3' && str[2] == '2' && (prefix || str.size() == 3)) {
+        return Type::f32;
+      }
+      if (str[1] == '6' && str[2] == '4' && (prefix || str.size() == 3)) {
+        return Type::f64;
+      }
+    }
+  }
+  if (str.size() >= 4) {
+    if (str[0] == 'v') {
+      if (str[1] =
