@@ -1966,4 +1966,407 @@ Expression* SExpressionWasmBuilder::makeLoad(
   return ret;
 }
 
-Expression* SExpressionWasmBuilder::makeS
+Expression* SExpressionWasmBuilder::makeStore(Element& s,
+                                              Type type,
+                                              int bytes,
+                                              bool isAtomic) {
+  auto ret = allocator.alloc<Store>();
+  ret->bytes = bytes;
+  ret->offset = 0;
+  ret->align = bytes;
+  ret->isAtomic = isAtomic;
+  ret->valueType = type;
+  Index i = 1;
+  Name memory;
+  // Check to make sure there are more than the default args & this str isn't
+  // the mem attributes
+  if (hasMemoryIdx(s, 3, i)) {
+    memory = getMemoryName(*s[i++]);
+  } else {
+    memory = getMemoryNameAtIdx(0);
+  }
+  ret->memory = memory;
+  i = parseMemAttributes(i, s, ret->offset, ret->align, isMemory64(memory));
+  ret->ptr = parseExpression(s[i]);
+  ret->value = parseExpression(s[i + 1]);
+  ret->finalize();
+  return ret;
+}
+
+Expression* SExpressionWasmBuilder::makeAtomicRMW(Element& s,
+                                                  AtomicRMWOp op,
+                                                  Type type,
+                                                  uint8_t bytes) {
+  auto ret = allocator.alloc<AtomicRMW>();
+  ret->type = type;
+  ret->op = op;
+  ret->bytes = bytes;
+  ret->offset = 0;
+  Index i = 1;
+  Name memory;
+  // Check to make sure there are more than the default args & this str isn't
+  // the mem attributes
+  if (hasMemoryIdx(s, 3, i)) {
+    memory = getMemoryName(*s[i++]);
+  } else {
+    memory = getMemoryNameAtIdx(0);
+  }
+  ret->memory = memory;
+  Address align = bytes;
+  i = parseMemAttributes(i, s, ret->offset, align, isMemory64(memory));
+  if (align != ret->bytes) {
+    throw ParseException("Align of Atomic RMW must match size", s.line, s.col);
+  }
+  ret->ptr = parseExpression(s[i]);
+  ret->value = parseExpression(s[i + 1]);
+  ret->finalize();
+  return ret;
+}
+
+Expression* SExpressionWasmBuilder::makeAtomicCmpxchg(Element& s,
+                                                      Type type,
+                                                      uint8_t bytes) {
+  auto ret = allocator.alloc<AtomicCmpxchg>();
+  ret->type = type;
+  ret->bytes = bytes;
+  ret->offset = 0;
+  Index i = 1;
+  Name memory;
+  // Check to make sure there are more than the default args & this str isn't
+  // the mem attributes
+  if (hasMemoryIdx(s, 4, i)) {
+    memory = getMemoryName(*s[i++]);
+  } else {
+    memory = getMemoryNameAtIdx(0);
+  }
+  ret->memory = memory;
+  Address align = ret->bytes;
+  i = parseMemAttributes(i, s, ret->offset, align, isMemory64(memory));
+  if (align != ret->bytes) {
+    throw ParseException(
+      "Align of Atomic Cmpxchg must match size", s.line, s.col);
+  }
+  ret->ptr = parseExpression(s[i]);
+  ret->expected = parseExpression(s[i + 1]);
+  ret->replacement = parseExpression(s[i + 2]);
+  ret->finalize();
+  return ret;
+}
+
+Expression* SExpressionWasmBuilder::makeAtomicWait(Element& s, Type type) {
+  auto ret = allocator.alloc<AtomicWait>();
+  ret->type = Type::i32;
+  ret->offset = 0;
+  ret->expectedType = type;
+  Index i = 1;
+  Name memory;
+  // Check to make sure there are more than the default args & this str isn't
+  // the mem attributes
+  if (hasMemoryIdx(s, 4, i)) {
+    memory = getMemoryName(*s[i++]);
+  } else {
+    memory = getMemoryNameAtIdx(0);
+  }
+  ret->memory = memory;
+  Address expectedAlign = type == Type::i64 ? 8 : 4;
+  Address align = expectedAlign;
+  i = parseMemAttributes(i, s, ret->offset, align, isMemory64(memory));
+  if (align != expectedAlign) {
+    throw ParseException(
+      "Align of memory.atomic.wait must match size", s.line, s.col);
+  }
+  ret->ptr = parseExpression(s[i]);
+  ret->expected = parseExpression(s[i + 1]);
+  ret->timeout = parseExpression(s[i + 2]);
+  ret->finalize();
+  return ret;
+}
+
+Expression* SExpressionWasmBuilder::makeAtomicNotify(Element& s) {
+  auto ret = allocator.alloc<AtomicNotify>();
+  ret->type = Type::i32;
+  ret->offset = 0;
+  Index i = 1;
+  Name memory;
+  // Check to make sure there are more than the default args & this str isn't
+  // the mem attributes
+  if (hasMemoryIdx(s, 3, i)) {
+    memory = getMemoryName(*s[i++]);
+  } else {
+    memory = getMemoryNameAtIdx(0);
+  }
+  ret->memory = memory;
+  Address align = 4;
+  i = parseMemAttributes(i, s, ret->offset, align, isMemory64(memory));
+  if (align != 4) {
+    throw ParseException(
+      "Align of memory.atomic.notify must be 4", s.line, s.col);
+  }
+  ret->ptr = parseExpression(s[i]);
+  ret->notifyCount = parseExpression(s[i + 1]);
+  ret->finalize();
+  return ret;
+}
+
+Expression* SExpressionWasmBuilder::makeAtomicFence(Element& s) {
+  return allocator.alloc<AtomicFence>();
+}
+
+static uint8_t parseLaneIndex(const Element* s, size_t lanes) {
+  const char* str = s->str().str.data();
+  char* end;
+  auto n = static_cast<unsigned long long>(strtoll(str, &end, 10));
+  if (end == str || *end != '\0') {
+    throw ParseException("Expected lane index", s->line, s->col);
+  }
+  if (n > lanes) {
+    throw ParseException(
+      "lane index must be less than " + std::to_string(lanes), s->line, s->col);
+  }
+  return uint8_t(n);
+}
+
+Expression* SExpressionWasmBuilder::makeSIMDExtract(Element& s,
+                                                    SIMDExtractOp op,
+                                                    size_t lanes) {
+  auto ret = allocator.alloc<SIMDExtract>();
+  ret->op = op;
+  ret->index = parseLaneIndex(s[1], lanes);
+  ret->vec = parseExpression(s[2]);
+  ret->finalize();
+  return ret;
+}
+
+Expression* SExpressionWasmBuilder::makeSIMDReplace(Element& s,
+                                                    SIMDReplaceOp op,
+                                                    size_t lanes) {
+  auto ret = allocator.alloc<SIMDReplace>();
+  ret->op = op;
+  ret->index = parseLaneIndex(s[1], lanes);
+  ret->vec = parseExpression(s[2]);
+  ret->value = parseExpression(s[3]);
+  ret->finalize();
+  return ret;
+}
+
+Expression* SExpressionWasmBuilder::makeSIMDShuffle(Element& s) {
+  auto ret = allocator.alloc<SIMDShuffle>();
+  for (size_t i = 0; i < 16; ++i) {
+    ret->mask[i] = parseLaneIndex(s[i + 1], 32);
+  }
+  ret->left = parseExpression(s[17]);
+  ret->right = parseExpression(s[18]);
+  ret->finalize();
+  return ret;
+}
+
+Expression* SExpressionWasmBuilder::makeSIMDTernary(Element& s,
+                                                    SIMDTernaryOp op) {
+  auto ret = allocator.alloc<SIMDTernary>();
+  ret->op = op;
+  ret->a = parseExpression(s[1]);
+  ret->b = parseExpression(s[2]);
+  ret->c = parseExpression(s[3]);
+  ret->finalize();
+  return ret;
+}
+
+Expression* SExpressionWasmBuilder::makeSIMDShift(Element& s, SIMDShiftOp op) {
+  auto ret = allocator.alloc<SIMDShift>();
+  ret->op = op;
+  ret->vec = parseExpression(s[1]);
+  ret->shift = parseExpression(s[2]);
+  ret->finalize();
+  return ret;
+}
+
+Expression*
+SExpressionWasmBuilder::makeSIMDLoad(Element& s, SIMDLoadOp op, int bytes) {
+  auto ret = allocator.alloc<SIMDLoad>();
+  ret->op = op;
+  ret->offset = 0;
+  ret->align = bytes;
+  Index i = 1;
+  Name memory;
+  // Check to make sure there are more than the default args & this str isn't
+  // the mem attributes
+  if (hasMemoryIdx(s, 2, i)) {
+    memory = getMemoryName(*s[i++]);
+  } else {
+    memory = getMemoryNameAtIdx(0);
+  }
+  ret->memory = memory;
+  i = parseMemAttributes(i, s, ret->offset, ret->align, isMemory64(memory));
+  ret->ptr = parseExpression(s[i]);
+  ret->finalize();
+  return ret;
+}
+
+Expression* SExpressionWasmBuilder::makeSIMDLoadStoreLane(
+  Element& s, SIMDLoadStoreLaneOp op, int bytes) {
+  auto* ret = allocator.alloc<SIMDLoadStoreLane>();
+  ret->op = op;
+  ret->offset = 0;
+  ret->align = bytes;
+  size_t lanes;
+  switch (op) {
+    case Load8LaneVec128:
+    case Store8LaneVec128:
+      lanes = 16;
+      break;
+    case Load16LaneVec128:
+    case Store16LaneVec128:
+      lanes = 8;
+      break;
+    case Load32LaneVec128:
+    case Store32LaneVec128:
+      lanes = 4;
+      break;
+    case Load64LaneVec128:
+    case Store64LaneVec128:
+      lanes = 2;
+      break;
+    default:
+      WASM_UNREACHABLE("Unexpected SIMDLoadStoreLane op");
+  }
+  Index i = 1;
+  Name memory;
+  // Check to make sure there are more than the default args & this str isn't
+  // the mem attributes
+  if (hasMemoryIdx(s, 4, i)) {
+    memory = getMemoryName(*s[i++]);
+  } else {
+    memory = getMemoryNameAtIdx(0);
+  }
+  ret->memory = memory;
+  i = parseMemAttributes(i, s, ret->offset, ret->align, isMemory64(memory));
+  ret->index = parseLaneIndex(s[i++], lanes);
+  ret->ptr = parseExpression(s[i++]);
+  ret->vec = parseExpression(s[i]);
+  ret->finalize();
+  return ret;
+}
+
+Expression* SExpressionWasmBuilder::makeMemoryInit(Element& s) {
+  auto ret = allocator.alloc<MemoryInit>();
+  Index i = 1;
+  Name memory;
+  if (s.size() > 5) {
+    memory = getMemoryName(*s[i++]);
+  } else {
+    memory = getMemoryNameAtIdx(0);
+  }
+  ret->memory = memory;
+  ret->segment = parseIndex(*s[i++]);
+  ret->dest = parseExpression(s[i++]);
+  ret->offset = parseExpression(s[i++]);
+  ret->size = parseExpression(s[i]);
+  ret->finalize();
+  return ret;
+}
+
+Expression* SExpressionWasmBuilder::makeDataDrop(Element& s) {
+  auto ret = allocator.alloc<DataDrop>();
+  ret->segment = parseIndex(*s[1]);
+  ret->finalize();
+  return ret;
+}
+
+Expression* SExpressionWasmBuilder::makeMemoryCopy(Element& s) {
+  auto ret = allocator.alloc<MemoryCopy>();
+  Index i = 1;
+  Name destMemory;
+  Name sourceMemory;
+  if (s.size() > 4) {
+    destMemory = getMemoryName(*s[i++]);
+    sourceMemory = getMemoryName(*s[i++]);
+  } else {
+    destMemory = getMemoryNameAtIdx(0);
+    sourceMemory = getMemoryNameAtIdx(0);
+  }
+  ret->destMemory = destMemory;
+  ret->sourceMemory = sourceMemory;
+  ret->dest = parseExpression(s[i++]);
+  ret->source = parseExpression(s[i++]);
+  ret->size = parseExpression(s[i]);
+  ret->finalize();
+  return ret;
+}
+
+Expression* SExpressionWasmBuilder::makeMemoryFill(Element& s) {
+  auto ret = allocator.alloc<MemoryFill>();
+  Index i = 1;
+  Name memory;
+  if (s.size() > 4) {
+    memory = getMemoryName(*s[i++]);
+  } else {
+    memory = getMemoryNameAtIdx(0);
+  }
+  ret->memory = memory;
+  ret->dest = parseExpression(s[i++]);
+  ret->value = parseExpression(s[i++]);
+  ret->size = parseExpression(s[i]);
+  ret->finalize();
+  return ret;
+}
+
+Expression* SExpressionWasmBuilder::makePop(Element& s) {
+  auto ret = allocator.alloc<Pop>();
+  std::vector<Type> types;
+  for (size_t i = 1; i < s.size(); ++i) {
+    types.push_back(elementToType(*s[i]));
+  }
+  ret->type = Type(types);
+  ret->finalize();
+  return ret;
+}
+
+Expression* SExpressionWasmBuilder::makeIf(Element& s) {
+  auto ret = allocator.alloc<If>();
+  Index i = 1;
+  Name sName;
+  if (s[i]->dollared()) {
+    // the if is labeled
+    sName = s[i++]->str();
+  } else {
+    sName = "if";
+  }
+  auto label = nameMapper.pushLabelName(sName);
+  // if signature
+  Type type = parseOptionalResultType(s, i);
+  ret->condition = parseExpression(s[i++]);
+  ret->ifTrue = parseExpression(*s[i++]);
+  if (i < s.size()) {
+    ret->ifFalse = parseExpression(*s[i++]);
+  }
+  ret->finalize(type);
+  nameMapper.popLabelName(label);
+  // create a break target if we must
+  if (BranchUtils::BranchSeeker::has(ret, label)) {
+    auto* block = allocator.alloc<Block>();
+    block->name = label;
+    block->list.push_back(ret);
+    block->finalize(type);
+    return block;
+  }
+  return ret;
+}
+
+Expression*
+SExpressionWasmBuilder::makeMaybeBlock(Element& s, size_t i, Type type) {
+  Index stopAt = -1;
+  if (s.size() == i) {
+    return allocator.alloc<Nop>();
+  }
+  if (s.size() == i + 1) {
+    return parseExpression(s[i]);
+  }
+  auto ret = allocator.alloc<Block>();
+  for (; i < s.size() && i < stopAt; i++) {
+    ret->list.push_back(parseExpression(s[i]));
+  }
+  ret->finalize(type);
+  // Note that we do not name these implicit/synthetic blocks. They
+  // are the effects of syntactic sugar, and nothing can branch to
+  // them anyhow.
+ 
