@@ -3481,4 +3481,381 @@ void SExpressionWasmBuilder::parseImport(Element& s) {
   }
   i++;
   // parse internals
-  Element& inner
+  Element& inner = newStyle ? *s[3] : s;
+  Index j = newStyle ? newStyleInner : i;
+  if (kind == ExternalKind::Function) {
+    auto func = make_unique<Function>();
+
+    j = parseTypeUse(inner, j, func->type);
+    func->setName(name, hasExplicitName);
+    func->module = module;
+    func->base = base;
+    functionTypes[name] = func->type;
+    wasm.addFunction(func.release());
+  } else if (kind == ExternalKind::Global) {
+    parseGlobal(inner, true);
+    j++;
+    auto& global = wasm.globals.back();
+    global->module = module;
+    global->base = base;
+  } else if (kind == ExternalKind::Table) {
+    auto table = make_unique<Table>();
+    table->setName(name, hasExplicitName);
+    table->module = module;
+    table->base = base;
+    tableNames.push_back(name);
+
+    if (j < inner.size() - 1) {
+      auto initElem = inner[j++];
+      table->initial = getAddress(initElem);
+      checkAddress(table->initial, "excessive table init size", initElem);
+    }
+    if (j < inner.size() - 1) {
+      auto maxElem = inner[j++];
+      table->max = getAddress(maxElem);
+      checkAddress(table->max, "excessive table max size", maxElem);
+    } else {
+      table->max = Table::kUnlimitedSize;
+    }
+
+    wasm.addTable(std::move(table));
+
+    j++; // funcref
+    // ends with the table element type
+  } else if (kind == ExternalKind::Memory) {
+    auto memory = make_unique<Memory>();
+    memory->setName(name, hasExplicitName);
+    memory->module = module;
+    memory->base = base;
+    memoryNames.push_back(name);
+
+    if (inner[j]->isList()) {
+      auto& limits = *inner[j];
+      if (!elementStartsWith(limits, SHARED)) {
+        throw ParseException(
+          "bad memory limit declaration", inner[j]->line, inner[j]->col);
+      }
+      memory->shared = true;
+      j = parseMemoryLimits(limits, 1, memory);
+    } else {
+      j = parseMemoryLimits(inner, j, memory);
+    }
+
+    wasm.addMemory(std::move(memory));
+  } else if (kind == ExternalKind::Tag) {
+    auto tag = make_unique<Tag>();
+    HeapType tagType;
+    j = parseTypeUse(inner, j, tagType);
+    tag->sig = tagType.getSignature();
+    tag->setName(name, hasExplicitName);
+    tag->module = module;
+    tag->base = base;
+    wasm.addTag(tag.release());
+  }
+  // If there are more elements, they are invalid
+  if (j < inner.size()) {
+    throw ParseException("invalid element", inner[j]->line, inner[j]->col);
+  }
+}
+
+void SExpressionWasmBuilder::parseGlobal(Element& s, bool preParseImport) {
+  std::unique_ptr<Global> global = make_unique<Global>();
+  size_t i = 1;
+  if (s[i]->dollared() && !(s[i]->isStr() && isType(s[i]->str()))) {
+    global->setExplicitName(s[i++]->str());
+  } else if (preParseImport) {
+    global->name = Name("gimport$" + std::to_string(globalCounter));
+  } else {
+    global->name = Name::fromInt(globalCounter);
+  }
+  globalCounter++;
+  globalNames.push_back(global->name);
+  bool mutable_ = false;
+  Type type = Type::none;
+  bool exported = false;
+  Name importModule, importBase;
+  while (i < s.size() && s[i]->isList()) {
+    auto& inner = *s[i++];
+    if (elementStartsWith(inner, EXPORT)) {
+      auto ex = make_unique<Export>();
+      ex->name = inner[1]->str();
+      ex->value = global->name;
+      ex->kind = ExternalKind::Global;
+      if (wasm.getExportOrNull(ex->name)) {
+        throw ParseException("duplicate export", s.line, s.col);
+      }
+      wasm.addExport(ex.release());
+      exported = true;
+    } else if (elementStartsWith(inner, IMPORT)) {
+      importModule = inner[1]->str();
+      importBase = inner[2]->str();
+    } else if (elementStartsWith(inner, MUT)) {
+      mutable_ = true;
+      type = elementToType(*inner[1]);
+      break;
+    } else {
+      type = elementToType(inner);
+      break;
+    }
+  }
+  if (exported && mutable_) {
+    throw ParseException("cannot export a mutable global", s.line, s.col);
+  }
+  if (type == Type::none) {
+    type = stringToType(s[i++]->str());
+  }
+  if (importModule.is()) {
+    // this is an import, actually
+    if (!importBase.size()) {
+      throw ParseException("module but no base for import", s.line, s.col);
+    }
+    if (!preParseImport) {
+      throw ParseException("!preParseImport in global", s.line, s.col);
+    }
+    auto im = make_unique<Global>();
+    im->name = global->name;
+    im->module = importModule;
+    im->base = importBase;
+    im->type = type;
+    im->mutable_ = mutable_;
+    if (wasm.getGlobalOrNull(im->name)) {
+      throw ParseException("duplicate import", s.line, s.col);
+    }
+    wasm.addGlobal(im.release());
+    return;
+  }
+  global->type = type;
+  if (i < s.size()) {
+    global->init = parseExpression(s[i++]);
+  } else if (!preParseImport) {
+    throw ParseException("global without init", s.line, s.col);
+  }
+  global->mutable_ = mutable_;
+  if (i != s.size()) {
+    throw ParseException("extra import elements", s.line, s.col);
+  }
+  if (wasm.getGlobalOrNull(global->name)) {
+    throw ParseException("duplicate import", s.line, s.col);
+  }
+  wasm.addGlobal(global.release());
+}
+
+void SExpressionWasmBuilder::parseTable(Element& s, bool preParseImport) {
+  std::unique_ptr<Table> table = make_unique<Table>();
+  Index i = 1;
+  if (s[i]->dollared()) {
+    table->setExplicitName(s[i++]->str());
+  } else {
+    table->name = Name::fromInt(tableCounter++);
+  }
+  tableNames.push_back(table->name);
+
+  Name importModule, importBase;
+  if (s[i]->isList()) {
+    auto& inner = *s[i];
+    if (elementStartsWith(inner, EXPORT)) {
+      auto ex = make_unique<Export>();
+      ex->name = inner[1]->str();
+      ex->value = table->name;
+      ex->kind = ExternalKind::Table;
+      if (wasm.getExportOrNull(ex->name)) {
+        throw ParseException("duplicate export", inner.line, inner.col);
+      }
+      wasm.addExport(ex.release());
+      i++;
+    } else if (elementStartsWith(inner, IMPORT)) {
+      if (!preParseImport) {
+        throw ParseException("!preParseImport in table", inner.line, inner.col);
+      }
+      table->module = inner[1]->str();
+      table->base = inner[2]->str();
+      i++;
+    } else if (!elementStartsWith(inner, REF)) {
+      throw ParseException("invalid table", inner.line, inner.col);
+    }
+  }
+
+  bool hasExplicitLimit = false;
+
+  if (s[i]->isStr() && String::isNumber(s[i]->toString())) {
+    table->initial = parseIndex(*s[i++]);
+    hasExplicitLimit = true;
+  }
+  if (s[i]->isStr() && String::isNumber(s[i]->toString())) {
+    table->max = parseIndex(*s[i++]);
+  }
+
+  table->type = elementToType(*s[i++]);
+  if (!table->type.isRef()) {
+    throw ParseException("Only reference types are valid for tables");
+  }
+
+  if (i < s.size() && s[i]->isList()) {
+    if (hasExplicitLimit) {
+      throw ParseException(
+        "Table cannot have both explicit limits and an inline (elem ...)");
+    }
+    // (table type (elem ..))
+    parseElem(*s[i], table.get());
+    auto it = std::find_if(wasm.elementSegments.begin(),
+                           wasm.elementSegments.end(),
+                           [&](std::unique_ptr<ElementSegment>& segment) {
+                             return segment->table == table->name;
+                           });
+    if (it != wasm.elementSegments.end()) {
+      table->initial = table->max = it->get()->data.size();
+    } else {
+      table->initial = table->max = 0;
+    }
+  }
+
+  wasm.addTable(std::move(table));
+}
+
+// parses an elem segment
+// elem  ::= (elem (table tableidx)? (offset (expr)) reftype vec(item (expr)))
+//         | (elem reftype vec(item (expr)))
+//         | (elem declare reftype vec(item (expr)))
+//
+// abbreviation:
+//   (offset (expr)) ≡ (expr)
+//     (item (expr)) ≡ (expr)
+//                 ϵ ≡ (table 0)
+//
+//        funcref vec(ref.func) ≡ func vec(funcidx)
+//   (elem (expr) vec(funcidx)) ≡ (elem (table 0) (offset (expr)) func
+//                                vec(funcidx))
+//
+void SExpressionWasmBuilder::parseElem(Element& s, Table* table) {
+  Index i = 1;
+  Name name = Name::fromInt(elemCounter++);
+  bool hasExplicitName = false;
+  bool isPassive = true;
+  bool usesExpressions = false;
+
+  if (table) {
+    Expression* offset = allocator.alloc<Const>()->set(Literal(int32_t(0)));
+    auto segment = std::make_unique<ElementSegment>(table->name, offset);
+    segment->setName(name, hasExplicitName);
+    parseElemFinish(s, segment, i, s[i]->isList());
+    return;
+  }
+
+  if (s[i]->isStr() && s[i]->dollared()) {
+    name = s[i++]->str();
+    hasExplicitName = true;
+  }
+  if (s[i]->isStr() && s[i]->str() == DECLARE) {
+    // We don't store declared segments in the IR
+    return;
+  }
+
+  auto segment = std::make_unique<ElementSegment>();
+  segment->setName(name, hasExplicitName);
+
+  if (s[i]->isList() && !elementStartsWith(s[i], REF)) {
+    // Optional (table <tableidx>)
+    if (elementStartsWith(s[i], TABLE)) {
+      auto& inner = *s[i++];
+      segment->table = getTableName(*inner[1]);
+    }
+
+    // Offset expression (offset (<expr>)) | (<expr>)
+    auto& inner = *s[i++];
+    if (elementStartsWith(inner, OFFSET)) {
+      if (inner.size() > 2) {
+        throw ParseException(
+          "Invalid offset for an element segment.", s.line, s.col);
+      }
+      segment->offset = parseExpression(inner[1]);
+    } else {
+      segment->offset = parseExpression(inner);
+    }
+    isPassive = false;
+  }
+
+  if (i < s.size()) {
+    if (s[i]->isStr() && s[i]->dollared()) {
+      usesExpressions = false;
+    } else if (s[i]->isStr() && s[i]->str() == FUNC) {
+      usesExpressions = false;
+      i += 1;
+    } else {
+      segment->type = elementToType(*s[i]);
+      usesExpressions = true;
+      i += 1;
+
+      if (!segment->type.isFunction()) {
+        throw ParseException(
+          "Invalid type for an element segment.", s.line, s.col);
+      }
+    }
+  }
+
+  if (!isPassive && segment->table.isNull()) {
+    if (wasm.tables.empty()) {
+      throw ParseException("active element without table", s.line, s.col);
+    }
+    table = wasm.tables.front().get();
+    segment->table = table->name;
+  }
+
+  // We may be post-MVP also due to type reasons or otherwise, as detected by
+  // the utility function for Binaryen IR.
+  usesExpressions =
+    usesExpressions || TableUtils::usesExpressions(segment.get(), &wasm);
+
+  parseElemFinish(s, segment, i, usesExpressions);
+}
+
+ElementSegment* SExpressionWasmBuilder::parseElemFinish(
+  Element& s,
+  std::unique_ptr<ElementSegment>& segment,
+  Index i,
+  bool usesExpressions) {
+
+  for (; i < s.size(); i++) {
+    if (!s[i]->isList()) {
+      // An MVP-style declaration: just a function name.
+      auto func = getFunctionName(*s[i]);
+      segment->data.push_back(
+        Builder(wasm).makeRefFunc(func, functionTypes[func]));
+      continue;
+    }
+    if (!usesExpressions) {
+      throw ParseException("expected an MVP-style $funcname in elem.");
+    }
+    auto& inner = *s[i];
+    if (elementStartsWith(inner, ITEM)) {
+      if (inner[1]->isList()) {
+        // (item (ref.func $f))
+        segment->data.push_back(parseExpression(inner[1]));
+      } else {
+        // (item ref.func $f)
+        inner.list().removeAt(0);
+        segment->data.push_back(parseExpression(inner));
+      }
+    } else {
+      segment->data.push_back(parseExpression(inner));
+    }
+  }
+  return wasm.addElementSegment(std::move(segment));
+}
+
+HeapType SExpressionWasmBuilder::parseHeapType(Element& s) {
+  if (s.isStr()) {
+    // It's a string.
+    if (s.dollared()) {
+      auto it = typeIndices.find(s.toString());
+      if (it == typeIndices.end()) {
+        throw ParseException("unknown dollared function type", s.line, s.col);
+      }
+      return types[it->second];
+    } else {
+      // It may be a numerical index, or it may be a built-in type name like
+      // "i31".
+      auto str = s.toString();
+      if (String::isNumber(str)) {
+        size_t offset = parseIndex(s);
+        if (offset >= types.size()) {
+          throw ParseException("unkno
