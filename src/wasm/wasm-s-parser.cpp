@@ -2766,4 +2766,352 @@ Expression* SExpressionWasmBuilder::makeI31New(Element& s) {
   return ret;
 }
 
-Expression
+Expression* SExpressionWasmBuilder::makeI31Get(Element& s, bool signed_) {
+  auto ret = allocator.alloc<I31Get>();
+  ret->i31 = parseExpression(s[1]);
+  ret->signed_ = signed_;
+  ret->finalize();
+  return ret;
+}
+
+Expression* SExpressionWasmBuilder::makeRefTest(Element& s,
+                                                std::optional<Type> castType) {
+  int i = 1;
+  if (!castType) {
+    auto nullability = NonNullable;
+    if (s[0]->str().str != "ref.test_static" && s[1]->str().str == "null") {
+      nullability = Nullable;
+      ++i;
+    }
+    auto type = parseHeapType(*s[i++]);
+    castType = Type(type, nullability);
+  }
+  auto* ref = parseExpression(*s[i++]);
+  return Builder(wasm).makeRefTest(ref, *castType);
+}
+
+Expression* SExpressionWasmBuilder::makeRefCast(Element& s,
+                                                std::optional<Type> castType) {
+  int i = 1;
+  bool legacy = false;
+  if (!castType) {
+    Nullability nullability = NonNullable;
+    if (s[0]->str().str == "ref.cast_static") {
+      legacy = true;
+    } else if (s[i]->str().str == "null") {
+      nullability = Nullable;
+      ++i;
+    }
+    auto type = parseHeapType(*s[i++]);
+    castType = Type(type, nullability);
+  }
+  auto* ref = parseExpression(*s[i++]);
+  if (legacy) {
+    // Legacy polymorphic behavior.
+    castType = Type(castType->getHeapType(), ref->type.getNullability());
+  }
+  return Builder(wasm).makeRefCast(ref, *castType, RefCast::Safe);
+}
+
+Expression* SExpressionWasmBuilder::makeRefCastNop(Element& s) {
+  auto heapType = parseHeapType(*s[1]);
+  auto* ref = parseExpression(*s[2]);
+  // Legacy polymorphic behavior.
+  auto type = Type(heapType, ref->type.getNullability());
+  return Builder(wasm).makeRefCast(ref, type, RefCast::Unsafe);
+}
+
+Expression* SExpressionWasmBuilder::makeBrOnNull(Element& s, bool onFail) {
+  int i = 1;
+  auto name = getLabel(*s[i++]);
+  auto* ref = parseExpression(*s[i]);
+  auto op = onFail ? BrOnNonNull : BrOnNull;
+  return Builder(wasm).makeBrOn(op, name, ref);
+}
+
+Expression* SExpressionWasmBuilder::makeBrOnCast(Element& s,
+                                                 std::optional<Type> castType,
+                                                 bool onFail) {
+  int i = 1;
+  auto name = getLabel(*s[i++]);
+  if (!castType) {
+    auto nullability = NonNullable;
+    if (s[i]->str().str == "null") {
+      nullability = Nullable;
+      ++i;
+    }
+    auto type = parseHeapType(*s[i++]);
+    castType = Type(type, nullability);
+  }
+  auto* ref = parseExpression(*s[i]);
+  auto op = onFail ? BrOnCastFail : BrOnCast;
+  return Builder(wasm).makeBrOn(op, name, ref, *castType);
+}
+
+Expression* SExpressionWasmBuilder::makeStructNew(Element& s, bool default_) {
+  auto heapType = parseHeapType(*s[1]);
+  auto numOperands = s.size() - 2;
+  if (default_ && numOperands > 0) {
+    throw ParseException("arguments provided for struct.new", s.line, s.col);
+  }
+  std::vector<Expression*> operands;
+  operands.resize(numOperands);
+  for (Index i = 0; i < numOperands; i++) {
+    operands[i] = parseExpression(*s[i + 2]);
+  }
+  return Builder(wasm).makeStructNew(heapType, operands);
+}
+
+Index SExpressionWasmBuilder::getStructIndex(Element& type, Element& field) {
+  if (field.dollared()) {
+    auto name = field.str();
+    auto index = typeIndices[type.toString()];
+    auto struct_ = types[index].getStruct();
+    auto& fields = struct_.fields;
+    const auto& names = fieldNames[index];
+    for (Index i = 0; i < fields.size(); i++) {
+      auto it = names.find(i);
+      if (it != names.end() && it->second == name) {
+        return i;
+      }
+    }
+    throw ParseException("bad struct field name", field.line, field.col);
+  }
+  // this is a numeric index
+  return parseIndex(field);
+}
+
+Expression* SExpressionWasmBuilder::makeStructGet(Element& s, bool signed_) {
+  auto heapType = parseHeapType(*s[1]);
+  if (!heapType.isStruct()) {
+    throw ParseException("bad struct heap type", s.line, s.col);
+  }
+  auto index = getStructIndex(*s[1], *s[2]);
+  auto type = heapType.getStruct().fields[index].type;
+  auto ref = parseExpression(*s[3]);
+  validateHeapTypeUsingChild(ref, heapType, s);
+  return Builder(wasm).makeStructGet(index, ref, type, signed_);
+}
+
+Expression* SExpressionWasmBuilder::makeStructSet(Element& s) {
+  auto heapType = parseHeapType(*s[1]);
+  if (!heapType.isStruct()) {
+    throw ParseException("bad struct heap type", s.line, s.col);
+  }
+  auto index = getStructIndex(*s[1], *s[2]);
+  auto ref = parseExpression(*s[3]);
+  validateHeapTypeUsingChild(ref, heapType, s);
+  auto value = parseExpression(*s[4]);
+  return Builder(wasm).makeStructSet(index, ref, value);
+}
+
+Expression* SExpressionWasmBuilder::makeArrayNew(Element& s, bool default_) {
+  auto heapType = parseHeapType(*s[1]);
+  Expression* init = nullptr;
+  size_t i = 2;
+  if (!default_) {
+    init = parseExpression(*s[i++]);
+  }
+  auto* size = parseExpression(*s[i++]);
+  return Builder(wasm).makeArrayNew(heapType, size, init);
+}
+
+Expression* SExpressionWasmBuilder::makeArrayNewSeg(Element& s,
+                                                    ArrayNewSegOp op) {
+  auto heapType = parseHeapType(*s[1]);
+  Index seg = parseIndex(*s[2]);
+  Expression* offset = parseExpression(*s[3]);
+  Expression* size = parseExpression(*s[4]);
+  return Builder(wasm).makeArrayNewSeg(op, heapType, seg, offset, size);
+}
+
+Expression* SExpressionWasmBuilder::makeArrayNewFixed(Element& s) {
+  auto heapType = parseHeapType(*s[1]);
+  size_t i = 2;
+  std::vector<Expression*> values;
+  while (i < s.size()) {
+    values.push_back(parseExpression(*s[i++]));
+  }
+  return Builder(wasm).makeArrayNewFixed(heapType, values);
+}
+
+Expression* SExpressionWasmBuilder::makeArrayGet(Element& s, bool signed_) {
+  auto heapType = parseHeapType(*s[1]);
+  if (!heapType.isArray()) {
+    throw ParseException("bad array heap type", s.line, s.col);
+  }
+  auto ref = parseExpression(*s[2]);
+  auto type = heapType.getArray().element.type;
+  validateHeapTypeUsingChild(ref, heapType, s);
+  auto index = parseExpression(*s[3]);
+  return Builder(wasm).makeArrayGet(ref, index, type, signed_);
+}
+
+Expression* SExpressionWasmBuilder::makeArraySet(Element& s) {
+  auto heapType = parseHeapType(*s[1]);
+  auto ref = parseExpression(*s[2]);
+  validateHeapTypeUsingChild(ref, heapType, s);
+  auto index = parseExpression(*s[3]);
+  auto value = parseExpression(*s[4]);
+  return Builder(wasm).makeArraySet(ref, index, value);
+}
+
+Expression* SExpressionWasmBuilder::makeArrayLen(Element& s) {
+  // There may or may not be a type annotation.
+  Index i = 1;
+  try {
+    parseHeapType(*s[i]);
+    ++i;
+  } catch (...) {
+  }
+  auto ref = parseExpression(*s[i]);
+  return Builder(wasm).makeArrayLen(ref);
+}
+
+Expression* SExpressionWasmBuilder::makeArrayCopy(Element& s) {
+  auto destHeapType = parseHeapType(*s[1]);
+  auto srcHeapType = parseHeapType(*s[2]);
+  auto destRef = parseExpression(*s[3]);
+  validateHeapTypeUsingChild(destRef, destHeapType, s);
+  auto destIndex = parseExpression(*s[4]);
+  auto srcRef = parseExpression(*s[5]);
+  validateHeapTypeUsingChild(srcRef, srcHeapType, s);
+  auto srcIndex = parseExpression(*s[6]);
+  auto length = parseExpression(*s[7]);
+  return Builder(wasm).makeArrayCopy(
+    destRef, destIndex, srcRef, srcIndex, length);
+}
+
+Expression* SExpressionWasmBuilder::makeRefAs(Element& s, RefAsOp op) {
+  auto* value = parseExpression(s[1]);
+  if (!value->type.isRef() && value->type != Type::unreachable) {
+    throw ParseException("ref.as child must be a ref", s.line, s.col);
+  }
+  return Builder(wasm).makeRefAs(op, value);
+}
+
+Expression*
+SExpressionWasmBuilder::makeStringNew(Element& s, StringNewOp op, bool try_) {
+  size_t i = 1;
+  Expression* length = nullptr;
+  if (op == StringNewWTF8 || op == StringNewUTF8) {
+    if (!try_) {
+      std::string_view str = s[i++]->str().str;
+      if (str == "utf8") {
+        op = StringNewUTF8;
+      } else if (str == "wtf8") {
+        op = StringNewWTF8;
+      } else if (str == "replace") {
+        op = StringNewReplace;
+      } else {
+        throw ParseException("bad string.new op", s.line, s.col);
+      }
+    }
+    length = parseExpression(s[i + 1]);
+    return Builder(wasm).makeStringNew(op, parseExpression(s[i]), length, try_);
+  } else if (op == StringNewWTF16) {
+    length = parseExpression(s[i + 1]);
+    return Builder(wasm).makeStringNew(op, parseExpression(s[i]), length, try_);
+  } else if (op == StringNewWTF8Array || op == StringNewUTF8Array) {
+    if (!try_) {
+      std::string_view str = s[i++]->str().str;
+      if (str == "utf8") {
+        op = StringNewUTF8Array;
+      } else if (str == "wtf8") {
+        op = StringNewWTF8Array;
+      } else if (str == "replace") {
+        op = StringNewReplaceArray;
+      } else {
+        throw ParseException("bad string.new op", s.line, s.col);
+      }
+    }
+    auto* start = parseExpression(s[i + 1]);
+    auto* end = parseExpression(s[i + 2]);
+    return Builder(wasm).makeStringNew(
+      op, parseExpression(s[i]), start, end, try_);
+  } else if (op == StringNewWTF16Array) {
+    auto* start = parseExpression(s[i + 1]);
+    auto* end = parseExpression(s[i + 2]);
+    return Builder(wasm).makeStringNew(
+      op, parseExpression(s[i]), start, end, try_);
+  } else if (op == StringNewFromCodePoint) {
+    return Builder(wasm).makeStringNew(
+      op, parseExpression(s[i]), nullptr, try_);
+  } else {
+    throw ParseException("bad string.new op", s.line, s.col);
+  }
+}
+
+Expression* SExpressionWasmBuilder::makeStringConst(Element& s) {
+  std::vector<char> data;
+  stringToBinary(*s[1], s[1]->str().str, data);
+  Name str = std::string_view(data.data(), data.size());
+  return Builder(wasm).makeStringConst(str);
+}
+
+Expression* SExpressionWasmBuilder::makeStringMeasure(Element& s,
+                                                      StringMeasureOp op) {
+  size_t i = 1;
+  if (op == StringMeasureWTF8) {
+    std::string_view str = s[i++]->str().str;
+    if (str == "utf8") {
+      op = StringMeasureUTF8;
+    } else if (str == "wtf8") {
+      op = StringMeasureWTF8;
+    } else {
+      throw ParseException("bad string.measure op", s.line, s.col);
+    }
+  }
+  return Builder(wasm).makeStringMeasure(op, parseExpression(s[i]));
+}
+
+Expression* SExpressionWasmBuilder::makeStringEncode(Element& s,
+                                                     StringEncodeOp op) {
+  size_t i = 1;
+  Expression* start = nullptr;
+  if (op == StringEncodeWTF8) {
+    std::string_view str = s[i++]->str().str;
+    if (str == "utf8") {
+      op = StringEncodeUTF8;
+    } else if (str == "wtf8") {
+      op = StringEncodeWTF8;
+    } else {
+      throw ParseException("bad string.new op", s.line, s.col);
+    }
+  } else if (op == StringEncodeWTF8Array) {
+    std::string_view str = s[i++]->str().str;
+    if (str == "utf8") {
+      op = StringEncodeUTF8Array;
+    } else if (str == "wtf8") {
+      op = StringEncodeWTF8Array;
+    } else {
+      throw ParseException("bad string.new op", s.line, s.col);
+    }
+    start = parseExpression(s[i + 2]);
+  } else if (op == StringEncodeWTF16Array) {
+    start = parseExpression(s[i + 2]);
+  }
+  return Builder(wasm).makeStringEncode(
+    op, parseExpression(s[i]), parseExpression(s[i + 1]), start);
+}
+
+Expression* SExpressionWasmBuilder::makeStringConcat(Element& s) {
+  return Builder(wasm).makeStringConcat(parseExpression(s[1]),
+                                        parseExpression(s[2]));
+}
+
+Expression* SExpressionWasmBuilder::makeStringEq(Element& s, StringEqOp op) {
+  return Builder(wasm).makeStringEq(
+    op, parseExpression(s[1]), parseExpression(s[2]));
+}
+
+Expression* SExpressionWasmBuilder::makeStringAs(Element& s, StringAsOp op) {
+  return Builder(wasm).makeStringAs(op, parseExpression(s[1]));
+}
+
+Expression* SExpressionWasmBuilder::makeStringWTF8Advance(Element& s) {
+  return Builder(wasm).makeStringWTF8Advance(
+    parseExpression(s[1]), parseExpression(s[2]), parseExpression(s[3]));
+}
+
+Exp
