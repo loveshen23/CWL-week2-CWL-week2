@@ -2369,4 +2369,401 @@ SExpressionWasmBuilder::makeMaybeBlock(Element& s, size_t i, Type type) {
   // Note that we do not name these implicit/synthetic blocks. They
   // are the effects of syntactic sugar, and nothing can branch to
   // them anyhow.
- 
+  return ret;
+}
+
+Type SExpressionWasmBuilder::parseOptionalResultType(Element& s, Index& i) {
+  if (s.size() == i) {
+    return Type::none;
+  }
+
+  // TODO(sbc): Remove support for old result syntax (bare streing) once the
+  // spec tests are updated.
+  if (s[i]->isStr()) {
+    return stringToType(s[i++]->str());
+  }
+
+  Element& results = *s[i];
+  IString id = results[0]->str();
+  if (id == RESULT) {
+    i++;
+    return Type(parseResults(results));
+  }
+  return Type::none;
+}
+
+Expression* SExpressionWasmBuilder::makeLoop(Element& s) {
+  auto ret = allocator.alloc<Loop>();
+  Index i = 1;
+  Name sName;
+  if (s.size() > i && s[i]->dollared()) {
+    sName = s[i++]->str();
+  } else {
+    sName = "loop-in";
+  }
+  ret->name = nameMapper.pushLabelName(sName);
+  ret->type = parseOptionalResultType(s, i);
+  ret->body = makeMaybeBlock(s, i, ret->type);
+  nameMapper.popLabelName(ret->name);
+  ret->finalize(ret->type);
+  return ret;
+}
+
+Expression* SExpressionWasmBuilder::makeCall(Element& s, bool isReturn) {
+  auto target = getFunctionName(*s[1]);
+  auto ret = allocator.alloc<Call>();
+  ret->target = target;
+  ret->type = getFunctionType(ret->target, s).getSignature().results;
+  parseCallOperands(s, 2, s.size(), ret);
+  ret->isReturn = isReturn;
+  ret->finalize();
+  return ret;
+}
+
+Expression* SExpressionWasmBuilder::makeCallIndirect(Element& s,
+                                                     bool isReturn) {
+  if (wasm.tables.empty()) {
+    throw ParseException("no tables", s.line, s.col);
+  }
+  Index i = 1;
+  auto ret = allocator.alloc<CallIndirect>();
+  if (s[i]->isStr()) {
+    ret->table = s[i++]->str();
+  } else {
+    ret->table = wasm.tables.front()->name;
+  }
+  HeapType callType;
+  i = parseTypeUse(s, i, callType);
+  ret->heapType = callType;
+  parseCallOperands(s, i, s.size() - 1, ret);
+  ret->target = parseExpression(s[s.size() - 1]);
+  ret->isReturn = isReturn;
+  ret->finalize();
+  return ret;
+}
+
+Name SExpressionWasmBuilder::getLabel(Element& s, LabelType labelType) {
+  if (s.dollared()) {
+    return nameMapper.sourceToUnique(s.str());
+  } else {
+    // offset, break to nth outside label
+    uint64_t offset;
+    try {
+      offset = std::stoll(s.toString(), nullptr, 0);
+    } catch (std::invalid_argument&) {
+      throw ParseException("invalid break offset", s.line, s.col);
+    } catch (std::out_of_range&) {
+      throw ParseException("out of range break offset", s.line, s.col);
+    }
+    if (offset > nameMapper.labelStack.size()) {
+      throw ParseException("invalid label", s.line, s.col);
+    }
+    if (offset == nameMapper.labelStack.size()) {
+      if (labelType == LabelType::Break) {
+        // a break to the function's scope. this means we need an automatic
+        // block, with a name
+        brokeToAutoBlock = true;
+        return FAKE_RETURN;
+      }
+      // This is a delegate that delegates to the caller
+      return DELEGATE_CALLER_TARGET;
+    }
+    return nameMapper.labelStack[nameMapper.labelStack.size() - 1 - offset];
+  }
+}
+
+Expression* SExpressionWasmBuilder::makeBreak(Element& s) {
+  auto ret = allocator.alloc<Break>();
+  size_t i = 1;
+  ret->name = getLabel(*s[i]);
+  i++;
+  if (i == s.size()) {
+    return ret;
+  }
+  if (elementStartsWith(s, BR_IF)) {
+    if (i + 1 < s.size()) {
+      ret->value = parseExpression(s[i]);
+      i++;
+    }
+    ret->condition = parseExpression(s[i]);
+  } else {
+    ret->value = parseExpression(s[i]);
+  }
+  ret->finalize();
+  return ret;
+}
+
+Expression* SExpressionWasmBuilder::makeBreakTable(Element& s) {
+  auto ret = allocator.alloc<Switch>();
+  size_t i = 1;
+  while (!s[i]->isList()) {
+    ret->targets.push_back(getLabel(*s[i++]));
+  }
+  if (ret->targets.size() == 0) {
+    throw ParseException("switch with no targets", s.line, s.col);
+  }
+  ret->default_ = ret->targets.back();
+  ret->targets.pop_back();
+  ret->condition = parseExpression(s[i++]);
+  if (i < s.size()) {
+    ret->value = ret->condition;
+    ret->condition = parseExpression(s[i++]);
+  }
+  return ret;
+}
+
+Expression* SExpressionWasmBuilder::makeReturn(Element& s) {
+  auto ret = allocator.alloc<Return>();
+  if (s.size() >= 2) {
+    ret->value = parseExpression(s[1]);
+  }
+  return ret;
+}
+
+Expression* SExpressionWasmBuilder::makeRefNull(Element& s) {
+  if (s.size() != 2) {
+    throw ParseException("invalid heap type reference", s.line, s.col);
+  }
+  auto ret = allocator.alloc<RefNull>();
+  // The heap type may be just "func", that is, the whole thing is just
+  // (ref.null func), or it may be the name of a defined type, such as
+  // (ref.null $struct.FOO)
+  if (s[1]->dollared()) {
+    ret->finalize(parseHeapType(*s[1]).getBottom());
+  } else {
+    ret->finalize(stringToHeapType(s[1]->str()).getBottom());
+  }
+  return ret;
+}
+
+Expression* SExpressionWasmBuilder::makeRefIsNull(Element& s) {
+  auto ret = allocator.alloc<RefIsNull>();
+  ret->value = parseExpression(s[1]);
+  ret->finalize();
+  return ret;
+}
+
+Expression* SExpressionWasmBuilder::makeRefFunc(Element& s) {
+  auto func = getFunctionName(*s[1]);
+  auto ret = allocator.alloc<RefFunc>();
+  ret->func = func;
+  // To support typed function refs, we give the reference not just a general
+  // funcref, but a specific subtype with the actual signature.
+  ret->finalize(Type(getFunctionType(func, s), NonNullable));
+  return ret;
+}
+
+Expression* SExpressionWasmBuilder::makeRefEq(Element& s) {
+  auto ret = allocator.alloc<RefEq>();
+  ret->left = parseExpression(s[1]);
+  ret->right = parseExpression(s[2]);
+  ret->finalize();
+  return ret;
+}
+
+Expression* SExpressionWasmBuilder::makeTableGet(Element& s) {
+  auto tableName = s[1]->str();
+  auto* index = parseExpression(s[2]);
+  auto* table = wasm.getTableOrNull(tableName);
+  if (!table) {
+    throw ParseException("invalid table name in table.get", s.line, s.col);
+  }
+  return Builder(wasm).makeTableGet(tableName, index, table->type);
+}
+
+Expression* SExpressionWasmBuilder::makeTableSet(Element& s) {
+  auto tableName = s[1]->str();
+  auto* table = wasm.getTableOrNull(tableName);
+  if (!table) {
+    throw ParseException("invalid table name in table.set", s.line, s.col);
+  }
+  auto* index = parseExpression(s[2]);
+  auto* value = parseExpression(s[3]);
+  return Builder(wasm).makeTableSet(tableName, index, value);
+}
+
+Expression* SExpressionWasmBuilder::makeTableSize(Element& s) {
+  auto tableName = s[1]->str();
+  auto* table = wasm.getTableOrNull(tableName);
+  if (!table) {
+    throw ParseException("invalid table name in table.size", s.line, s.col);
+  }
+  return Builder(wasm).makeTableSize(tableName);
+}
+
+Expression* SExpressionWasmBuilder::makeTableGrow(Element& s) {
+  auto tableName = s[1]->str();
+  auto* table = wasm.getTableOrNull(tableName);
+  if (!table) {
+    throw ParseException("invalid table name in table.grow", s.line, s.col);
+  }
+  auto* value = parseExpression(s[2]);
+  if (!value->type.isRef()) {
+    throw ParseException("only reference types are valid for tables");
+  }
+  auto* delta = parseExpression(s[3]);
+  return Builder(wasm).makeTableGrow(tableName, value, delta);
+}
+
+// try can be either in the form of try-catch or try-delegate.
+// try-catch is written in the folded wast format as
+// (try
+//  (do
+//    ...
+//  )
+//  (catch $e
+//    ...
+//  )
+//  ...
+//  (catch_all
+//    ...
+//  )
+// )
+// Any number of catch blocks can exist, including none. Zero or one catch_all
+// block can exist, and if it does, it should be at the end. There should be at
+// least one catch or catch_all body per try.
+//
+// try-delegate is written in the folded format as
+// (try
+//  (do
+//    ...
+//  )
+//  (delegate $label)
+// )
+Expression* SExpressionWasmBuilder::makeTry(Element& s) {
+  auto ret = allocator.alloc<Try>();
+  Index i = 1;
+  Name sName;
+  if (s[i]->dollared()) {
+    // the try is labeled
+    sName = s[i++]->str();
+  } else {
+    sName = "try";
+  }
+  ret->name = nameMapper.pushLabelName(sName);
+  Type type = parseOptionalResultType(s, i); // signature
+
+  if (!elementStartsWith(*s[i], "do")) {
+    throw ParseException(
+      "try body should start with 'do'", s[i]->line, s[i]->col);
+  }
+  ret->body = makeMaybeBlock(*s[i++], 1, type);
+
+  while (i < s.size() && elementStartsWith(*s[i], "catch")) {
+    Element& inner = *s[i++];
+    if (inner.size() < 2) {
+      throw ParseException("invalid catch block", inner.line, inner.col);
+    }
+    Name tag = getTagName(*inner[1]);
+    if (!wasm.getTagOrNull(tag)) {
+      throw ParseException("bad tag name", inner[1]->line, inner[1]->col);
+    }
+    ret->catchTags.push_back(getTagName(*inner[1]));
+    ret->catchBodies.push_back(makeMaybeBlock(inner, 2, type));
+  }
+
+  if (i < s.size() && elementStartsWith(*s[i], "catch_all")) {
+    ret->catchBodies.push_back(makeMaybeBlock(*s[i++], 1, type));
+  }
+
+  // 'delegate' cannot target its own try. So we pop the name here.
+  nameMapper.popLabelName(ret->name);
+
+  if (i < s.size() && elementStartsWith(*s[i], "delegate")) {
+    Element& inner = *s[i++];
+    if (inner.size() != 2) {
+      throw ParseException("invalid delegate", inner.line, inner.col);
+    }
+    ret->delegateTarget = getLabel(*inner[1], LabelType::Exception);
+  }
+
+  if (i != s.size()) {
+    throw ParseException(
+      "there should be at most one catch_all block at the end", s.line, s.col);
+  }
+
+  ret->finalize(type);
+
+  // create a break target if we must
+  if (BranchUtils::BranchSeeker::has(ret, ret->name)) {
+    auto* block = allocator.alloc<Block>();
+    // We create a different name for the wrapping block, because try's name can
+    // be used by internal delegates
+    block->name = nameMapper.pushLabelName(sName);
+    // For simplicity, try's name can only be targeted by delegates and
+    // rethrows. Make the branches target the new wrapping block instead.
+    BranchUtils::replaceBranchTargets(ret, ret->name, block->name);
+    block->list.push_back(ret);
+    nameMapper.popLabelName(block->name);
+    block->finalize(type);
+    return block;
+  }
+  return ret;
+}
+
+Expression* SExpressionWasmBuilder::makeThrow(Element& s) {
+  auto ret = allocator.alloc<Throw>();
+  Index i = 1;
+
+  ret->tag = getTagName(*s[i++]);
+  if (!wasm.getTagOrNull(ret->tag)) {
+    throw ParseException("bad tag name", s[1]->line, s[1]->col);
+  }
+  for (; i < s.size(); i++) {
+    ret->operands.push_back(parseExpression(s[i]));
+  }
+  ret->finalize();
+  return ret;
+}
+
+Expression* SExpressionWasmBuilder::makeRethrow(Element& s) {
+  auto ret = allocator.alloc<Rethrow>();
+  ret->target = getLabel(*s[1], LabelType::Exception);
+  ret->finalize();
+  return ret;
+}
+
+Expression* SExpressionWasmBuilder::makeTupleMake(Element& s) {
+  auto ret = allocator.alloc<TupleMake>();
+  parseCallOperands(s, 1, s.size(), ret);
+  ret->finalize();
+  return ret;
+}
+
+Expression* SExpressionWasmBuilder::makeTupleExtract(Element& s) {
+  auto ret = allocator.alloc<TupleExtract>();
+  ret->index = parseIndex(*s[1]);
+  ret->tuple = parseExpression(s[2]);
+  if (ret->tuple->type != Type::unreachable &&
+      ret->index >= ret->tuple->type.size()) {
+    throw ParseException("Bad index on tuple.extract", s[1]->line, s[1]->col);
+  }
+  ret->finalize();
+  return ret;
+}
+
+Expression* SExpressionWasmBuilder::makeCallRef(Element& s, bool isReturn) {
+  HeapType sigType = parseHeapType(*s[1]);
+  std::vector<Expression*> operands;
+  parseOperands(s, 2, s.size() - 1, operands);
+  auto* target = parseExpression(s[s.size() - 1]);
+
+  if (!sigType.isSignature()) {
+    throw ParseException(
+      std::string(isReturn ? "return_call_ref" : "call_ref") +
+        " type annotation should be a signature",
+      s.line,
+      s.col);
+  }
+  return Builder(wasm).makeCallRef(
+    target, operands, sigType.getSignature().results, isReturn);
+}
+
+Expression* SExpressionWasmBuilder::makeI31New(Element& s) {
+  auto ret = allocator.alloc<I31New>();
+  ret->value = parseExpression(s[1]);
+  ret->finalize();
+  return ret;
+}
+
+Expression
