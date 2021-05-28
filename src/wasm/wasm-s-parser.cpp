@@ -3114,4 +3114,371 @@ Expression* SExpressionWasmBuilder::makeStringWTF8Advance(Element& s) {
     parseExpression(s[1]), parseExpression(s[2]), parseExpression(s[3]));
 }
 
-Exp
+Expression* SExpressionWasmBuilder::makeStringWTF16Get(Element& s) {
+  return Builder(wasm).makeStringWTF16Get(parseExpression(s[1]),
+                                          parseExpression(s[2]));
+}
+
+Expression* SExpressionWasmBuilder::makeStringIterNext(Element& s) {
+  return Builder(wasm).makeStringIterNext(parseExpression(s[1]));
+}
+
+Expression* SExpressionWasmBuilder::makeStringIterMove(Element& s,
+                                                       StringIterMoveOp op) {
+  return Builder(wasm).makeStringIterMove(
+    op, parseExpression(s[1]), parseExpression(s[2]));
+}
+
+Expression* SExpressionWasmBuilder::makeStringSliceWTF(Element& s,
+                                                       StringSliceWTFOp op) {
+  return Builder(wasm).makeStringSliceWTF(
+    op, parseExpression(s[1]), parseExpression(s[2]), parseExpression(s[3]));
+}
+
+Expression* SExpressionWasmBuilder::makeStringSliceIter(Element& s) {
+  return Builder(wasm).makeStringSliceIter(parseExpression(s[1]),
+                                           parseExpression(s[2]));
+}
+
+// converts an s-expression string representing binary data into an output
+// sequence of raw bytes this appends to data, which may already contain
+// content.
+void SExpressionWasmBuilder::stringToBinary(Element& s,
+                                            std::string_view str,
+                                            std::vector<char>& data) {
+  auto originalSize = data.size();
+  data.resize(originalSize + str.size());
+  char* write = data.data() + originalSize;
+  const char* end = str.data() + str.size();
+  for (const char* input = str.data(); input < end;) {
+    if (input[0] == '\\') {
+      if (input + 1 >= end) {
+        throw ParseException("Unterminated escape sequence", s.line, s.col);
+      }
+      if (input[1] == 't') {
+        *write++ = '\t';
+        input += 2;
+        continue;
+      } else if (input[1] == 'n') {
+        *write++ = '\n';
+        input += 2;
+        continue;
+      } else if (input[1] == 'r') {
+        *write++ = '\r';
+        input += 2;
+        continue;
+      } else if (input[1] == '"') {
+        *write++ = '"';
+        input += 2;
+        continue;
+      } else if (input[1] == '\'') {
+        *write++ = '\'';
+        input += 2;
+        continue;
+      } else if (input[1] == '\\') {
+        *write++ = '\\';
+        input += 2;
+        continue;
+      } else {
+        if (input + 2 >= end) {
+          throw ParseException("Unterminated escape sequence", s.line, s.col);
+        }
+        *write++ = (char)(unhex(input[1]) * 16 + unhex(input[2]));
+        input += 3;
+        continue;
+      }
+    }
+    *write++ = input[0];
+    input++;
+  }
+  assert(write >= data.data());
+  size_t actual = write - data.data();
+  assert(actual <= data.size());
+  data.resize(actual);
+}
+
+Index SExpressionWasmBuilder::parseMemoryIndex(
+  Element& s, Index i, std::unique_ptr<Memory>& memory) {
+  if (i < s.size() && s[i]->isStr()) {
+    if (s[i]->str() == "i64") {
+      i++;
+      memory->indexType = Type::i64;
+    } else if (s[i]->str() == "i32") {
+      i++;
+      memory->indexType = Type::i32;
+    }
+  }
+  return i;
+}
+
+Index SExpressionWasmBuilder::parseMemoryLimits(
+  Element& s, Index i, std::unique_ptr<Memory>& memory) {
+  i = parseMemoryIndex(s, i, memory);
+  if (i == s.size()) {
+    throw ParseException("missing memory limits", s.line, s.col);
+  }
+  auto initElem = s[i++];
+  memory->initial = getAddress(initElem);
+  if (!memory->is64()) {
+    checkAddress(memory->initial, "excessive memory init", initElem);
+  }
+  if (i == s.size()) {
+    memory->max = Memory::kUnlimitedSize;
+  } else {
+    auto maxElem = s[i++];
+    memory->max = getAddress(maxElem);
+    if (!memory->is64() && memory->max > Memory::kMaxSize32) {
+      throw ParseException(
+        "total memory must be <= 4GB", maxElem->line, maxElem->col);
+    }
+  }
+  return i;
+}
+
+void SExpressionWasmBuilder::parseMemory(Element& s, bool preParseImport) {
+  auto memory = make_unique<Memory>();
+  memory->shared = false;
+  Index i = 1;
+  if (s[i]->dollared()) {
+    memory->setExplicitName(s[i++]->str());
+  } else {
+    memory->name = Name::fromInt(memoryCounter++);
+  }
+  memoryNames.push_back(memory->name);
+
+  i = parseMemoryIndex(s, i, memory);
+  Name importModule, importBase;
+  if (s[i]->isList()) {
+    auto& inner = *s[i];
+    if (elementStartsWith(inner, EXPORT)) {
+      auto ex = make_unique<Export>();
+      ex->name = inner[1]->str();
+      ex->value = memory->name;
+      ex->kind = ExternalKind::Memory;
+      if (wasm.getExportOrNull(ex->name)) {
+        throw ParseException("duplicate export", inner.line, inner.col);
+      }
+      wasm.addExport(ex.release());
+      i++;
+    } else if (elementStartsWith(inner, IMPORT)) {
+      memory->module = inner[1]->str();
+      memory->base = inner[2]->str();
+      i++;
+    } else if (elementStartsWith(inner, SHARED)) {
+      memory->shared = true;
+      parseMemoryLimits(inner, 1, memory);
+      i++;
+    } else {
+      if (!(inner.size() > 0 ? inner[0]->str() != IMPORT : true)) {
+        throw ParseException("bad import ending", inner.line, inner.col);
+      }
+      // (memory (data ..)) format
+      auto j = parseMemoryIndex(inner, 1, memory);
+      auto offset = allocator.alloc<Const>();
+      if (memory->is64()) {
+        offset->set(Literal(int64_t(0)));
+      } else {
+        offset->set(Literal(int32_t(0)));
+      }
+      auto seg = Builder::makeDataSegment(
+        Name::fromInt(dataCounter++), memory->name, false, offset);
+      parseInnerData(inner, j, seg);
+      memory->initial = seg->data.size();
+      wasm.addDataSegment(std::move(seg));
+      wasm.addMemory(std::move(memory));
+      return;
+    }
+  }
+  if (!memory->shared) {
+    i = parseMemoryLimits(s, i, memory);
+  }
+
+  // Parse memory initializers.
+  while (i < s.size()) {
+    Element& curr = *s[i];
+    size_t j = 1;
+    Address offsetValue;
+    if (elementStartsWith(curr, DATA)) {
+      offsetValue = 0;
+    } else {
+      auto offsetElem = curr[j++];
+      offsetValue = getAddress(offsetElem);
+      if (!memory->is64()) {
+        checkAddress(offsetValue, "excessive memory offset", offsetElem);
+      }
+    }
+    std::string_view input = curr[j]->str().str;
+    auto* offset = allocator.alloc<Const>();
+    if (memory->is64()) {
+      offset->type = Type::i64;
+      offset->value = Literal(offsetValue);
+    } else {
+      offset->type = Type::i32;
+      offset->value = Literal(int32_t(offsetValue));
+    }
+    if (input.size()) {
+      std::vector<char> data;
+      stringToBinary(*curr[j], input, data);
+      auto segment = Builder::makeDataSegment(Name::fromInt(dataCounter++),
+                                              memory->name,
+                                              false,
+                                              offset,
+                                              data.data(),
+                                              data.size());
+      segment->hasExplicitName = false;
+      wasm.addDataSegment(std::move(segment));
+    } else {
+      auto segment = Builder::makeDataSegment(
+        Name::fromInt(dataCounter++), memory->name, false, offset);
+      segment->hasExplicitName = false;
+      wasm.addDataSegment(std::move(segment));
+    }
+    i++;
+  }
+  wasm.addMemory(std::move(memory));
+}
+
+void SExpressionWasmBuilder::parseData(Element& s) {
+  Index i = 1;
+  Name name = Name::fromInt(dataCounter++);
+  bool hasExplicitName = false;
+  Name memory;
+  bool isPassive = true;
+  Expression* offset = nullptr;
+
+  if (s[i]->isStr() && s[i]->dollared()) {
+    name = s[i++]->str();
+    hasExplicitName = true;
+  }
+
+  if (s[i]->isList()) {
+    // Optional (memory <memoryidx>)
+    if (elementStartsWith(s[i], MEMORY)) {
+      auto& inner = *s[i++];
+      memory = getMemoryName(*inner[1]);
+    } else {
+      memory = getMemoryNameAtIdx(0);
+    }
+    // Offset expression (offset (<expr>)) | (<expr>)
+    auto& inner = *s[i++];
+    if (elementStartsWith(inner, OFFSET)) {
+      offset = parseExpression(inner[1]);
+    } else {
+      offset = parseExpression(inner);
+    }
+    isPassive = false;
+  }
+
+  auto seg = Builder::makeDataSegment(name, memory, isPassive, offset);
+  seg->hasExplicitName = hasExplicitName;
+  parseInnerData(s, i, seg);
+  wasm.addDataSegment(std::move(seg));
+}
+
+void SExpressionWasmBuilder::parseInnerData(Element& s,
+                                            Index i,
+                                            std::unique_ptr<DataSegment>& seg) {
+  std::vector<char> data;
+  while (i < s.size()) {
+    std::string_view input = s[i++]->str().str;
+    stringToBinary(s, input, data);
+  }
+  seg->data.resize(data.size());
+  std::copy_n(data.data(), data.size(), seg->data.begin());
+}
+
+void SExpressionWasmBuilder::parseExport(Element& s) {
+  std::unique_ptr<Export> ex = make_unique<Export>();
+  ex->name = s[1]->str();
+  if (s[2]->isList()) {
+    auto& inner = *s[2];
+    if (elementStartsWith(inner, FUNC)) {
+      ex->kind = ExternalKind::Function;
+      ex->value = getFunctionName(*inner[1]);
+    } else if (elementStartsWith(inner, MEMORY)) {
+      ex->kind = ExternalKind::Memory;
+      ex->value = inner[1]->str();
+    } else if (elementStartsWith(inner, TABLE)) {
+      ex->kind = ExternalKind::Table;
+      ex->value = getTableName(*inner[1]);
+    } else if (elementStartsWith(inner, GLOBAL)) {
+      ex->kind = ExternalKind::Global;
+      ex->value = getGlobalName(*inner[1]);
+    } else if (inner[0]->str() == TAG) {
+      ex->kind = ExternalKind::Tag;
+      ex->value = getTagName(*inner[1]);
+    } else {
+      throw ParseException("invalid export", inner.line, inner.col);
+    }
+  } else {
+    // function
+    ex->value = s[2]->str();
+    ex->kind = ExternalKind::Function;
+  }
+  if (wasm.getExportOrNull(ex->name)) {
+    throw ParseException("duplicate export", s.line, s.col);
+  }
+  wasm.addExport(ex.release());
+}
+
+void SExpressionWasmBuilder::parseImport(Element& s) {
+  size_t i = 1;
+  // (import "env" "STACKTOP" (global $stackTop i32))
+  bool newStyle = s.size() == 4 && s[3]->isList();
+  auto kind = ExternalKind::Invalid;
+  if (newStyle) {
+    if (elementStartsWith(*s[3], FUNC)) {
+      kind = ExternalKind::Function;
+    } else if (elementStartsWith(*s[3], MEMORY)) {
+      kind = ExternalKind::Memory;
+    } else if (elementStartsWith(*s[3], TABLE)) {
+      kind = ExternalKind::Table;
+    } else if (elementStartsWith(*s[3], GLOBAL)) {
+      kind = ExternalKind::Global;
+    } else if ((*s[3])[0]->str() == TAG) {
+      kind = ExternalKind::Tag;
+    } else {
+      newStyle = false; // either (param..) or (result..)
+    }
+  }
+  Index newStyleInner = 1;
+  Name name;
+  if (s.size() > 3 && s[3]->isStr()) {
+    name = s[i++]->str();
+  } else if (newStyle && newStyleInner < s[3]->size() &&
+             (*s[3])[newStyleInner]->dollared()) {
+    name = (*s[3])[newStyleInner++]->str();
+  }
+  bool hasExplicitName = name.is();
+  if (!hasExplicitName) {
+    if (kind == ExternalKind::Function) {
+      name = Name("fimport$" + std::to_string(functionCounter++));
+      functionNames.push_back(name);
+    } else if (kind == ExternalKind::Global) {
+      // Handled in `parseGlobal`.
+    } else if (kind == ExternalKind::Memory) {
+      name = Name("mimport$" + std::to_string(memoryCounter++));
+    } else if (kind == ExternalKind::Table) {
+      name = Name("timport$" + std::to_string(tableCounter++));
+    } else if (kind == ExternalKind::Tag) {
+      name = Name("eimport$" + std::to_string(tagCounter++));
+      tagNames.push_back(name);
+    } else {
+      throw ParseException("invalid import", s[3]->line, s[3]->col);
+    }
+  }
+  if (!newStyle) {
+    kind = ExternalKind::Function;
+  }
+  auto module = s[i++]->str();
+  if (!s[i]->isStr()) {
+    throw ParseException("no name for import", s[i]->line, s[i]->col);
+  }
+  auto base = s[i]->str();
+  if (!module.size() || !base.size()) {
+    throw ParseException(
+      "imports must have module and base", s[i]->line, s[i]->col);
+  }
+  i++;
+  // parse internals
+  Element& inner
