@@ -2774,3 +2774,836 @@ void FunctionValidator::visitArrayNewSeg(ArrayNewSeg* curr) {
       WASM_UNREACHABLE("unexpected op");
   }
 }
+
+void FunctionValidator::visitArrayNewFixed(ArrayNewFixed* curr) {
+  shouldBeTrue(getModule()->features.hasGC(),
+               curr,
+               "array.init requires gc [--enable-gc]");
+  if (curr->type == Type::unreachable) {
+    return;
+  }
+  auto heapType = curr->type.getHeapType();
+  if (!shouldBeTrue(
+        heapType.isArray(), curr, "array.init heap type must be array")) {
+    return;
+  }
+  const auto& element = heapType.getArray().element;
+  for (auto* value : curr->values) {
+    shouldBeSubType(value->type,
+                    element.type,
+                    curr,
+                    "array.init value must have proper type");
+  }
+}
+
+void FunctionValidator::visitArrayGet(ArrayGet* curr) {
+  shouldBeTrue(
+    getModule()->features.hasGC(), curr, "array.get requires gc [--enable-gc]");
+  shouldBeEqualOrFirstIsUnreachable(
+    curr->index->type, Type(Type::i32), curr, "array.get index must be an i32");
+  if (curr->type == Type::unreachable) {
+    return;
+  }
+  if (!shouldBeSubType(curr->ref->type,
+                       Type(HeapType::array, Nullable),
+                       curr,
+                       "array.get target should be an array reference")) {
+    return;
+  }
+  auto heapType = curr->ref->type.getHeapType();
+  if (heapType == HeapType::none) {
+    return;
+  }
+  if (!shouldBeTrue(heapType != HeapType::array,
+                    curr,
+                    "array.get target should be a specific array reference")) {
+    return;
+  }
+  const auto& element = heapType.getArray().element;
+  // If the type is not packed, it must be marked internally as unsigned, by
+  // convention.
+  if (element.type != Type::i32 || element.packedType == Field::not_packed) {
+    shouldBeFalse(curr->signed_, curr, "non-packed get cannot be signed");
+  }
+  shouldBeEqual(
+    curr->type, element.type, curr, "array.get must have the proper type");
+}
+
+void FunctionValidator::visitArraySet(ArraySet* curr) {
+  shouldBeTrue(
+    getModule()->features.hasGC(), curr, "array.set requires gc [--enable-gc]");
+  shouldBeEqualOrFirstIsUnreachable(
+    curr->index->type, Type(Type::i32), curr, "array.set index must be an i32");
+  if (curr->type == Type::unreachable) {
+    return;
+  }
+  if (!shouldBeSubType(curr->ref->type,
+                       Type(HeapType::array, Nullable),
+                       curr,
+                       "array.set target should be an array reference")) {
+    return;
+  }
+  auto heapType = curr->ref->type.getHeapType();
+  if (heapType == HeapType::none) {
+    return;
+  }
+  if (!shouldBeTrue(heapType != HeapType::array,
+                    curr,
+                    "array.set target should be a specific array reference")) {
+    return;
+  }
+  const auto& element = curr->ref->type.getHeapType().getArray().element;
+  shouldBeSubType(curr->value->type,
+                  element.type,
+                  curr,
+                  "array.set must have the proper type");
+  shouldBeTrue(element.mutable_, curr, "array.set type must be mutable");
+}
+
+void FunctionValidator::visitArrayLen(ArrayLen* curr) {
+  shouldBeTrue(
+    getModule()->features.hasGC(), curr, "array.len requires gc [--enable-gc]");
+  shouldBeEqualOrFirstIsUnreachable(
+    curr->type, Type(Type::i32), curr, "array.len result must be an i32");
+  shouldBeSubType(curr->ref->type,
+                  Type(HeapType::array, Nullable),
+                  curr,
+                  "array.len argument must be an array reference");
+}
+
+void FunctionValidator::visitArrayCopy(ArrayCopy* curr) {
+  shouldBeTrue(getModule()->features.hasGC(),
+               curr,
+               "array.copy requires gc [--enable-gc]");
+  shouldBeEqualOrFirstIsUnreachable(curr->srcIndex->type,
+                                    Type(Type::i32),
+                                    curr,
+                                    "array.copy src index must be an i32");
+  shouldBeEqualOrFirstIsUnreachable(curr->destIndex->type,
+                                    Type(Type::i32),
+                                    curr,
+                                    "array.copy dest index must be an i32");
+  if (curr->type == Type::unreachable) {
+    return;
+  }
+  if (!shouldBeSubType(curr->srcRef->type,
+                       Type(HeapType::array, Nullable),
+                       curr,
+                       "array.copy source should be an array reference") ||
+      !shouldBeSubType(curr->destRef->type,
+                       Type(HeapType::array, Nullable),
+                       curr,
+                       "array.copy destination should be an array reference")) {
+    return;
+  }
+  auto srcHeapType = curr->srcRef->type.getHeapType();
+  auto destHeapType = curr->destRef->type.getHeapType();
+  if (srcHeapType == HeapType::none || destHeapType == HeapType::none) {
+    return;
+  }
+  if (!shouldBeTrue(
+        srcHeapType != HeapType::array,
+        curr,
+        "array.copy source needs to be a specific array reference") ||
+      !shouldBeTrue(
+        srcHeapType != HeapType::array,
+        curr,
+        "array.copy destination needs to be a specific array reference")) {
+    return;
+  }
+  const auto& srcElement = srcHeapType.getArray().element;
+  const auto& destElement = destHeapType.getArray().element;
+  shouldBeSubType(srcElement.type,
+                  destElement.type,
+                  curr,
+                  "array.copy must have the proper types");
+  shouldBeTrue(destElement.mutable_, curr, "array.copy type must be mutable");
+}
+
+void FunctionValidator::visitFunction(Function* curr) {
+  if (curr->getResults().isTuple()) {
+    shouldBeTrue(getModule()->features.hasMultivalue(),
+                 curr->body,
+                 "Multivalue function results (multivalue is not enabled)");
+  }
+  FeatureSet features;
+  // Check for things like having a rec group with GC enabled. The type we're
+  // checking is a reference type even if this an MVP function type, so ignore
+  // the reference types feature here.
+  features |=
+    (Type(curr->type, Nullable).getFeatures() & ~FeatureSet::ReferenceTypes);
+  for (const auto& param : curr->getParams()) {
+    features |= param.getFeatures();
+    shouldBeTrue(param.isConcrete(), curr, "params must be concretely typed");
+  }
+  for (const auto& result : curr->getResults()) {
+    features |= result.getFeatures();
+    shouldBeTrue(result.isConcrete(), curr, "results must be concretely typed");
+  }
+  for (const auto& var : curr->vars) {
+    features |= var.getFeatures();
+  }
+  shouldBeTrue(features <= getModule()->features,
+               curr->name,
+               "all used types should be allowed");
+  if (curr->profile == IRProfile::Poppy) {
+    shouldBeTrue(
+      curr->body->is<Block>(), curr->body, "Function body must be a block");
+  }
+  // if function has no result, it is ignored
+  // if body is unreachable, it might be e.g. a return
+  shouldBeSubType(curr->body->type,
+                  curr->getResults(),
+                  curr->body,
+                  "function body type must match, if function returns");
+  for (Type returnType : returnTypes) {
+    shouldBeSubType(returnType,
+                    curr->getResults(),
+                    curr->body,
+                    "function result must match, if function has returns");
+  }
+
+  assert(breakTypes.empty());
+  assert(delegateTargetNames.empty());
+  assert(rethrowTargetNames.empty());
+  returnTypes.clear();
+  labelNames.clear();
+  // validate optional local names
+  std::unordered_set<Name> seen;
+  for (auto& pair : curr->localNames) {
+    Name name = pair.second;
+    shouldBeTrue(seen.insert(name).second, name, "local names must be unique");
+  }
+
+  if (getModule()->features.hasGC()) {
+    // If we have non-nullable locals, verify that local.get are valid.
+    if (!getModule()->features.hasGCNNLocals()) {
+      // Without the special GCNNLocals feature, we implement the spec rules,
+      // that is, a set allows gets until the end of the block.
+      LocalStructuralDominance info(curr, *getModule());
+      for (auto index : info.nonDominatingIndices) {
+        shouldBeTrue(!curr->getLocalType(index).isNonNullable(),
+                     index,
+                     "non-nullable local's sets must dominate gets");
+      }
+    } else {
+      // With the special GCNNLocals feature, we allow gets anywhere, so long as
+      // we can prove they cannot read the null value. (TODO: remove this once
+      // the spec is stable).
+      //
+      // This is slow, so only do it if we find such locals exist at all.
+      bool hasNNLocals = false;
+      for (const auto& var : curr->vars) {
+        if (!var.isDefaultable()) {
+          hasNNLocals = true;
+          break;
+        }
+      }
+      if (hasNNLocals) {
+        LocalGraph graph(curr);
+        for (auto& [get, sets] : graph.getSetses) {
+          auto index = get->index;
+          // It is always ok to read nullable locals, and it is always ok to
+          // read params even if they are non-nullable.
+          if (curr->getLocalType(index).isDefaultable() ||
+              curr->isParam(index)) {
+            continue;
+          }
+          for (auto* set : sets) {
+            shouldBeTrue(!!set, index, "non-nullable local must not read null");
+          }
+        }
+      }
+    }
+  }
+}
+
+static bool checkSegmentOffset(Expression* curr,
+                               Address add,
+                               Address max,
+                               FeatureSet features) {
+  return Properties::isValidInConstantExpression(curr, features);
+}
+
+void FunctionValidator::validateAlignment(
+  size_t align, Type type, Index bytes, bool isAtomic, Expression* curr) {
+  if (isAtomic) {
+    shouldBeEqual(align,
+                  (size_t)bytes,
+                  curr,
+                  "atomic accesses must have natural alignment");
+    return;
+  }
+  switch (align) {
+    case 1:
+    case 2:
+    case 4:
+    case 8:
+    case 16:
+      break;
+    default: {
+      info.fail("bad alignment: " + std::to_string(align), curr, getFunction());
+      break;
+    }
+  }
+  shouldBeTrue(align <= bytes, curr, "alignment must not exceed natural");
+  TODO_SINGLE_COMPOUND(type);
+  switch (type.getBasic()) {
+    case Type::i32:
+    case Type::f32: {
+      shouldBeTrue(align <= 4, curr, "alignment must not exceed natural");
+      break;
+    }
+    case Type::i64:
+    case Type::f64: {
+      shouldBeTrue(align <= 8, curr, "alignment must not exceed natural");
+      break;
+    }
+    case Type::v128:
+    case Type::unreachable:
+      break;
+    case Type::none:
+      WASM_UNREACHABLE("invalid type");
+  }
+}
+
+static void validateBinaryenIR(Module& wasm, ValidationInfo& info) {
+  struct BinaryenIRValidator
+    : public PostWalker<BinaryenIRValidator,
+                        UnifiedExpressionVisitor<BinaryenIRValidator>> {
+    ValidationInfo& info;
+
+    std::unordered_set<Expression*> seen;
+
+    BinaryenIRValidator(ValidationInfo& info) : info(info) {}
+
+    void visitExpression(Expression* curr) {
+      auto scope = getFunction() ? getFunction()->name : Name("(global scope)");
+      // check if a node type is 'stale', i.e., we forgot to finalize() the
+      // node.
+      auto oldType = curr->type;
+      ReFinalizeNode().visit(curr);
+      auto newType = curr->type;
+      if (newType != oldType) {
+        // We accept concrete => undefined on control flow structures:
+        // e.g.
+        //
+        //  (drop (block (result i32) (unreachable)))
+        //
+        // The block has a type annotated on it, which can make its unreachable
+        // contents have a concrete type. Refinalize will make it unreachable,
+        // so both are valid here.
+        bool validControlFlowStructureChange =
+          Properties::isControlFlowStructure(curr) && oldType.isConcrete() &&
+          newType == Type::unreachable;
+        // It's ok in general for types to get refined as long as they don't
+        // become unreachable.
+        bool validRefinement =
+          Type::isSubType(newType, oldType) && newType != Type::unreachable;
+        if (!validRefinement && !validControlFlowStructureChange) {
+          std::ostringstream ss;
+          ss << "stale type found in " << scope << " on " << curr
+             << "\n(marked as " << oldType << ", should be " << newType
+             << ")\n";
+          info.fail(ss.str(), curr, getFunction());
+        }
+        curr->type = oldType;
+      }
+      // check if a node is a duplicate - expressions must not be seen more than
+      // once
+      if (!seen.insert(curr).second) {
+        std::ostringstream ss;
+        ss << "expression seen more than once in the tree in " << scope
+           << " on " << curr << '\n';
+        info.fail(ss.str(), curr, getFunction());
+      }
+    }
+  };
+  BinaryenIRValidator binaryenIRValidator(info);
+  binaryenIRValidator.walkModule(&wasm);
+}
+
+// Main validator class
+
+static void validateImports(Module& module, ValidationInfo& info) {
+  ModuleUtils::iterImportedFunctions(module, [&](Function* curr) {
+    if (curr->getResults().isTuple()) {
+      info.shouldBeTrue(module.features.hasMultivalue(),
+                        curr->name,
+                        "Imported multivalue function requires multivalue "
+                        "[--enable-multivalue]");
+    }
+    if (info.validateWeb) {
+      for (const auto& param : curr->getParams()) {
+        info.shouldBeUnequal(param,
+                             Type(Type::i64),
+                             curr->name,
+                             "Imported function must not have i64 parameters");
+      }
+      for (const auto& result : curr->getResults()) {
+        info.shouldBeUnequal(result,
+                             Type(Type::i64),
+                             curr->name,
+                             "Imported function must not have i64 results");
+      }
+    }
+
+    if (Intrinsics(module).isCallWithoutEffects(curr)) {
+      auto lastParam = curr->getParams();
+      if (lastParam.isTuple()) {
+        lastParam = lastParam.getTuple().types.back();
+      }
+      info.shouldBeTrue(lastParam.isFunction(),
+                        curr->name,
+                        "call.if.used's last param must be a function");
+    }
+  });
+  ModuleUtils::iterImportedGlobals(module, [&](Global* curr) {
+    if (!module.features.hasMutableGlobals()) {
+      info.shouldBeFalse(curr->mutable_,
+                         curr->name,
+                         "Imported mutable global requires mutable-globals "
+                         "[--enable-mutable-globals]");
+    }
+    info.shouldBeFalse(
+      curr->type.isTuple(), curr->name, "Imported global cannot be tuple");
+  });
+}
+
+static void validateExports(Module& module, ValidationInfo& info) {
+  for (auto& curr : module.exports) {
+    if (curr->kind == ExternalKind::Function) {
+      if (info.validateWeb) {
+        Function* f = module.getFunction(curr->value);
+        for (const auto& param : f->getParams()) {
+          info.shouldBeUnequal(
+            param,
+            Type(Type::i64),
+            f->name,
+            "Exported function must not have i64 parameters");
+        }
+        for (const auto& result : f->getResults()) {
+          info.shouldBeUnequal(result,
+                               Type(Type::i64),
+                               f->name,
+                               "Exported function must not have i64 results");
+        }
+      }
+    } else if (curr->kind == ExternalKind::Global) {
+      if (Global* g = module.getGlobalOrNull(curr->value)) {
+        if (!module.features.hasMutableGlobals()) {
+          info.shouldBeFalse(g->mutable_,
+                             g->name,
+                             "Exported mutable global requires mutable-globals "
+                             "[--enable-mutable-globals]");
+        }
+        info.shouldBeFalse(
+          g->type.isTuple(), g->name, "Exported global cannot be tuple");
+      }
+    }
+  }
+  std::unordered_set<Name> exportNames;
+  for (auto& exp : module.exports) {
+    Name name = exp->value;
+    if (exp->kind == ExternalKind::Function) {
+      info.shouldBeTrue(module.getFunctionOrNull(name),
+                        name,
+                        "module function exports must be found");
+    } else if (exp->kind == ExternalKind::Global) {
+      info.shouldBeTrue(module.getGlobalOrNull(name),
+                        name,
+                        "module global exports must be found");
+    } else if (exp->kind == ExternalKind::Table) {
+      info.shouldBeTrue(module.getTableOrNull(name),
+                        name,
+                        "module table exports must be found");
+    } else if (exp->kind == ExternalKind::Memory) {
+      info.shouldBeTrue(module.getMemoryOrNull(name),
+                        name,
+                        "module memory exports must be found");
+    } else if (exp->kind == ExternalKind::Tag) {
+      info.shouldBeTrue(
+        module.getTagOrNull(name), name, "module tag exports must be found");
+    } else {
+      WASM_UNREACHABLE("invalid ExternalKind");
+    }
+    Name exportName = exp->name;
+    info.shouldBeFalse(exportNames.count(exportName) > 0,
+                       exportName,
+                       "module exports must be unique");
+    exportNames.insert(exportName);
+  }
+}
+
+static void validateGlobals(Module& module, ValidationInfo& info) {
+  ModuleUtils::iterDefinedGlobals(module, [&](Global* curr) {
+    info.shouldBeTrue(curr->type.getFeatures() <= module.features,
+                      curr->name,
+                      "all used types should be allowed");
+    info.shouldBeTrue(
+      curr->init != nullptr, curr->name, "global init must be non-null");
+    assert(curr->init);
+    info.shouldBeTrue(
+      GlobalUtils::canInitializeGlobal(curr->init, module.features),
+      curr->name,
+      "global init must be valid");
+
+    if (!info.shouldBeSubType(curr->init->type,
+                              curr->type,
+                              curr->init,
+                              "global init must have correct type") &&
+        !info.quiet) {
+      info.getStream(nullptr) << "(on global " << curr->name << ")\n";
+    }
+    FunctionValidator(module, &info).validate(curr->init);
+  });
+}
+
+static void validateMemories(Module& module, ValidationInfo& info) {
+  if (module.memories.size() > 1) {
+    info.shouldBeTrue(
+      module.features.hasMultiMemories(),
+      "memory",
+      "multiple memories require multi-memories [--enable-multi-memories]");
+  }
+  for (auto& memory : module.memories) {
+    if (memory->hasMax()) {
+      info.shouldBeFalse(
+        memory->initial > memory->max, "memory", "memory max >= initial");
+    }
+    if (memory->is64()) {
+      info.shouldBeTrue(module.features.hasMemory64(),
+                        "memory",
+                        "64-bit memories require memory64 [--enable-memory64]");
+    } else {
+      info.shouldBeTrue(memory->initial <= Memory::kMaxSize32,
+                        "memory",
+                        "initial memory must be <= 4GB");
+      info.shouldBeTrue(!memory->hasMax() || memory->max <= Memory::kMaxSize32,
+                        "memory",
+                        "max memory must be <= 4GB, or unlimited");
+    }
+    info.shouldBeTrue(!memory->shared || memory->hasMax(),
+                      "memory",
+                      "shared memory must have max size");
+    if (memory->shared) {
+      info.shouldBeTrue(module.features.hasAtomics(),
+                        "memory",
+                        "shared memory requires threads [--enable-threads]");
+    }
+  }
+}
+
+static void validateDataSegments(Module& module, ValidationInfo& info) {
+  for (auto& segment : module.dataSegments) {
+    auto size = segment->data.size();
+    if (segment->isPassive) {
+      info.shouldBeTrue(
+        module.features.hasBulkMemory(),
+        segment->offset,
+        "nonzero segment flags require bulk memory [--enable-bulk-memory]");
+      info.shouldBeEqual(segment->offset,
+                         (Expression*)nullptr,
+                         segment->offset,
+                         "passive segment should not have an offset");
+    } else {
+      auto memory = module.getMemoryOrNull(segment->memory);
+      if (!info.shouldBeTrue(memory != nullptr,
+                             "segment",
+                             "active segment must have a valid memory name")) {
+        continue;
+      }
+      if (memory->is64()) {
+        if (!info.shouldBeEqual(segment->offset->type,
+                                Type(Type::i64),
+                                segment->offset,
+                                "segment offset should be i64")) {
+          continue;
+        }
+      } else {
+        if (!info.shouldBeEqual(segment->offset->type,
+                                Type(Type::i32),
+                                segment->offset,
+                                "segment offset should be i32")) {
+          continue;
+        }
+      }
+      info.shouldBeTrue(checkSegmentOffset(segment->offset,
+                                           segment->data.size(),
+                                           memory->initial * Memory::kPageSize,
+                                           module.features),
+                        segment->offset,
+                        "memory segment offset should be reasonable");
+      FunctionValidator(module, &info).validate(segment->offset);
+      // If the memory is imported we don't actually know its initial size.
+      // Specifically wasm dll's import a zero sized memory which is perfectly
+      // valid.
+      if (!memory->imported()) {
+        info.shouldBeTrue(size <= memory->initial * Memory::kPageSize,
+                          segment->data.size(),
+                          "segment size should fit in memory (initial)");
+      }
+    }
+  }
+}
+
+static void validateTables(Module& module, ValidationInfo& info) {
+  FunctionValidator validator(module, &info);
+
+  if (!module.features.hasReferenceTypes()) {
+    info.shouldBeTrue(module.tables.size() <= 1,
+                      "table",
+                      "Only 1 table definition allowed in MVP (requires "
+                      "--enable-reference-types)");
+    if (!module.tables.empty()) {
+      auto& table = module.tables.front();
+      info.shouldBeTrue(table->type == Type(HeapType::func, Nullable),
+                        "table",
+                        "Only funcref is valid for table type (when reference "
+                        "types are disabled)");
+      for (auto& segment : module.elementSegments) {
+        info.shouldBeTrue(segment->table == table->name,
+                          "elem",
+                          "all element segments should refer to a single table "
+                          "in MVP.");
+        for (auto* expr : segment->data) {
+          info.shouldBeTrue(
+            expr->is<RefFunc>(),
+            expr,
+            "all table elements must be non-null funcrefs in MVP.");
+          validator.validate(expr);
+        }
+      }
+    }
+  }
+
+  Type externref = Type(HeapType::ext, Nullable);
+  Type funcref = Type(HeapType::func, Nullable);
+  for (auto& table : module.tables) {
+    info.shouldBeTrue(table->initial <= table->max,
+                      "table",
+                      "size minimum must not be greater than maximum");
+    info.shouldBeTrue(
+      table->type.isNullable(),
+      "table",
+      "Non-nullable reference types are not yet supported for tables");
+    if (!module.features.hasGC()) {
+      info.shouldBeTrue(table->type.isFunction() || table->type == externref,
+                        "table",
+                        "Only function reference types or externref are valid "
+                        "for table type (when GC is disabled)");
+    }
+    if (!module.features.hasGC()) {
+      info.shouldBeTrue(table->type == funcref || table->type == externref,
+                        "table",
+                        "Only funcref and externref are valid for table type "
+                        "(when gc is disabled)");
+    }
+  }
+
+  for (auto& segment : module.elementSegments) {
+    // Since element segment items need to be constant expressions, that leaves
+    // us with ref.null, ref.func and global.get. As a result, the only possible
+    // type for element segments will be function references.
+    // TODO: This is not true! Allow GC data here (#4846).
+    info.shouldBeTrue(segment->type.isFunction(),
+                      "elem",
+                      "element segment type must be of function type.");
+    info.shouldBeTrue(
+      segment->type.isNullable(),
+      "elem",
+      "Non-nullable reference types are not yet supported for tables");
+
+    if (segment->table.is()) {
+      auto table = module.getTableOrNull(segment->table);
+      info.shouldBeTrue(table != nullptr,
+                        "elem",
+                        "element segment must have a valid table name");
+      info.shouldBeTrue(!!segment->offset,
+                        "elem",
+                        "table segment offset should have an offset");
+      info.shouldBeEqual(segment->offset->type,
+                         Type(Type::i32),
+                         segment->offset,
+                         "element segment offset should be i32");
+      info.shouldBeTrue(checkSegmentOffset(segment->offset,
+                                           segment->data.size(),
+                                           table->initial * Table::kPageSize,
+                                           module.features),
+                        segment->offset,
+                        "table segment offset should be reasonable");
+      info.shouldBeTrue(
+        Type::isSubType(segment->type, table->type),
+        "elem",
+        "element segment type must be a subtype of the table type");
+      validator.validate(segment->offset);
+    } else {
+      info.shouldBeTrue(!segment->offset,
+                        "elem",
+                        "non-table segment offset should have no offset");
+    }
+    // Avoid double checking items
+    if (module.features.hasReferenceTypes()) {
+      for (auto* expr : segment->data) {
+        if (auto* globalExpr = expr->dynCast<GlobalGet>()) {
+          auto* global = module.getGlobal(globalExpr->name);
+          info.shouldBeFalse(
+            global->mutable_, expr, "expected a constant expression");
+        } else {
+          info.shouldBeTrue(expr->is<RefFunc>() || expr->is<RefNull>() ||
+                              expr->is<GlobalGet>(),
+                            expr,
+                            "element segment items must be one of global.get, "
+                            "ref.func, ref.null func");
+        }
+        info.shouldBeSubType(expr->type,
+                             segment->type,
+                             expr,
+                             "element segment item expressions must return a "
+                             "subtype of the segment type");
+        validator.validate(expr);
+      }
+    }
+  }
+}
+
+static void validateTags(Module& module, ValidationInfo& info) {
+  if (!module.tags.empty()) {
+    info.shouldBeTrue(
+      module.features.hasExceptionHandling(),
+      module.tags[0]->name,
+      "Tags require exception-handling [--enable-exception-handling]");
+  }
+  for (auto& curr : module.tags) {
+    info.shouldBeEqual(curr->sig.results,
+                       Type(Type::none),
+                       curr->name,
+                       "Tag type's result type should be none");
+    if (curr->sig.params.isTuple()) {
+      info.shouldBeTrue(
+        module.features.hasMultivalue(),
+        curr->name,
+        "Multivalue tag type requires multivalue [--enable-multivalue]");
+    }
+    for (const auto& param : curr->sig.params) {
+      info.shouldBeTrue(param.isConcrete(),
+                        curr->name,
+                        "Values in a tag should have concrete types");
+    }
+  }
+}
+
+static void validateModule(Module& module, ValidationInfo& info) {
+  // start
+  if (module.start.is()) {
+    auto func = module.getFunctionOrNull(module.start);
+    if (info.shouldBeTrue(
+          func != nullptr, module.start, "start must be found")) {
+      info.shouldBeTrue(func->getParams() == Type::none,
+                        module.start,
+                        "start must have 0 params");
+      info.shouldBeTrue(func->getResults() == Type::none,
+                        module.start,
+                        "start must not return a value");
+    }
+  }
+}
+
+static void validateFeatures(Module& module, ValidationInfo& info) {
+  if (module.features.hasGC()) {
+    info.shouldBeTrue(module.features.hasReferenceTypes(),
+                      module.features,
+                      "--enable-gc requires --enable-reference-types");
+  }
+}
+
+static void validateClosedWorldInterface(Module& module, ValidationInfo& info) {
+  // Error if there are any publicly exposed heap types beyond the types of
+  // publicly exposed functions.
+  std::unordered_set<HeapType> publicFuncTypes;
+  ModuleUtils::iterImportedFunctions(
+    module, [&](Function* func) { publicFuncTypes.insert(func->type); });
+  for (auto& ex : module.exports) {
+    if (ex->kind == ExternalKind::Function) {
+      publicFuncTypes.insert(module.getFunction(ex->value)->type);
+    }
+  }
+
+  for (auto type : ModuleUtils::getPublicHeapTypes(module)) {
+    if (!publicFuncTypes.count(type)) {
+      auto name = type.toString();
+      if (auto it = module.typeNames.find(type); it != module.typeNames.end()) {
+        name = it->second.name.toString();
+      }
+      info.fail("publicly exposed type disallowed with a closed world: $" +
+                  name,
+                type,
+                nullptr);
+    }
+  }
+}
+
+// TODO: If we want the validator to be part of libwasm rather than libpasses,
+// then Using PassRunner::getPassDebug causes a circular dependence. We should
+// fix that, perhaps by moving some of the pass infrastructure into libsupport.
+bool WasmValidator::validate(Module& module, Flags flags) {
+  ValidationInfo info(module);
+  info.validateWeb = (flags & Web) != 0;
+  info.validateGlobally = (flags & Globally) != 0;
+  info.quiet = (flags & Quiet) != 0;
+  info.closedWorld = (flags & ClosedWorld) != 0;
+  // parallel wasm logic validation
+  PassRunner runner(&module);
+  FunctionValidator(module, &info).validate(&runner);
+  // validate globally
+  if (info.validateGlobally) {
+    validateImports(module, info);
+    validateExports(module, info);
+    validateGlobals(module, info);
+    validateMemories(module, info);
+    validateDataSegments(module, info);
+    validateTables(module, info);
+    validateTags(module, info);
+    validateModule(module, info);
+    validateFeatures(module, info);
+    if (info.closedWorld) {
+      validateClosedWorldInterface(module, info);
+    }
+  }
+  // validate additional internal IR details when in pass-debug mode
+  if (PassRunner::getPassDebug()) {
+    validateBinaryenIR(module, info);
+  }
+  // print all the data
+  if (!info.valid.load() && !info.quiet) {
+    for (auto& func : module.functions) {
+      std::cerr << info.getStream(func.get()).str();
+    }
+    std::cerr << info.getStream(nullptr).str();
+  }
+  return info.valid.load();
+}
+
+bool WasmValidator::validate(Module& module, const PassOptions& options) {
+  Flags flags = options.validateGlobally ? Globally : Minimal;
+  if (options.closedWorld) {
+    flags |= ClosedWorld;
+  }
+  return validate(module, flags);
+}
+
+bool WasmValidator::validate(Function* func, Module& module, Flags flags) {
+  ValidationInfo info(module);
+  info.validateWeb = (flags & Web) != 0;
+  info.validateGlobally = (flags & Globally) != 0;
+  info.quiet = (flags & Quiet) != 0;
+  FunctionValidator(module, &info).validate(func);
+  // print all the data
+  if (!info.valid.load() && !info.quiet) {
+    std::cerr << info.getStream(func).str();
+    std::cerr << info.getStream(nullptr).str();
+  }
+  return info.valid.load();
+}
+
+} // namespace wasm
