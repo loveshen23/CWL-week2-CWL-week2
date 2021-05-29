@@ -3858,4 +3858,105 @@ HeapType SExpressionWasmBuilder::parseHeapType(Element& s) {
       if (String::isNumber(str)) {
         size_t offset = parseIndex(s);
         if (offset >= types.size()) {
-          throw ParseException("unkno
+          throw ParseException("unknown indexed function type", s.line, s.col);
+        }
+        return types[offset];
+      }
+      return stringToHeapType(s.str(), /* prefix = */ false);
+    }
+  }
+  throw ParseException("invalid heap type", s.line, s.col);
+}
+
+void SExpressionWasmBuilder::parseTag(Element& s, bool preParseImport) {
+  auto tag = make_unique<Tag>();
+  size_t i = 1;
+
+  // Parse name
+  if (s[i]->isStr() && s[i]->dollared()) {
+    auto& inner = *s[i++];
+    tag->setExplicitName(inner.str());
+    if (wasm.getTagOrNull(tag->name)) {
+      throw ParseException("duplicate tag", inner.line, inner.col);
+    }
+  } else {
+    tag->name = Name::fromInt(tagCounter);
+    assert(!wasm.getTagOrNull(tag->name));
+  }
+  tagCounter++;
+  tagNames.push_back(tag->name);
+
+  // Parse import, if any
+  if (i < s.size() && elementStartsWith(*s[i], IMPORT)) {
+    assert(preParseImport && "import element in non-preParseImport mode");
+    auto& importElem = *s[i++];
+    if (importElem.size() != 3) {
+      throw ParseException("invalid import", importElem.line, importElem.col);
+    }
+    if (!importElem[1]->isStr() || importElem[1]->dollared()) {
+      throw ParseException(
+        "invalid import module name", importElem[1]->line, importElem[1]->col);
+    }
+    if (!importElem[2]->isStr() || importElem[2]->dollared()) {
+      throw ParseException(
+        "invalid import base name", importElem[2]->line, importElem[2]->col);
+    }
+    tag->module = importElem[1]->str();
+    tag->base = importElem[2]->str();
+  }
+
+  // Parse export, if any
+  if (i < s.size() && elementStartsWith(*s[i], EXPORT)) {
+    auto& exportElem = *s[i++];
+    if (tag->module.is()) {
+      throw ParseException("import and export cannot be specified together",
+                           exportElem.line,
+                           exportElem.col);
+    }
+    if (exportElem.size() != 2) {
+      throw ParseException("invalid export", exportElem.line, exportElem.col);
+    }
+    if (!exportElem[1]->isStr() || exportElem[1]->dollared()) {
+      throw ParseException(
+        "invalid export name", exportElem[1]->line, exportElem[1]->col);
+    }
+    auto ex = make_unique<Export>();
+    ex->name = exportElem[1]->str();
+    if (wasm.getExportOrNull(ex->name)) {
+      throw ParseException(
+        "duplicate export", exportElem[1]->line, exportElem[1]->col);
+    }
+    ex->value = tag->name;
+    ex->kind = ExternalKind::Tag;
+    wasm.addExport(ex.release());
+  }
+
+  // Parse typeuse
+  HeapType tagType;
+  i = parseTypeUse(s, i, tagType);
+  tag->sig = tagType.getSignature();
+
+  // If there are more elements, they are invalid
+  if (i < s.size()) {
+    throw ParseException("invalid element", s[i]->line, s[i]->col);
+  }
+
+  wasm.addTag(tag.release());
+}
+
+void SExpressionWasmBuilder::validateHeapTypeUsingChild(Expression* child,
+                                                        HeapType heapType,
+                                                        Element& s) {
+  if (child->type == Type::unreachable) {
+    return;
+  }
+  if (!child->type.isRef() ||
+      !HeapType::isSubType(child->type.getHeapType(), heapType)) {
+    throw ParseException("bad heap type: expected " + heapType.toString() +
+                           " but found " + child->type.toString(),
+                         s.line,
+                         s.col);
+  }
+}
+
+} // namespace wasm
