@@ -33,4 +33,17 @@ bool isDWARFSection(Name name);
 bool hasDWARFSections(const Module& wasm);
 
 // Dump the DWARF sections to stdout.
-void dumpDWARF(const Module& was
+void dumpDWARF(const Module& wasm);
+
+// Check whether we should preserve valid DWARF while optimizing. (If so, we
+// will disable optimizations that currently cause issues with debug info.)
+bool shouldPreserveDWARF(PassOptions& options, Module& wasm);
+
+// Update the DWARF sections.
+void writeDWARFSections(Module& wasm, const BinaryLocations& newLocations);
+
+} // namespace wasm::Debug
+
+#undef DEBUG_TYPE
+
+#endif // wasm_wasm_debug_h
