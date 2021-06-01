@@ -1154,4 +1154,387 @@ enum ASTNodes {
   StringAsWTF8 = 0x90,
   StringViewWTF8Advance = 0x91,
   StringViewWTF8Slice = 0x93,
-  S
+  StringAsWTF16 = 0x98,
+  StringViewWTF16Length = 0x99,
+  StringViewWTF16GetCodePoint = 0x9a,
+  StringViewWTF16Slice = 0x9c,
+  StringAsIter = 0xa0,
+  StringViewIterNext = 0xa1,
+  StringViewIterAdvance = 0xa2,
+  StringViewIterRewind = 0xa3,
+  StringViewIterSlice = 0xa4,
+  StringCompare = 0xa8,
+  StringFromCodePoint = 0xa9,
+  StringHash = 0xaa,
+  StringNewWTF8Array = 0xb0,
+  StringNewWTF16Array = 0xb1,
+  StringEncodeWTF8Array = 0xb2,
+  StringEncodeWTF16Array = 0xb3,
+  StringNewUTF8ArrayTry = 0xb8,
+};
+
+enum MemoryAccess {
+  Offset = 0x10,    // bit 4
+  Alignment = 0x80, // bit 7
+  NaturalAlignment = 0
+};
+
+enum MemoryFlags { HasMaximum = 1 << 0, IsShared = 1 << 1, Is64 = 1 << 2 };
+
+enum StringPolicy {
+  UTF8 = 0x00,
+  WTF8 = 0x01,
+  Replace = 0x02,
+};
+
+enum FeaturePrefix {
+  FeatureUsed = '+',
+  FeatureRequired = '=',
+  FeatureDisallowed = '-'
+};
+
+} // namespace BinaryConsts
+
+// (local index in IR, tuple index) => binary local index
+using MappedLocals = std::unordered_map<std::pair<Index, Index>, size_t>;
+
+// Writes out wasm to the binary format
+
+class WasmBinaryWriter {
+  // Computes the indexes in a wasm binary, i.e., with function imports
+  // and function implementations sharing a single index space, etc.,
+  // and with the imports first (the Module's functions and globals
+  // arrays are not assumed to be in a particular order, so we can't
+  // just use them directly).
+  struct BinaryIndexes {
+    std::unordered_map<Name, Index> functionIndexes;
+    std::unordered_map<Name, Index> tagIndexes;
+    std::unordered_map<Name, Index> globalIndexes;
+    std::unordered_map<Name, Index> tableIndexes;
+    std::unordered_map<Name, Index> elemIndexes;
+    std::unordered_map<Name, Index> memoryIndexes;
+    std::unordered_map<Name, Index> dataIndexes;
+
+    BinaryIndexes(Module& wasm) {
+      auto addIndexes = [&](auto& source, auto& indexes) {
+        auto addIndex = [&](auto* curr) {
+          auto index = indexes.size();
+          indexes[curr->name] = index;
+        };
+        for (auto& curr : source) {
+          if (curr->imported()) {
+            addIndex(curr.get());
+          }
+        }
+        for (auto& curr : source) {
+          if (!curr->imported()) {
+            addIndex(curr.get());
+          }
+        }
+      };
+      addIndexes(wasm.functions, functionIndexes);
+      addIndexes(wasm.tags, tagIndexes);
+      addIndexes(wasm.tables, tableIndexes);
+      addIndexes(wasm.memories, memoryIndexes);
+
+      for (auto& curr : wasm.elementSegments) {
+        auto index = elemIndexes.size();
+        elemIndexes[curr->name] = index;
+      }
+
+      for (auto& curr : wasm.dataSegments) {
+        auto index = dataIndexes.size();
+        dataIndexes[curr->name] = index;
+      }
+
+      // Globals may have tuple types in the IR, in which case they lower to
+      // multiple globals, one for each tuple element, in the binary. Tuple
+      // globals therefore occupy multiple binary indices, and we have to take
+      // that into account when calculating indices.
+      Index globalCount = 0;
+      auto addGlobal = [&](auto* curr) {
+        globalIndexes[curr->name] = globalCount;
+        globalCount += curr->type.size();
+      };
+      for (auto& curr : wasm.globals) {
+        if (curr->imported()) {
+          addGlobal(curr.get());
+        }
+      }
+      for (auto& curr : wasm.globals) {
+        if (!curr->imported()) {
+          addGlobal(curr.get());
+        }
+      }
+    }
+  };
+
+public:
+  WasmBinaryWriter(Module* input, BufferWithRandomAccess& o)
+    : wasm(input), o(o), indexes(*input) {
+    prepare();
+  }
+
+  // locations in the output binary for the various parts of the module
+  struct TableOfContents {
+    struct Entry {
+      Name name;
+      size_t offset; // where the entry starts
+      size_t size;   // the size of the entry
+      Entry(Name name, size_t offset, size_t size)
+        : name(name), offset(offset), size(size) {}
+    };
+    std::vector<Entry> functionBodies;
+  } tableOfContents;
+
+  void setNamesSection(bool set) {
+    debugInfo = set;
+    emitModuleName = set;
+  }
+  void setEmitModuleName(bool set) { emitModuleName = set; }
+  void setSourceMap(std::ostream* set, std::string url) {
+    sourceMap = set;
+    sourceMapUrl = url;
+  }
+  void setSymbolMap(std::string set) { symbolMap = set; }
+
+  void write();
+  void writeHeader();
+  int32_t writeU32LEBPlaceholder();
+  void writeResizableLimits(
+    Address initial, Address maximum, bool hasMaximum, bool shared, bool is64);
+  template<typename T> int32_t startSection(T code);
+  void finishSection(int32_t start);
+  int32_t startSubsection(BinaryConsts::CustomSections::Subsection code);
+  void finishSubsection(int32_t start);
+  void writeStart();
+  void writeMemories();
+  void writeTypes();
+  void writeImports();
+
+  void writeFunctionSignatures();
+  void writeExpression(Expression* curr);
+  void writeFunctions();
+  void writeStrings();
+  void writeGlobals();
+  void writeExports();
+  void writeDataCount();
+  void writeDataSegments();
+  void writeTags();
+
+  uint32_t getFunctionIndex(Name name) const;
+  uint32_t getTableIndex(Name name) const;
+  uint32_t getMemoryIndex(Name name) const;
+  uint32_t getGlobalIndex(Name name) const;
+  uint32_t getTagIndex(Name name) const;
+  uint32_t getTypeIndex(HeapType type) const;
+  uint32_t getStringIndex(Name string) const;
+
+  void writeTableDeclarations();
+  void writeElementSegments();
+  void writeNames();
+  void writeSourceMapUrl();
+  void writeSymbolMap();
+  void writeLateCustomSections();
+  void writeCustomSection(const CustomSection& section);
+  void writeFeaturesSection();
+  void writeDylinkSection();
+  void writeLegacyDylinkSection();
+
+  void initializeDebugInfo();
+  void writeSourceMapProlog();
+  void writeSourceMapEpilog();
+  void writeDebugLocation(const Function::DebugLocation& loc);
+  void writeDebugLocation(Expression* curr, Function* func);
+  void writeDebugLocationEnd(Expression* curr, Function* func);
+  void writeExtraDebugLocation(Expression* curr, Function* func, size_t id);
+
+  // helpers
+  void writeInlineString(std::string_view name);
+  void writeEscapedName(std::string_view name);
+  void writeInlineBuffer(const char* data, size_t size);
+  void writeData(const char* data, size_t size);
+
+  struct Buffer {
+    const char* data;
+    size_t size;
+    size_t pointerLocation;
+    Buffer(const char* data, size_t size, size_t pointerLocation)
+      : data(data), size(size), pointerLocation(pointerLocation) {}
+  };
+
+  Module* getModule() { return wasm; }
+
+  void writeType(Type type);
+
+  // Writes an arbitrary heap type, which may be indexed or one of the
+  // basic types like funcref.
+  void writeHeapType(HeapType type);
+  // Writes an indexed heap type. Note that this is encoded differently than a
+  // general heap type because it does not allow negative values for basic heap
+  // types.
+  void writeIndexedHeapType(HeapType type);
+
+  void writeField(const Field& field);
+
+private:
+  Module* wasm;
+  BufferWithRandomAccess& o;
+  BinaryIndexes indexes;
+  ModuleUtils::IndexedHeapTypes indexedTypes;
+
+  bool debugInfo = true;
+
+  // TODO: Remove `emitModuleName` in the future once there are better ways to
+  // ensure modules have meaningful names in stack traces.For example, using
+  // ObjectURLs works in FireFox, but not Chrome. See
+  // https://bugs.chromium.org/p/v8/issues/detail?id=11808.
+  bool emitModuleName = true;
+
+  std::ostream* sourceMap = nullptr;
+  std::string sourceMapUrl;
+  std::string symbolMap;
+
+  MixedArena allocator;
+
+  // storage of source map locations until the section is placed at its final
+  // location (shrinking LEBs may cause changes there)
+  std::vector<std::pair<size_t, const Function::DebugLocation*>>
+    sourceMapLocations;
+  size_t sourceMapLocationsSizeAtSectionStart;
+  Function::DebugLocation lastDebugLocation;
+
+  std::unique_ptr<ImportInfo> importInfo;
+
+  // General debugging info: track locations as we write.
+  BinaryLocations binaryLocations;
+  size_t binaryLocationsSizeAtSectionStart;
+  // Track the expressions that we added for the current function being
+  // written, so that we can update those specific binary locations when
+  // the function is written out.
+  std::vector<Expression*> binaryLocationTrackedExpressionsForFunc;
+
+  // Maps function names to their mapped locals. This is used when we emit the
+  // local names section: we map the locals when writing the function, save that
+  // info here, and then use it when writing the names.
+  std::unordered_map<Name, MappedLocals> funcMappedLocals;
+
+  // Indexes in the string literal section of each StringConst in the wasm.
+  std::unordered_map<Name, Index> stringIndexes;
+
+  void prepare();
+};
+
+class WasmBinaryBuilder {
+  Module& wasm;
+  MixedArena& allocator;
+  const std::vector<char>& input;
+  std::istream* sourceMap;
+  struct NextDebugLocation {
+    uint32_t availablePos;
+    uint32_t previousPos;
+    Function::DebugLocation next;
+  };
+  NextDebugLocation nextDebugLocation;
+  bool debugInfo = true;
+  bool DWARF = false;
+  bool skipFunctionBodies = false;
+
+  size_t pos = 0;
+  Index startIndex = -1;
+  std::set<Function::DebugLocation> debugLocation;
+  size_t codeSectionLocation;
+
+  std::set<BinaryConsts::Section> seenSections;
+
+  // All types defined in the type section
+  std::vector<HeapType> types;
+
+public:
+  WasmBinaryBuilder(Module& wasm,
+                    FeatureSet features,
+                    const std::vector<char>& input);
+
+  void setDebugInfo(bool value) { debugInfo = value; }
+  void setDWARF(bool value) { DWARF = value; }
+  void setSkipFunctionBodies(bool skipFunctionBodies_) {
+    skipFunctionBodies = skipFunctionBodies_;
+  }
+  void read();
+  void readCustomSection(size_t payloadLen);
+
+  bool more() { return pos < input.size(); }
+
+  std::string_view getByteView(size_t size);
+  uint8_t getInt8();
+  uint16_t getInt16();
+  uint32_t getInt32();
+  uint64_t getInt64();
+  uint8_t getLaneIndex(size_t lanes);
+  // it is unsafe to return a float directly, due to ABI issues with the
+  // signalling bit
+  Literal getFloat32Literal();
+  Literal getFloat64Literal();
+  Literal getVec128Literal();
+  uint32_t getU32LEB();
+  uint64_t getU64LEB();
+  int32_t getS32LEB();
+  int64_t getS64LEB();
+  uint64_t getUPtrLEB();
+
+  bool getBasicType(int32_t code, Type& out);
+  bool getBasicHeapType(int64_t code, HeapType& out);
+  // Read a value and get a type for it.
+  Type getType();
+  // Get a type given the initial S32LEB has already been read, and is provided.
+  Type getType(int initial);
+  HeapType getHeapType();
+  HeapType getIndexedHeapType();
+
+  Type getConcreteType();
+  Name getInlineString();
+  void verifyInt8(int8_t x);
+  void verifyInt16(int16_t x);
+  void verifyInt32(int32_t x);
+  void verifyInt64(int64_t x);
+  void readHeader();
+  void readStart();
+  void readMemories();
+  void readTypes();
+
+  // gets a name in the combined import+defined space
+  Name getFunctionName(Index index);
+  Name getTableName(Index index);
+  Name getMemoryName(Index index);
+  Name getGlobalName(Index index);
+  Name getTagName(Index index);
+
+  // gets a memory in the combined import+defined space
+  Memory* getMemory(Index index);
+
+  void getResizableLimits(Address& initial,
+                          Address& max,
+                          bool& shared,
+                          Type& indexType,
+                          Address defaultIfNoMax);
+  void readImports();
+
+  // The signatures of each function, including imported functions, given in the
+  // import and function sections. Store HeapTypes instead of Signatures because
+  // reconstructing the HeapTypes from the Signatures is expensive.
+  std::vector<HeapType> functionTypes;
+
+  void readFunctionSignatures();
+  HeapType getTypeByIndex(Index index);
+  HeapType getTypeByFunctionIndex(Index index);
+  Signature getSignatureByTypeIndex(Index index);
+  Signature getSignatureByFunctionIndex(Index index);
+
+  size_t nextLabel;
+
+  Name getNextLabel();
+
+  // We read functions and globals before we know their names, so we need to
+  // backpatch the names later
+
+  // at index i w
