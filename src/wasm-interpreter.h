@@ -382,4 +382,392 @@ public:
       case ConvertSInt32ToFloat32:
       case ConvertSInt64ToFloat32:
         return value.convertSIToF32();
-      case
+      case ConvertSInt32ToFloat64:
+      case ConvertSInt64ToFloat64:
+        return value.convertSIToF64();
+      case ExtendS8Int32:
+      case ExtendS8Int64:
+        return value.extendS8();
+      case ExtendS16Int32:
+      case ExtendS16Int64:
+        return value.extendS16();
+      case ExtendS32Int64:
+        return value.extendS32();
+      case NegFloat32:
+      case NegFloat64:
+        return value.neg();
+      case AbsFloat32:
+      case AbsFloat64:
+        return value.abs();
+      case CeilFloat32:
+      case CeilFloat64:
+        return value.ceil();
+      case FloorFloat32:
+      case FloorFloat64:
+        return value.floor();
+      case TruncFloat32:
+      case TruncFloat64:
+        return value.trunc();
+      case NearestFloat32:
+      case NearestFloat64:
+        return value.nearbyint();
+      case SqrtFloat32:
+      case SqrtFloat64:
+        return value.sqrt();
+      case TruncSFloat32ToInt32:
+      case TruncSFloat64ToInt32:
+      case TruncSFloat32ToInt64:
+      case TruncSFloat64ToInt64:
+        return truncSFloat(curr, value);
+      case TruncUFloat32ToInt32:
+      case TruncUFloat64ToInt32:
+      case TruncUFloat32ToInt64:
+      case TruncUFloat64ToInt64:
+        return truncUFloat(curr, value);
+      case TruncSatSFloat32ToInt32:
+      case TruncSatSFloat64ToInt32:
+        return value.truncSatToSI32();
+      case TruncSatSFloat32ToInt64:
+      case TruncSatSFloat64ToInt64:
+        return value.truncSatToSI64();
+      case TruncSatUFloat32ToInt32:
+      case TruncSatUFloat64ToInt32:
+        return value.truncSatToUI32();
+      case TruncSatUFloat32ToInt64:
+      case TruncSatUFloat64ToInt64:
+        return value.truncSatToUI64();
+      case ReinterpretFloat32:
+        return value.castToI32();
+      case PromoteFloat32:
+        return value.extendToF64();
+      case ReinterpretFloat64:
+        return value.castToI64();
+      case DemoteFloat64:
+        return value.demote();
+      case SplatVecI8x16:
+        return value.splatI8x16();
+      case SplatVecI16x8:
+        return value.splatI16x8();
+      case SplatVecI32x4:
+        return value.splatI32x4();
+      case SplatVecI64x2:
+        return value.splatI64x2();
+      case SplatVecF32x4:
+        return value.splatF32x4();
+      case SplatVecF64x2:
+        return value.splatF64x2();
+      case NotVec128:
+        return value.notV128();
+      case AnyTrueVec128:
+        return value.anyTrueV128();
+      case AbsVecI8x16:
+        return value.absI8x16();
+      case NegVecI8x16:
+        return value.negI8x16();
+      case AllTrueVecI8x16:
+        return value.allTrueI8x16();
+      case BitmaskVecI8x16:
+        return value.bitmaskI8x16();
+      case PopcntVecI8x16:
+        return value.popcntI8x16();
+      case AbsVecI16x8:
+        return value.absI16x8();
+      case NegVecI16x8:
+        return value.negI16x8();
+      case AllTrueVecI16x8:
+        return value.allTrueI16x8();
+      case BitmaskVecI16x8:
+        return value.bitmaskI16x8();
+      case AbsVecI32x4:
+        return value.absI32x4();
+      case NegVecI32x4:
+        return value.negI32x4();
+      case AllTrueVecI32x4:
+        return value.allTrueI32x4();
+      case BitmaskVecI32x4:
+        return value.bitmaskI32x4();
+      case AbsVecI64x2:
+        return value.absI64x2();
+      case NegVecI64x2:
+        return value.negI64x2();
+      case AllTrueVecI64x2:
+        return value.allTrueI64x2();
+      case BitmaskVecI64x2:
+        return value.bitmaskI64x2();
+      case AbsVecF32x4:
+        return value.absF32x4();
+      case NegVecF32x4:
+        return value.negF32x4();
+      case SqrtVecF32x4:
+        return value.sqrtF32x4();
+      case CeilVecF32x4:
+        return value.ceilF32x4();
+      case FloorVecF32x4:
+        return value.floorF32x4();
+      case TruncVecF32x4:
+        return value.truncF32x4();
+      case NearestVecF32x4:
+        return value.nearestF32x4();
+      case AbsVecF64x2:
+        return value.absF64x2();
+      case NegVecF64x2:
+        return value.negF64x2();
+      case SqrtVecF64x2:
+        return value.sqrtF64x2();
+      case CeilVecF64x2:
+        return value.ceilF64x2();
+      case FloorVecF64x2:
+        return value.floorF64x2();
+      case TruncVecF64x2:
+        return value.truncF64x2();
+      case NearestVecF64x2:
+        return value.nearestF64x2();
+      case ExtAddPairwiseSVecI8x16ToI16x8:
+        return value.extAddPairwiseToSI16x8();
+      case ExtAddPairwiseUVecI8x16ToI16x8:
+        return value.extAddPairwiseToUI16x8();
+      case ExtAddPairwiseSVecI16x8ToI32x4:
+        return value.extAddPairwiseToSI32x4();
+      case ExtAddPairwiseUVecI16x8ToI32x4:
+        return value.extAddPairwiseToUI32x4();
+      case TruncSatSVecF32x4ToVecI32x4:
+      case RelaxedTruncSVecF32x4ToVecI32x4:
+        return value.truncSatToSI32x4();
+      case TruncSatUVecF32x4ToVecI32x4:
+      case RelaxedTruncUVecF32x4ToVecI32x4:
+        return value.truncSatToUI32x4();
+      case ConvertSVecI32x4ToVecF32x4:
+        return value.convertSToF32x4();
+      case ConvertUVecI32x4ToVecF32x4:
+        return value.convertUToF32x4();
+      case ExtendLowSVecI8x16ToVecI16x8:
+        return value.extendLowSToI16x8();
+      case ExtendHighSVecI8x16ToVecI16x8:
+        return value.extendHighSToI16x8();
+      case ExtendLowUVecI8x16ToVecI16x8:
+        return value.extendLowUToI16x8();
+      case ExtendHighUVecI8x16ToVecI16x8:
+        return value.extendHighUToI16x8();
+      case ExtendLowSVecI16x8ToVecI32x4:
+        return value.extendLowSToI32x4();
+      case ExtendHighSVecI16x8ToVecI32x4:
+        return value.extendHighSToI32x4();
+      case ExtendLowUVecI16x8ToVecI32x4:
+        return value.extendLowUToI32x4();
+      case ExtendHighUVecI16x8ToVecI32x4:
+        return value.extendHighUToI32x4();
+      case ExtendLowSVecI32x4ToVecI64x2:
+        return value.extendLowSToI64x2();
+      case ExtendHighSVecI32x4ToVecI64x2:
+        return value.extendHighSToI64x2();
+      case ExtendLowUVecI32x4ToVecI64x2:
+        return value.extendLowUToI64x2();
+      case ExtendHighUVecI32x4ToVecI64x2:
+        return value.extendHighUToI64x2();
+      case ConvertLowSVecI32x4ToVecF64x2:
+        return value.convertLowSToF64x2();
+      case ConvertLowUVecI32x4ToVecF64x2:
+        return value.convertLowUToF64x2();
+      case TruncSatZeroSVecF64x2ToVecI32x4:
+      case RelaxedTruncZeroSVecF64x2ToVecI32x4:
+        return value.truncSatZeroSToI32x4();
+      case TruncSatZeroUVecF64x2ToVecI32x4:
+      case RelaxedTruncZeroUVecF64x2ToVecI32x4:
+        return value.truncSatZeroUToI32x4();
+      case DemoteZeroVecF64x2ToVecF32x4:
+        return value.demoteZeroToF32x4();
+      case PromoteLowVecF32x4ToVecF64x2:
+        return value.promoteLowToF64x2();
+      case InvalidUnary:
+        WASM_UNREACHABLE("invalid unary op");
+    }
+    WASM_UNREACHABLE("invalid op");
+  }
+  Flow visitBinary(Binary* curr) {
+    NOTE_ENTER("Binary");
+    Flow flow = visit(curr->left);
+    if (flow.breaking()) {
+      return flow;
+    }
+    Literal left = flow.getSingleValue();
+    flow = visit(curr->right);
+    if (flow.breaking()) {
+      return flow;
+    }
+    Literal right = flow.getSingleValue();
+    NOTE_EVAL2(left, right);
+    assert(curr->left->type.isConcrete() ? left.type == curr->left->type
+                                         : true);
+    assert(curr->right->type.isConcrete() ? right.type == curr->right->type
+                                          : true);
+    switch (curr->op) {
+      case AddInt32:
+      case AddInt64:
+      case AddFloat32:
+      case AddFloat64:
+        return left.add(right);
+      case SubInt32:
+      case SubInt64:
+      case SubFloat32:
+      case SubFloat64:
+        return left.sub(right);
+      case MulInt32:
+      case MulInt64:
+      case MulFloat32:
+      case MulFloat64:
+        return left.mul(right);
+      case DivSInt32: {
+        if (right.getInteger() == 0) {
+          trap("i32.div_s by 0");
+        }
+        if (left.getInteger() == std::numeric_limits<int32_t>::min() &&
+            right.getInteger() == -1) {
+          trap("i32.div_s overflow"); // signed division overflow
+        }
+        return left.divS(right);
+      }
+      case DivUInt32: {
+        if (right.getInteger() == 0) {
+          trap("i32.div_u by 0");
+        }
+        return left.divU(right);
+      }
+      case RemSInt32: {
+        if (right.getInteger() == 0) {
+          trap("i32.rem_s by 0");
+        }
+        if (left.getInteger() == std::numeric_limits<int32_t>::min() &&
+            right.getInteger() == -1) {
+          return Literal(int32_t(0));
+        }
+        return left.remS(right);
+      }
+      case RemUInt32: {
+        if (right.getInteger() == 0) {
+          trap("i32.rem_u by 0");
+        }
+        return left.remU(right);
+      }
+      case DivSInt64: {
+        if (right.getInteger() == 0) {
+          trap("i64.div_s by 0");
+        }
+        if (left.getInteger() == LLONG_MIN && right.getInteger() == -1LL) {
+          trap("i64.div_s overflow"); // signed division overflow
+        }
+        return left.divS(right);
+      }
+      case DivUInt64: {
+        if (right.getInteger() == 0) {
+          trap("i64.div_u by 0");
+        }
+        return left.divU(right);
+      }
+      case RemSInt64: {
+        if (right.getInteger() == 0) {
+          trap("i64.rem_s by 0");
+        }
+        if (left.getInteger() == LLONG_MIN && right.getInteger() == -1LL) {
+          return Literal(int64_t(0));
+        }
+        return left.remS(right);
+      }
+      case RemUInt64: {
+        if (right.getInteger() == 0) {
+          trap("i64.rem_u by 0");
+        }
+        return left.remU(right);
+      }
+      case DivFloat32:
+      case DivFloat64:
+        return left.div(right);
+      case AndInt32:
+      case AndInt64:
+        return left.and_(right);
+      case OrInt32:
+      case OrInt64:
+        return left.or_(right);
+      case XorInt32:
+      case XorInt64:
+        return left.xor_(right);
+      case ShlInt32:
+      case ShlInt64:
+        return left.shl(right);
+      case ShrUInt32:
+      case ShrUInt64:
+        return left.shrU(right);
+      case ShrSInt32:
+      case ShrSInt64:
+        return left.shrS(right);
+      case RotLInt32:
+      case RotLInt64:
+        return left.rotL(right);
+      case RotRInt32:
+      case RotRInt64:
+        return left.rotR(right);
+
+      case EqInt32:
+      case EqInt64:
+      case EqFloat32:
+      case EqFloat64:
+        return left.eq(right);
+      case NeInt32:
+      case NeInt64:
+      case NeFloat32:
+      case NeFloat64:
+        return left.ne(right);
+      case LtSInt32:
+      case LtSInt64:
+        return left.ltS(right);
+      case LtUInt32:
+      case LtUInt64:
+        return left.ltU(right);
+      case LeSInt32:
+      case LeSInt64:
+        return left.leS(right);
+      case LeUInt32:
+      case LeUInt64:
+        return left.leU(right);
+      case GtSInt32:
+      case GtSInt64:
+        return left.gtS(right);
+      case GtUInt32:
+      case GtUInt64:
+        return left.gtU(right);
+      case GeSInt32:
+      case GeSInt64:
+        return left.geS(right);
+      case GeUInt32:
+      case GeUInt64:
+        return left.geU(right);
+      case LtFloat32:
+      case LtFloat64:
+        return left.lt(right);
+      case LeFloat32:
+      case LeFloat64:
+        return left.le(right);
+      case GtFloat32:
+      case GtFloat64:
+        return left.gt(right);
+      case GeFloat32:
+      case GeFloat64:
+        return left.ge(right);
+
+      case CopySignFloat32:
+      case CopySignFloat64:
+        return left.copysign(right);
+      case MinFloat32:
+      case MinFloat64:
+        return left.min(right);
+      case MaxFloat32:
+      case MaxFloat64:
+        return left.max(right);
+
+      case EqVecI8x16:
+        return left.eqI8x16(right);
+      case NeVecI8x16:
+        return left.neI8x16(right);
+      case LtSVecI8x16:
+        return left.ltSI8x16(right);
+      case LtUVecI8x16:
+       
