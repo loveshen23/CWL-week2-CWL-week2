@@ -190,4 +190,23 @@ struct FeatureSet {
   }
 
   bool operator<=(const FeatureSet& other) const {
-    r
+    return !(features & ~other.features);
+  }
+
+  bool operator==(const FeatureSet& other) const {
+    return *this <= other && other <= *this;
+  }
+
+  bool operator!=(const FeatureSet& other) const { return !(*this == other); }
+
+  FeatureSet& operator|=(const FeatureSet& other) {
+    features |= other.features;
+    return *this;
+  }
+
+  uint32_t features;
+};
+
+} // namespace wasm
+
+#endif // wasm_features_h
