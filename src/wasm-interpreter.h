@@ -770,4 +770,388 @@ public:
       case LtSVecI8x16:
         return left.ltSI8x16(right);
       case LtUVecI8x16:
-       
+        return left.ltUI8x16(right);
+      case GtSVecI8x16:
+        return left.gtSI8x16(right);
+      case GtUVecI8x16:
+        return left.gtUI8x16(right);
+      case LeSVecI8x16:
+        return left.leSI8x16(right);
+      case LeUVecI8x16:
+        return left.leUI8x16(right);
+      case GeSVecI8x16:
+        return left.geSI8x16(right);
+      case GeUVecI8x16:
+        return left.geUI8x16(right);
+      case EqVecI16x8:
+        return left.eqI16x8(right);
+      case NeVecI16x8:
+        return left.neI16x8(right);
+      case LtSVecI16x8:
+        return left.ltSI16x8(right);
+      case LtUVecI16x8:
+        return left.ltUI16x8(right);
+      case GtSVecI16x8:
+        return left.gtSI16x8(right);
+      case GtUVecI16x8:
+        return left.gtUI16x8(right);
+      case LeSVecI16x8:
+        return left.leSI16x8(right);
+      case LeUVecI16x8:
+        return left.leUI16x8(right);
+      case GeSVecI16x8:
+        return left.geSI16x8(right);
+      case GeUVecI16x8:
+        return left.geUI16x8(right);
+      case EqVecI32x4:
+        return left.eqI32x4(right);
+      case NeVecI32x4:
+        return left.neI32x4(right);
+      case LtSVecI32x4:
+        return left.ltSI32x4(right);
+      case LtUVecI32x4:
+        return left.ltUI32x4(right);
+      case GtSVecI32x4:
+        return left.gtSI32x4(right);
+      case GtUVecI32x4:
+        return left.gtUI32x4(right);
+      case LeSVecI32x4:
+        return left.leSI32x4(right);
+      case LeUVecI32x4:
+        return left.leUI32x4(right);
+      case GeSVecI32x4:
+        return left.geSI32x4(right);
+      case GeUVecI32x4:
+        return left.geUI32x4(right);
+      case EqVecI64x2:
+        return left.eqI64x2(right);
+      case NeVecI64x2:
+        return left.neI64x2(right);
+      case LtSVecI64x2:
+        return left.ltSI64x2(right);
+      case GtSVecI64x2:
+        return left.gtSI64x2(right);
+      case LeSVecI64x2:
+        return left.leSI64x2(right);
+      case GeSVecI64x2:
+        return left.geSI64x2(right);
+      case EqVecF32x4:
+        return left.eqF32x4(right);
+      case NeVecF32x4:
+        return left.neF32x4(right);
+      case LtVecF32x4:
+        return left.ltF32x4(right);
+      case GtVecF32x4:
+        return left.gtF32x4(right);
+      case LeVecF32x4:
+        return left.leF32x4(right);
+      case GeVecF32x4:
+        return left.geF32x4(right);
+      case EqVecF64x2:
+        return left.eqF64x2(right);
+      case NeVecF64x2:
+        return left.neF64x2(right);
+      case LtVecF64x2:
+        return left.ltF64x2(right);
+      case GtVecF64x2:
+        return left.gtF64x2(right);
+      case LeVecF64x2:
+        return left.leF64x2(right);
+      case GeVecF64x2:
+        return left.geF64x2(right);
+
+      case AndVec128:
+        return left.andV128(right);
+      case OrVec128:
+        return left.orV128(right);
+      case XorVec128:
+        return left.xorV128(right);
+      case AndNotVec128:
+        return left.andV128(right.notV128());
+
+      case AddVecI8x16:
+        return left.addI8x16(right);
+      case AddSatSVecI8x16:
+        return left.addSaturateSI8x16(right);
+      case AddSatUVecI8x16:
+        return left.addSaturateUI8x16(right);
+      case SubVecI8x16:
+        return left.subI8x16(right);
+      case SubSatSVecI8x16:
+        return left.subSaturateSI8x16(right);
+      case SubSatUVecI8x16:
+        return left.subSaturateUI8x16(right);
+      case MinSVecI8x16:
+        return left.minSI8x16(right);
+      case MinUVecI8x16:
+        return left.minUI8x16(right);
+      case MaxSVecI8x16:
+        return left.maxSI8x16(right);
+      case MaxUVecI8x16:
+        return left.maxUI8x16(right);
+      case AvgrUVecI8x16:
+        return left.avgrUI8x16(right);
+      case AddVecI16x8:
+        return left.addI16x8(right);
+      case AddSatSVecI16x8:
+        return left.addSaturateSI16x8(right);
+      case AddSatUVecI16x8:
+        return left.addSaturateUI16x8(right);
+      case SubVecI16x8:
+        return left.subI16x8(right);
+      case SubSatSVecI16x8:
+        return left.subSaturateSI16x8(right);
+      case SubSatUVecI16x8:
+        return left.subSaturateUI16x8(right);
+      case MulVecI16x8:
+        return left.mulI16x8(right);
+      case MinSVecI16x8:
+        return left.minSI16x8(right);
+      case MinUVecI16x8:
+        return left.minUI16x8(right);
+      case MaxSVecI16x8:
+        return left.maxSI16x8(right);
+      case MaxUVecI16x8:
+        return left.maxUI16x8(right);
+      case AvgrUVecI16x8:
+        return left.avgrUI16x8(right);
+      case Q15MulrSatSVecI16x8:
+      case RelaxedQ15MulrSVecI16x8:
+        return left.q15MulrSatSI16x8(right);
+      case ExtMulLowSVecI16x8:
+        return left.extMulLowSI16x8(right);
+      case ExtMulHighSVecI16x8:
+        return left.extMulHighSI16x8(right);
+      case ExtMulLowUVecI16x8:
+        return left.extMulLowUI16x8(right);
+      case ExtMulHighUVecI16x8:
+        return left.extMulHighUI16x8(right);
+      case AddVecI32x4:
+        return left.addI32x4(right);
+      case SubVecI32x4:
+        return left.subI32x4(right);
+      case MulVecI32x4:
+        return left.mulI32x4(right);
+      case MinSVecI32x4:
+        return left.minSI32x4(right);
+      case MinUVecI32x4:
+        return left.minUI32x4(right);
+      case MaxSVecI32x4:
+        return left.maxSI32x4(right);
+      case MaxUVecI32x4:
+        return left.maxUI32x4(right);
+      case DotSVecI16x8ToVecI32x4:
+        return left.dotSI16x8toI32x4(right);
+      case ExtMulLowSVecI32x4:
+        return left.extMulLowSI32x4(right);
+      case ExtMulHighSVecI32x4:
+        return left.extMulHighSI32x4(right);
+      case ExtMulLowUVecI32x4:
+        return left.extMulLowUI32x4(right);
+      case ExtMulHighUVecI32x4:
+        return left.extMulHighUI32x4(right);
+      case AddVecI64x2:
+        return left.addI64x2(right);
+      case SubVecI64x2:
+        return left.subI64x2(right);
+      case MulVecI64x2:
+        return left.mulI64x2(right);
+      case ExtMulLowSVecI64x2:
+        return left.extMulLowSI64x2(right);
+      case ExtMulHighSVecI64x2:
+        return left.extMulHighSI64x2(right);
+      case ExtMulLowUVecI64x2:
+        return left.extMulLowUI64x2(right);
+      case ExtMulHighUVecI64x2:
+        return left.extMulHighUI64x2(right);
+
+      case AddVecF32x4:
+        return left.addF32x4(right);
+      case SubVecF32x4:
+        return left.subF32x4(right);
+      case MulVecF32x4:
+        return left.mulF32x4(right);
+      case DivVecF32x4:
+        return left.divF32x4(right);
+      case MinVecF32x4:
+      case RelaxedMinVecF32x4:
+        return left.minF32x4(right);
+      case MaxVecF32x4:
+      case RelaxedMaxVecF32x4:
+        return left.maxF32x4(right);
+      case PMinVecF32x4:
+        return left.pminF32x4(right);
+      case PMaxVecF32x4:
+        return left.pmaxF32x4(right);
+      case AddVecF64x2:
+        return left.addF64x2(right);
+      case SubVecF64x2:
+        return left.subF64x2(right);
+      case MulVecF64x2:
+        return left.mulF64x2(right);
+      case DivVecF64x2:
+        return left.divF64x2(right);
+      case MinVecF64x2:
+      case RelaxedMinVecF64x2:
+        return left.minF64x2(right);
+      case MaxVecF64x2:
+      case RelaxedMaxVecF64x2:
+        return left.maxF64x2(right);
+      case PMinVecF64x2:
+        return left.pminF64x2(right);
+      case PMaxVecF64x2:
+        return left.pmaxF64x2(right);
+
+      case NarrowSVecI16x8ToVecI8x16:
+        return left.narrowSToI8x16(right);
+      case NarrowUVecI16x8ToVecI8x16:
+        return left.narrowUToI8x16(right);
+      case NarrowSVecI32x4ToVecI16x8:
+        return left.narrowSToI16x8(right);
+      case NarrowUVecI32x4ToVecI16x8:
+        return left.narrowUToI16x8(right);
+
+      case SwizzleVecI8x16:
+      case RelaxedSwizzleVecI8x16:
+        return left.swizzleI8x16(right);
+
+      case DotI8x16I7x16SToVecI16x8:
+        return left.dotSI8x16toI16x8(right);
+
+      case InvalidBinary:
+        WASM_UNREACHABLE("invalid binary op");
+    }
+    WASM_UNREACHABLE("invalid op");
+  }
+  Flow visitSIMDExtract(SIMDExtract* curr) {
+    NOTE_ENTER("SIMDExtract");
+    Flow flow = self()->visit(curr->vec);
+    if (flow.breaking()) {
+      return flow;
+    }
+    Literal vec = flow.getSingleValue();
+    switch (curr->op) {
+      case ExtractLaneSVecI8x16:
+        return vec.extractLaneSI8x16(curr->index);
+      case ExtractLaneUVecI8x16:
+        return vec.extractLaneUI8x16(curr->index);
+      case ExtractLaneSVecI16x8:
+        return vec.extractLaneSI16x8(curr->index);
+      case ExtractLaneUVecI16x8:
+        return vec.extractLaneUI16x8(curr->index);
+      case ExtractLaneVecI32x4:
+        return vec.extractLaneI32x4(curr->index);
+      case ExtractLaneVecI64x2:
+        return vec.extractLaneI64x2(curr->index);
+      case ExtractLaneVecF32x4:
+        return vec.extractLaneF32x4(curr->index);
+      case ExtractLaneVecF64x2:
+        return vec.extractLaneF64x2(curr->index);
+    }
+    WASM_UNREACHABLE("invalid op");
+  }
+  Flow visitSIMDReplace(SIMDReplace* curr) {
+    NOTE_ENTER("SIMDReplace");
+    Flow flow = self()->visit(curr->vec);
+    if (flow.breaking()) {
+      return flow;
+    }
+    Literal vec = flow.getSingleValue();
+    flow = self()->visit(curr->value);
+    if (flow.breaking()) {
+      return flow;
+    }
+    Literal value = flow.getSingleValue();
+    switch (curr->op) {
+      case ReplaceLaneVecI8x16:
+        return vec.replaceLaneI8x16(value, curr->index);
+      case ReplaceLaneVecI16x8:
+        return vec.replaceLaneI16x8(value, curr->index);
+      case ReplaceLaneVecI32x4:
+        return vec.replaceLaneI32x4(value, curr->index);
+      case ReplaceLaneVecI64x2:
+        return vec.replaceLaneI64x2(value, curr->index);
+      case ReplaceLaneVecF32x4:
+        return vec.replaceLaneF32x4(value, curr->index);
+      case ReplaceLaneVecF64x2:
+        return vec.replaceLaneF64x2(value, curr->index);
+    }
+    WASM_UNREACHABLE("invalid op");
+  }
+  Flow visitSIMDShuffle(SIMDShuffle* curr) {
+    NOTE_ENTER("SIMDShuffle");
+    Flow flow = self()->visit(curr->left);
+    if (flow.breaking()) {
+      return flow;
+    }
+    Literal left = flow.getSingleValue();
+    flow = self()->visit(curr->right);
+    if (flow.breaking()) {
+      return flow;
+    }
+    Literal right = flow.getSingleValue();
+    return left.shuffleV8x16(right, curr->mask);
+  }
+  Flow visitSIMDTernary(SIMDTernary* curr) {
+    NOTE_ENTER("SIMDBitselect");
+    Flow flow = self()->visit(curr->a);
+    if (flow.breaking()) {
+      return flow;
+    }
+    Literal a = flow.getSingleValue();
+    flow = self()->visit(curr->b);
+    if (flow.breaking()) {
+      return flow;
+    }
+    Literal b = flow.getSingleValue();
+    flow = self()->visit(curr->c);
+    if (flow.breaking()) {
+      return flow;
+    }
+    Literal c = flow.getSingleValue();
+    switch (curr->op) {
+      case Bitselect:
+      case LaneselectI8x16:
+      case LaneselectI16x8:
+      case LaneselectI32x4:
+      case LaneselectI64x2:
+        return c.bitselectV128(a, b);
+
+      case RelaxedFmaVecF32x4:
+        return a.relaxedFmaF32x4(b, c);
+      case RelaxedFmsVecF32x4:
+        return a.relaxedFmsF32x4(b, c);
+      case RelaxedFmaVecF64x2:
+        return a.relaxedFmaF64x2(b, c);
+      case RelaxedFmsVecF64x2:
+        return a.relaxedFmsF64x2(b, c);
+      default:
+        // TODO: implement signselect and dot_add
+        WASM_UNREACHABLE("not implemented");
+    }
+  }
+  Flow visitSIMDShift(SIMDShift* curr) {
+    NOTE_ENTER("SIMDShift");
+    Flow flow = self()->visit(curr->vec);
+    if (flow.breaking()) {
+      return flow;
+    }
+    Literal vec = flow.getSingleValue();
+    flow = self()->visit(curr->shift);
+    if (flow.breaking()) {
+      return flow;
+    }
+    Literal shift = flow.getSingleValue();
+    switch (curr->op) {
+      case ShlVecI8x16:
+        return vec.shlI8x16(shift);
+      case ShrSVecI8x16:
+        return vec.shrSI8x16(shift);
+      case ShrUVecI8x16:
+        return vec.shrUI8x16(shift);
+      case ShlVecI16x8:
+        return vec.shlI16x8(shift);
+      case ShrSVecI16x8:
+        return vec.shrSI16x8(shift);
+      case ShrUVecI16x8:
+        r
