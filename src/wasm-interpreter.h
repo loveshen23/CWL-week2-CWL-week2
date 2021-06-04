@@ -1154,4 +1154,378 @@ public:
       case ShrSVecI16x8:
         return vec.shrSI16x8(shift);
       case ShrUVecI16x8:
-        r
+        return vec.shrUI16x8(shift);
+      case ShlVecI32x4:
+        return vec.shlI32x4(shift);
+      case ShrSVecI32x4:
+        return vec.shrSI32x4(shift);
+      case ShrUVecI32x4:
+        return vec.shrUI32x4(shift);
+      case ShlVecI64x2:
+        return vec.shlI64x2(shift);
+      case ShrSVecI64x2:
+        return vec.shrSI64x2(shift);
+      case ShrUVecI64x2:
+        return vec.shrUI64x2(shift);
+    }
+    WASM_UNREACHABLE("invalid op");
+  }
+  Flow visitSelect(Select* curr) {
+    NOTE_ENTER("Select");
+    Flow ifTrue = visit(curr->ifTrue);
+    if (ifTrue.breaking()) {
+      return ifTrue;
+    }
+    Flow ifFalse = visit(curr->ifFalse);
+    if (ifFalse.breaking()) {
+      return ifFalse;
+    }
+    Flow condition = visit(curr->condition);
+    if (condition.breaking()) {
+      return condition;
+    }
+    NOTE_EVAL1(condition.getSingleValue());
+    return condition.getSingleValue().geti32() ? ifTrue : ifFalse; // ;-)
+  }
+  Flow visitDrop(Drop* curr) {
+    NOTE_ENTER("Drop");
+    Flow value = visit(curr->value);
+    if (value.breaking()) {
+      return value;
+    }
+    return Flow();
+  }
+  Flow visitReturn(Return* curr) {
+    NOTE_ENTER("Return");
+    Flow flow;
+    if (curr->value) {
+      flow = visit(curr->value);
+      if (flow.breaking()) {
+        return flow;
+      }
+      NOTE_EVAL1(flow.getSingleValue());
+    }
+    flow.breakTo = RETURN_FLOW;
+    return flow;
+  }
+  Flow visitNop(Nop* curr) {
+    NOTE_ENTER("Nop");
+    return Flow();
+  }
+  Flow visitUnreachable(Unreachable* curr) {
+    NOTE_ENTER("Unreachable");
+    trap("unreachable");
+    WASM_UNREACHABLE("unreachable");
+  }
+
+  Literal truncSFloat(Unary* curr, Literal value) {
+    double val = value.getFloat();
+    if (std::isnan(val)) {
+      trap("truncSFloat of nan");
+    }
+    if (curr->type == Type::i32) {
+      if (value.type == Type::f32) {
+        if (!isInRangeI32TruncS(value.reinterpreti32())) {
+          trap("i32.truncSFloat overflow");
+        }
+      } else {
+        if (!isInRangeI32TruncS(value.reinterpreti64())) {
+          trap("i32.truncSFloat overflow");
+        }
+      }
+      return Literal(int32_t(val));
+    } else {
+      if (value.type == Type::f32) {
+        if (!isInRangeI64TruncS(value.reinterpreti32())) {
+          trap("i64.truncSFloat overflow");
+        }
+      } else {
+        if (!isInRangeI64TruncS(value.reinterpreti64())) {
+          trap("i64.truncSFloat overflow");
+        }
+      }
+      return Literal(int64_t(val));
+    }
+  }
+
+  Literal truncUFloat(Unary* curr, Literal value) {
+    double val = value.getFloat();
+    if (std::isnan(val)) {
+      trap("truncUFloat of nan");
+    }
+    if (curr->type == Type::i32) {
+      if (value.type == Type::f32) {
+        if (!isInRangeI32TruncU(value.reinterpreti32())) {
+          trap("i32.truncUFloat overflow");
+        }
+      } else {
+        if (!isInRangeI32TruncU(value.reinterpreti64())) {
+          trap("i32.truncUFloat overflow");
+        }
+      }
+      return Literal(uint32_t(val));
+    } else {
+      if (value.type == Type::f32) {
+        if (!isInRangeI64TruncU(value.reinterpreti32())) {
+          trap("i64.truncUFloat overflow");
+        }
+      } else {
+        if (!isInRangeI64TruncU(value.reinterpreti64())) {
+          trap("i64.truncUFloat overflow");
+        }
+      }
+      return Literal(uint64_t(val));
+    }
+  }
+  Flow visitAtomicFence(AtomicFence* curr) {
+    // Wasm currently supports only sequentially consistent atomics, in which
+    // case atomic_fence can be lowered to nothing.
+    NOTE_ENTER("AtomicFence");
+    return Flow();
+  }
+  Flow visitTupleMake(TupleMake* curr) {
+    NOTE_ENTER("tuple.make");
+    Literals arguments;
+    Flow flow = generateArguments(curr->operands, arguments);
+    if (flow.breaking()) {
+      return flow;
+    }
+    for (auto arg : arguments) {
+      assert(arg.type.isConcrete());
+      flow.values.push_back(arg);
+    }
+    return flow;
+  }
+  Flow visitTupleExtract(TupleExtract* curr) {
+    NOTE_ENTER("tuple.extract");
+    Flow flow = visit(curr->tuple);
+    if (flow.breaking()) {
+      return flow;
+    }
+    assert(flow.values.size() > curr->index);
+    return Flow(flow.values[curr->index]);
+  }
+  Flow visitLocalGet(LocalGet* curr) { WASM_UNREACHABLE("unimp"); }
+  Flow visitLocalSet(LocalSet* curr) { WASM_UNREACHABLE("unimp"); }
+  Flow visitGlobalGet(GlobalGet* curr) { WASM_UNREACHABLE("unimp"); }
+  Flow visitGlobalSet(GlobalSet* curr) { WASM_UNREACHABLE("unimp"); }
+  Flow visitCall(Call* curr) { WASM_UNREACHABLE("unimp"); }
+  Flow visitCallIndirect(CallIndirect* curr) { WASM_UNREACHABLE("unimp"); }
+  Flow visitLoad(Load* curr) { WASM_UNREACHABLE("unimp"); }
+  Flow visitStore(Store* curr) { WASM_UNREACHABLE("unimp"); }
+  Flow visitMemorySize(MemorySize* curr) { WASM_UNREACHABLE("unimp"); }
+  Flow visitMemoryGrow(MemoryGrow* curr) { WASM_UNREACHABLE("unimp"); }
+  Flow visitMemoryInit(MemoryInit* curr) { WASM_UNREACHABLE("unimp"); }
+  Flow visitDataDrop(DataDrop* curr) { WASM_UNREACHABLE("unimp"); }
+  Flow visitMemoryCopy(MemoryCopy* curr) { WASM_UNREACHABLE("unimp"); }
+  Flow visitMemoryFill(MemoryFill* curr) { WASM_UNREACHABLE("unimp"); }
+  Flow visitAtomicRMW(AtomicRMW* curr) { WASM_UNREACHABLE("unimp"); }
+  Flow visitAtomicCmpxchg(AtomicCmpxchg* curr) { WASM_UNREACHABLE("unimp"); }
+  Flow visitAtomicWait(AtomicWait* curr) { WASM_UNREACHABLE("unimp"); }
+  Flow visitAtomicNotify(AtomicNotify* curr) { WASM_UNREACHABLE("unimp"); }
+  Flow visitSIMDLoad(SIMDLoad* curr) { WASM_UNREACHABLE("unimp"); }
+  Flow visitSIMDLoadSplat(SIMDLoad* curr) { WASM_UNREACHABLE("unimp"); }
+  Flow visitSIMDLoadExtend(SIMDLoad* curr) { WASM_UNREACHABLE("unimp"); }
+  Flow visitSIMDLoadZero(SIMDLoad* curr) { WASM_UNREACHABLE("unimp"); }
+  Flow visitSIMDLoadStoreLane(SIMDLoadStoreLane* curr) {
+    WASM_UNREACHABLE("unimp");
+  }
+  Flow visitPop(Pop* curr) { WASM_UNREACHABLE("unimp"); }
+  Flow visitCallRef(CallRef* curr) { WASM_UNREACHABLE("unimp"); }
+  Flow visitRefNull(RefNull* curr) {
+    NOTE_ENTER("RefNull");
+    return Literal::makeNull(curr->type.getHeapType());
+  }
+  Flow visitRefIsNull(RefIsNull* curr) {
+    NOTE_ENTER("RefIsNull");
+    Flow flow = visit(curr->value);
+    if (flow.breaking()) {
+      return flow;
+    }
+    const auto& value = flow.getSingleValue();
+    NOTE_EVAL1(value);
+    return Literal(int32_t(value.isNull()));
+  }
+  Flow visitRefFunc(RefFunc* curr) {
+    NOTE_ENTER("RefFunc");
+    NOTE_NAME(curr->func);
+    return Literal::makeFunc(curr->func, curr->type.getHeapType());
+  }
+  Flow visitRefEq(RefEq* curr) {
+    NOTE_ENTER("RefEq");
+    Flow flow = visit(curr->left);
+    if (flow.breaking()) {
+      return flow;
+    }
+    auto left = flow.getSingleValue();
+    flow = visit(curr->right);
+    if (flow.breaking()) {
+      return flow;
+    }
+    auto right = flow.getSingleValue();
+    NOTE_EVAL2(left, right);
+    return Literal(int32_t(left == right));
+  }
+  Flow visitTableGet(TableGet* curr) { WASM_UNREACHABLE("unimp"); }
+  Flow visitTableSet(TableSet* curr) { WASM_UNREACHABLE("unimp"); }
+  Flow visitTableSize(TableSize* curr) { WASM_UNREACHABLE("unimp"); }
+  Flow visitTableGrow(TableGrow* curr) { WASM_UNREACHABLE("unimp"); }
+  Flow visitTry(Try* curr) { WASM_UNREACHABLE("unimp"); }
+  Flow visitThrow(Throw* curr) {
+    NOTE_ENTER("Throw");
+    Literals arguments;
+    Flow flow = generateArguments(curr->operands, arguments);
+    if (flow.breaking()) {
+      return flow;
+    }
+    NOTE_EVAL1(curr->tag);
+    WasmException exn;
+    exn.tag = curr->tag;
+    for (auto item : arguments) {
+      exn.values.push_back(item);
+    }
+    throwException(exn);
+    WASM_UNREACHABLE("throw");
+  }
+  Flow visitRethrow(Rethrow* curr) { WASM_UNREACHABLE("unimp"); }
+  Flow visitI31New(I31New* curr) {
+    NOTE_ENTER("I31New");
+    Flow flow = visit(curr->value);
+    if (flow.breaking()) {
+      return flow;
+    }
+    const auto& value = flow.getSingleValue();
+    NOTE_EVAL1(value);
+    return Literal::makeI31(value.geti32());
+  }
+  Flow visitI31Get(I31Get* curr) {
+    NOTE_ENTER("I31Get");
+    Flow flow = visit(curr->i31);
+    if (flow.breaking()) {
+      return flow;
+    }
+    const auto& value = flow.getSingleValue();
+    NOTE_EVAL1(value);
+    if (value.isNull()) {
+      trap("null ref");
+    }
+    return Literal(value.geti31(curr->signed_));
+  }
+
+  // Helper for ref.test, ref.cast, and br_on_cast, which share almost all their
+  // logic except for what they return.
+  struct Cast {
+    // The control flow that preempts the cast.
+    struct Breaking : Flow {
+      Breaking(Flow breaking) : Flow(breaking) {}
+    };
+    // The result of the successful cast.
+    struct Success : Literal {
+      Success(Literal result) : Literal(result) {}
+    };
+    // The input to a failed cast.
+    struct Failure : Literal {
+      Failure(Literal original) : Literal(original) {}
+    };
+
+    std::variant<Breaking, Success, Failure> state;
+
+    template<class T> Cast(T state) : state(state) {}
+    Flow* getBreaking() { return std::get_if<Breaking>(&state); }
+    Literal* getSuccess() { return std::get_if<Success>(&state); }
+    Literal* getFailure() { return std::get_if<Failure>(&state); }
+  };
+
+  template<typename T> Cast doCast(T* curr) {
+    Flow ref = self()->visit(curr->ref);
+    if (ref.breaking()) {
+      return typename Cast::Breaking{ref};
+    }
+    Literal val = ref.getSingleValue();
+    Type castType = curr->getCastType();
+    if (val.isNull()) {
+      if (castType.isNullable()) {
+        return typename Cast::Success{val};
+      } else {
+        return typename Cast::Failure{val};
+      }
+    }
+    if (HeapType::isSubType(val.type.getHeapType(), castType.getHeapType())) {
+      return typename Cast::Success{val};
+    } else {
+      return typename Cast::Failure{val};
+    }
+  }
+
+  Flow visitRefTest(RefTest* curr) {
+    NOTE_ENTER("RefTest");
+    auto cast = doCast(curr);
+    if (auto* breaking = cast.getBreaking()) {
+      return *breaking;
+    } else {
+      return Literal(int32_t(bool(cast.getSuccess())));
+    }
+  }
+  Flow visitRefCast(RefCast* curr) {
+    NOTE_ENTER("RefCast");
+    auto cast = doCast(curr);
+    if (auto* breaking = cast.getBreaking()) {
+      return *breaking;
+    } else if (auto* result = cast.getSuccess()) {
+      return *result;
+    }
+    assert(cast.getFailure());
+    trap("cast error");
+    WASM_UNREACHABLE("unreachable");
+  }
+  Flow visitBrOn(BrOn* curr) {
+    NOTE_ENTER("BrOn");
+    // BrOnCast* uses the casting infrastructure, so handle them first.
+    if (curr->op == BrOnCast || curr->op == BrOnCastFail) {
+      auto cast = doCast(curr);
+      if (auto* breaking = cast.getBreaking()) {
+        return *breaking;
+      } else if (auto* original = cast.getFailure()) {
+        if (curr->op == BrOnCast) {
+          return *original;
+        } else {
+          return Flow(curr->name, *original);
+        }
+      } else {
+        auto* result = cast.getSuccess();
+        assert(result);
+        if (curr->op == BrOnCast) {
+          return Flow(curr->name, *result);
+        } else {
+          return *result;
+        }
+      }
+    }
+    // Otherwise we are just checking for null.
+    Flow flow = visit(curr->ref);
+    if (flow.breaking()) {
+      return flow;
+    }
+    const auto& value = flow.getSingleValue();
+    NOTE_EVAL1(value);
+    if (curr->op == BrOnNull) {
+      // BrOnNull does not propagate the value if it takes the branch.
+      if (value.isNull()) {
+        return Flow(curr->name);
+      }
+      // If the branch is not taken, we return the non-null value.
+      return {value};
+    } else {
+      // BrOnNonNull does not return a value if it does not take the branch.
+      if (value.isNull()) {
+        return Flow();
+      }
+      // If the branch is taken, we send the non-null value.
+      return Flow(curr->name, value);
+    }
+  }
+  Flow visitStructNew(StructNew* curr) {
+    NOTE_ENTER("StructNew");
+    if (curr->type == Type::unreachable) {
+      // We cannot proceed to compute the heap type, as there isn't one. Just
+      // find why we are unreachable,
