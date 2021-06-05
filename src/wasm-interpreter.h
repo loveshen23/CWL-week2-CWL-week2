@@ -1528,4 +1528,389 @@ public:
     NOTE_ENTER("StructNew");
     if (curr->type == Type::unreachable) {
       // We cannot proceed to compute the heap type, as there isn't one. Just
-      // find why we are unreachable,
+      // find why we are unreachable, and stop there.
+      for (auto* operand : curr->operands) {
+        auto value = self()->visit(operand);
+        if (value.breaking()) {
+          return value;
+        }
+      }
+      WASM_UNREACHABLE("unreachable but no unreachable child");
+    }
+    auto heapType = curr->type.getHeapType();
+    const auto& fields = heapType.getStruct().fields;
+    Literals data(fields.size());
+    for (Index i = 0; i < fields.size(); i++) {
+      if (curr->isWithDefault()) {
+        data[i] = Literal::makeZero(fields[i].type);
+      } else {
+        auto value = self()->visit(curr->operands[i]);
+        if (value.breaking()) {
+          return value;
+        }
+        data[i] = value.getSingleValue();
+      }
+    }
+    return Literal(std::make_shared<GCData>(curr->type.getHeapType(), data),
+                   curr->type.getHeapType());
+  }
+  Flow visitStructGet(StructGet* curr) {
+    NOTE_ENTER("StructGet");
+    Flow ref = self()->visit(curr->ref);
+    if (ref.breaking()) {
+      return ref;
+    }
+    auto data = ref.getSingleValue().getGCData();
+    if (!data) {
+      trap("null ref");
+    }
+    auto field = curr->ref->type.getHeapType().getStruct().fields[curr->index];
+    return extendForPacking(data->values[curr->index], field, curr->signed_);
+  }
+  Flow visitStructSet(StructSet* curr) {
+    NOTE_ENTER("StructSet");
+    Flow ref = self()->visit(curr->ref);
+    if (ref.breaking()) {
+      return ref;
+    }
+    Flow value = self()->visit(curr->value);
+    if (value.breaking()) {
+      return value;
+    }
+    auto data = ref.getSingleValue().getGCData();
+    if (!data) {
+      trap("null ref");
+    }
+    auto field = curr->ref->type.getHeapType().getStruct().fields[curr->index];
+    data->values[curr->index] =
+      truncateForPacking(value.getSingleValue(), field);
+    return Flow();
+  }
+
+  // Arbitrary deterministic limit on size. If we need to allocate a Literals
+  // vector that takes around 1-2GB of memory then we are likely to hit memory
+  // limits on 32-bit machines, and in particular on wasm32 VMs that do not
+  // have 4GB support, so give up there.
+  static const Index ArrayLimit = (1 << 30) / sizeof(Literal);
+
+  Flow visitArrayNew(ArrayNew* curr) {
+    NOTE_ENTER("ArrayNew");
+    Flow init;
+    if (!curr->isWithDefault()) {
+      init = self()->visit(curr->init);
+      if (init.breaking()) {
+        return init;
+      }
+    }
+    auto size = self()->visit(curr->size);
+    if (size.breaking()) {
+      return size;
+    }
+    if (curr->type == Type::unreachable) {
+      // We cannot proceed to compute the heap type, as there isn't one. Just
+      // visit the unreachable child, and stop there.
+      auto init = self()->visit(curr->init);
+      assert(init.breaking());
+      return init;
+    }
+    auto heapType = curr->type.getHeapType();
+    const auto& element = heapType.getArray().element;
+    Index num = size.getSingleValue().geti32();
+    if (num >= ArrayLimit) {
+      hostLimit("allocation failure");
+    }
+    Literals data(num);
+    if (curr->isWithDefault()) {
+      for (Index i = 0; i < num; i++) {
+        data[i] = Literal::makeZero(element.type);
+      }
+    } else {
+      auto field = curr->type.getHeapType().getArray().element;
+      auto value = truncateForPacking(init.getSingleValue(), field);
+      for (Index i = 0; i < num; i++) {
+        data[i] = value;
+      }
+    }
+    return Literal(std::make_shared<GCData>(curr->type.getHeapType(), data),
+                   curr->type.getHeapType());
+  }
+  Flow visitArrayNewSeg(ArrayNewSeg* curr) { WASM_UNREACHABLE("unimp"); }
+  Flow visitArrayNewFixed(ArrayNewFixed* curr) {
+    NOTE_ENTER("ArrayNewFixed");
+    Index num = curr->values.size();
+    if (num >= ArrayLimit) {
+      hostLimit("allocation failure");
+    }
+    if (curr->type == Type::unreachable) {
+      // We cannot proceed to compute the heap type, as there isn't one. Just
+      // find why we are unreachable, and stop there.
+      for (auto* value : curr->values) {
+        auto result = self()->visit(value);
+        if (result.breaking()) {
+          return result;
+        }
+      }
+      WASM_UNREACHABLE("unreachable but no unreachable child");
+    }
+    auto heapType = curr->type.getHeapType();
+    auto field = heapType.getArray().element;
+    Literals data(num);
+    for (Index i = 0; i < num; i++) {
+      auto value = self()->visit(curr->values[i]);
+      if (value.breaking()) {
+        return value;
+      }
+      data[i] = truncateForPacking(value.getSingleValue(), field);
+    }
+    return Literal(std::make_shared<GCData>(curr->type.getHeapType(), data),
+                   curr->type.getHeapType());
+  }
+  Flow visitArrayGet(ArrayGet* curr) {
+    NOTE_ENTER("ArrayGet");
+    Flow ref = self()->visit(curr->ref);
+    if (ref.breaking()) {
+      return ref;
+    }
+    Flow index = self()->visit(curr->index);
+    if (index.breaking()) {
+      return index;
+    }
+    auto data = ref.getSingleValue().getGCData();
+    if (!data) {
+      trap("null ref");
+    }
+    Index i = index.getSingleValue().geti32();
+    if (i >= data->values.size()) {
+      trap("array oob");
+    }
+    auto field = curr->ref->type.getHeapType().getArray().element;
+    return extendForPacking(data->values[i], field, curr->signed_);
+  }
+  Flow visitArraySet(ArraySet* curr) {
+    NOTE_ENTER("ArraySet");
+    Flow ref = self()->visit(curr->ref);
+    if (ref.breaking()) {
+      return ref;
+    }
+    Flow index = self()->visit(curr->index);
+    if (index.breaking()) {
+      return index;
+    }
+    Flow value = self()->visit(curr->value);
+    if (value.breaking()) {
+      return value;
+    }
+    auto data = ref.getSingleValue().getGCData();
+    if (!data) {
+      trap("null ref");
+    }
+    Index i = index.getSingleValue().geti32();
+    if (i >= data->values.size()) {
+      trap("array oob");
+    }
+    auto field = curr->ref->type.getHeapType().getArray().element;
+    data->values[i] = truncateForPacking(value.getSingleValue(), field);
+    return Flow();
+  }
+  Flow visitArrayLen(ArrayLen* curr) {
+    NOTE_ENTER("ArrayLen");
+    Flow ref = self()->visit(curr->ref);
+    if (ref.breaking()) {
+      return ref;
+    }
+    auto data = ref.getSingleValue().getGCData();
+    if (!data) {
+      trap("null ref");
+    }
+    return Literal(int32_t(data->values.size()));
+  }
+  Flow visitArrayCopy(ArrayCopy* curr) {
+    NOTE_ENTER("ArrayCopy");
+    Flow destRef = self()->visit(curr->destRef);
+    if (destRef.breaking()) {
+      return destRef;
+    }
+    Flow destIndex = self()->visit(curr->destIndex);
+    if (destIndex.breaking()) {
+      return destIndex;
+    }
+    Flow srcRef = self()->visit(curr->srcRef);
+    if (srcRef.breaking()) {
+      return srcRef;
+    }
+    Flow srcIndex = self()->visit(curr->srcIndex);
+    if (srcIndex.breaking()) {
+      return srcIndex;
+    }
+    Flow length = self()->visit(curr->length);
+    if (length.breaking()) {
+      return length;
+    }
+    auto destData = destRef.getSingleValue().getGCData();
+    if (!destData) {
+      trap("null ref");
+    }
+    auto srcData = srcRef.getSingleValue().getGCData();
+    if (!srcData) {
+      trap("null ref");
+    }
+    size_t destVal = destIndex.getSingleValue().getUnsigned();
+    size_t srcVal = srcIndex.getSingleValue().getUnsigned();
+    size_t lengthVal = length.getSingleValue().getUnsigned();
+    if (lengthVal >= ArrayLimit) {
+      hostLimit("allocation failure");
+    }
+    std::vector<Literal> copied;
+    copied.resize(lengthVal);
+    for (size_t i = 0; i < lengthVal; i++) {
+      if (srcVal + i >= srcData->values.size()) {
+        trap("oob");
+      }
+      copied[i] = srcData->values[srcVal + i];
+    }
+    for (size_t i = 0; i < lengthVal; i++) {
+      if (destVal + i >= destData->values.size()) {
+        trap("oob");
+      }
+      destData->values[destVal + i] = copied[i];
+    }
+    return Flow();
+  }
+  Flow visitRefAs(RefAs* curr) {
+    NOTE_ENTER("RefAs");
+    Flow flow = visit(curr->value);
+    if (flow.breaking()) {
+      return flow;
+    }
+    const auto& value = flow.getSingleValue();
+    NOTE_EVAL1(value);
+    if (value.isNull()) {
+      trap("null ref");
+    }
+    switch (curr->op) {
+      case RefAsNonNull:
+        // We've already checked for a null.
+        return value;
+      case ExternInternalize:
+      case ExternExternalize:
+        WASM_UNREACHABLE("unimplemented extern conversion");
+    }
+    WASM_UNREACHABLE("unimplemented ref.as_*");
+  }
+  Flow visitStringNew(StringNew* curr) {
+    Flow ptr = visit(curr->ptr);
+    if (ptr.breaking()) {
+      return ptr;
+    }
+    switch (curr->op) {
+      case StringNewWTF16Array: {
+        Flow start = visit(curr->start);
+        if (start.breaking()) {
+          return start;
+        }
+        Flow end = visit(curr->end);
+        if (end.breaking()) {
+          return end;
+        }
+        auto ptrData = ptr.getSingleValue().getGCData();
+        if (!ptrData) {
+          trap("null ref");
+        }
+        const auto& ptrDataValues = ptrData->values;
+        size_t startVal = start.getSingleValue().getUnsigned();
+        size_t endVal = end.getSingleValue().getUnsigned();
+        if (endVal > ptrDataValues.size()) {
+          trap("array oob");
+        }
+        Literals contents;
+        if (endVal > startVal) {
+          contents.reserve(endVal - startVal);
+          for (size_t i = startVal; i < endVal; i++) {
+            contents.push_back(ptrDataValues[i]);
+          }
+        }
+        auto heapType = curr->type.getHeapType();
+        return Literal(std::make_shared<GCData>(heapType, contents), heapType);
+      }
+      default:
+        // TODO: others
+        return Flow(NONCONSTANT_FLOW);
+    }
+  }
+  Flow visitStringConst(StringConst* curr) {
+    return Literal(curr->string.toString());
+  }
+  Flow visitStringMeasure(StringMeasure* curr) { WASM_UNREACHABLE("unimp"); }
+  Flow visitStringEncode(StringEncode* curr) { WASM_UNREACHABLE("unimp"); }
+  Flow visitStringConcat(StringConcat* curr) { WASM_UNREACHABLE("unimp"); }
+  Flow visitStringEq(StringEq* curr) {
+    NOTE_ENTER("StringEq");
+    Flow flow = visit(curr->left);
+    if (flow.breaking()) {
+      return flow;
+    }
+    auto left = flow.getSingleValue();
+    flow = visit(curr->right);
+    if (flow.breaking()) {
+      return flow;
+    }
+    auto right = flow.getSingleValue();
+    NOTE_EVAL2(left, right);
+    auto leftData = left.getGCData();
+    auto rightData = right.getGCData();
+    int32_t result;
+    switch (curr->op) {
+      case StringEqEqual: {
+        // They are equal if both are null, or both are non-null and equal.
+        result =
+          (!leftData && !rightData) ||
+          (leftData && rightData && leftData->values == rightData->values);
+        break;
+      }
+      case StringEqCompare: {
+        if (!leftData || !rightData) {
+          trap("null ref");
+        }
+        auto& leftValues = leftData->values;
+        auto& rightValues = rightData->values;
+        Index i = 0;
+        while (1) {
+          if (i == leftValues.size() && i == rightValues.size()) {
+            // We reached the end, and they are equal.
+            result = 0;
+            break;
+          } else if (i == leftValues.size()) {
+            // The left string is short.
+            result = -1;
+            break;
+          } else if (i == rightValues.size()) {
+            result = 1;
+            break;
+          }
+          auto left = leftValues[i].getInteger();
+          auto right = rightValues[i].getInteger();
+          if (left < right) {
+            // The left character is lower.
+            result = -1;
+            break;
+          } else if (left > right) {
+            result = 1;
+            break;
+          } else {
+            // Look further.
+            i++;
+          }
+        }
+        break;
+      }
+      default: {
+        WASM_UNREACHABLE("bad op");
+      }
+    }
+    return Literal(result);
+  }
+  Flow visitStringAs(StringAs* curr) { WASM_UNREACHABLE("unimp"); }
+  Flow visitStringWTF8Advance(StringWTF8Advance* curr) {
+    WASM_UNREACHABLE("unimp");
+  }
+  Flow visitStringWTF16Get(StringWT
