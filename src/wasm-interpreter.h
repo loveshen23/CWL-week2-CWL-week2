@@ -2591,4 +2591,382 @@ private:
       Table* table = wasm.getTable(segment->table);
       ExternalInterface* extInterface = externalInterface;
       Name tableName = segment->table;
-      if 
+      if (table->imported()) {
+        auto inst = linkedInstances.at(table->module);
+        extInterface = inst->externalInterface;
+        tableName = inst->wasm.getExport(table->base)->value;
+      }
+
+      for (Index i = 0; i < segment->data.size(); ++i) {
+        Flow ret = self()->visit(segment->data[i]);
+        extInterface->tableStore(tableName, offset + i, ret.getSingleValue());
+      }
+    });
+  }
+
+  struct MemoryInstanceInfo {
+    // The ModuleRunner instance in which the memory is defined.
+    SubType* instance;
+    // The name the memory has in that interface.
+    Name name;
+  };
+
+  MemoryInstanceInfo getMemoryInstanceInfo(Name name) {
+    auto* memory = wasm.getMemory(name);
+    MemoryInstanceInfo memoryInterfaceInfo;
+    if (!memory->imported()) {
+      return MemoryInstanceInfo{self(), name};
+    }
+
+    auto& importedInstance = linkedInstances.at(memory->module);
+    auto* memoryExport = importedInstance->wasm.getExport(memory->base);
+    return importedInstance->getMemoryInstanceInfo(memoryExport->value);
+  }
+
+  void initializeMemoryContents() {
+    initializeMemorySizes();
+    Const offset;
+    offset.value = Literal(uint32_t(0));
+    offset.finalize();
+
+    // apply active memory segments
+    for (size_t i = 0, e = wasm.dataSegments.size(); i < e; ++i) {
+      auto& segment = wasm.dataSegments[i];
+      if (segment->isPassive) {
+        continue;
+      }
+      Const size;
+      size.value = Literal(uint32_t(segment->data.size()));
+      size.finalize();
+
+      MemoryInit init;
+      init.memory = segment->memory;
+      init.segment = i;
+      init.dest = segment->offset;
+      init.offset = &offset;
+      init.size = &size;
+      init.finalize();
+
+      DataDrop drop;
+      drop.segment = i;
+      drop.finalize();
+
+      self()->visit(&init);
+      self()->visit(&drop);
+    }
+  }
+
+  // in pages, used to keep track of memorySize throughout the below memops
+  std::unordered_map<Name, Address> memorySizes;
+
+  void initializeMemorySizes() {
+    for (auto& memory : wasm.memories) {
+      memorySizes[memory->name] = memory->initial;
+    }
+  }
+
+  Address getMemorySize(Name memory) {
+    auto iter = memorySizes.find(memory);
+    if (iter == memorySizes.end()) {
+      externalInterface->trap("getMemorySize called on non-existing memory");
+    }
+    return iter->second;
+  }
+
+  void setMemorySize(Name memory, Address size) {
+    auto iter = memorySizes.find(memory);
+    if (iter == memorySizes.end()) {
+      externalInterface->trap("setMemorySize called on non-existing memory");
+    }
+    memorySizes[memory] = size;
+  }
+
+public:
+  class FunctionScope {
+  public:
+    std::vector<Literals> locals;
+    Function* function;
+    SubType& parent;
+
+    FunctionScope* oldScope;
+
+    FunctionScope(Function* function,
+                  const Literals& arguments,
+                  SubType& parent)
+      : function(function), parent(parent) {
+      oldScope = parent.scope;
+      parent.scope = this;
+
+      if (function->getParams().size() != arguments.size()) {
+        std::cerr << "Function `" << function->name << "` expects "
+                  << function->getParams().size() << " parameters, got "
+                  << arguments.size() << " arguments." << std::endl;
+        WASM_UNREACHABLE("invalid param count");
+      }
+      locals.resize(function->getNumLocals());
+      Type params = function->getParams();
+      for (size_t i = 0; i < function->getNumLocals(); i++) {
+        if (i < arguments.size()) {
+          if (!Type::isSubType(arguments[i].type, params[i])) {
+            std::cerr << "Function `" << function->name << "` expects type "
+                      << params[i] << " for parameter " << i << ", got "
+                      << arguments[i].type << "." << std::endl;
+            WASM_UNREACHABLE("invalid param count");
+          }
+          locals[i] = {arguments[i]};
+        } else {
+          assert(function->isVar(i));
+          locals[i] = Literal::makeZeros(function->getLocalType(i));
+        }
+      }
+    }
+
+    ~FunctionScope() { parent.scope = oldScope; }
+
+    // The current delegate target, if delegation of an exception is in
+    // progress. If no delegation is in progress, this will be an empty Name.
+    // This is on a function scope because it cannot "escape" to the outside,
+    // that is, a delegate target is like a branch target, it operates within
+    // a function.
+    Name currDelegateTarget;
+  };
+
+private:
+  // This is managed in an RAII manner by the FunctionScope class.
+  FunctionScope* scope = nullptr;
+
+  // Stack of <caught exception, caught catch's try label>
+  SmallVector<std::pair<WasmException, Name>, 4> exceptionStack;
+
+protected:
+  // Returns a reference to the current value of a potentially imported global
+  Literals& getGlobal(Name name) {
+    auto* inst = self();
+    auto* global = inst->wasm.getGlobal(name);
+    while (global->imported()) {
+      inst = inst->linkedInstances.at(global->module).get();
+      Export* globalExport = inst->wasm.getExport(global->base);
+      global = inst->wasm.getGlobal(globalExport->value);
+    }
+
+    return inst->globals[global->name];
+  }
+
+public:
+  Flow visitCall(Call* curr) {
+    NOTE_ENTER("Call");
+    NOTE_NAME(curr->target);
+    Literals arguments;
+    Flow flow = self()->generateArguments(curr->operands, arguments);
+    if (flow.breaking()) {
+      return flow;
+    }
+    auto* func = wasm.getFunction(curr->target);
+    Flow ret;
+    if (Intrinsics(*self()->getModule()).isCallWithoutEffects(func)) {
+      // The call.without.effects intrinsic is a call to an import that actually
+      // calls the given function reference that is the final argument.
+      auto newArguments = arguments;
+      auto target = newArguments.back();
+      newArguments.pop_back();
+      ret.values = callFunctionInternal(target.getFunc(), newArguments);
+    } else if (func->imported()) {
+      ret.values = externalInterface->callImport(func, arguments);
+    } else {
+      ret.values = callFunctionInternal(curr->target, arguments);
+    }
+#ifdef WASM_INTERPRETER_DEBUG
+    std::cout << "(returned to " << scope->function->name << ")\n";
+#endif
+    // TODO: make this a proper tail call (return first)
+    if (curr->isReturn) {
+      ret.breakTo = RETURN_FLOW;
+    }
+    return ret;
+  }
+
+  Flow visitCallIndirect(CallIndirect* curr) {
+    NOTE_ENTER("CallIndirect");
+    Literals arguments;
+    Flow flow = self()->generateArguments(curr->operands, arguments);
+    if (flow.breaking()) {
+      return flow;
+    }
+    Flow target = self()->visit(curr->target);
+    if (target.breaking()) {
+      return target;
+    }
+
+    Index index = target.getSingleValue().geti32();
+    Type type = curr->isReturn ? scope->function->getResults() : curr->type;
+
+    auto info = getTableInterfaceInfo(curr->table);
+    Flow ret = info.interface->callTable(
+      info.name, index, curr->heapType, arguments, type, *self());
+
+    // TODO: make this a proper tail call (return first)
+    if (curr->isReturn) {
+      ret.breakTo = RETURN_FLOW;
+    }
+    return ret;
+  }
+  Flow visitCallRef(CallRef* curr) {
+    NOTE_ENTER("CallRef");
+    Literals arguments;
+    Flow flow = self()->generateArguments(curr->operands, arguments);
+    if (flow.breaking()) {
+      return flow;
+    }
+    Flow target = self()->visit(curr->target);
+    if (target.breaking()) {
+      return target;
+    }
+    if (target.getSingleValue().isNull()) {
+      trap("null target in call_ref");
+    }
+    Name funcName = target.getSingleValue().getFunc();
+    auto* func = wasm.getFunction(funcName);
+    Flow ret;
+    if (func->imported()) {
+      ret.values = externalInterface->callImport(func, arguments);
+    } else {
+      ret.values = callFunctionInternal(funcName, arguments);
+    }
+#ifdef WASM_INTERPRETER_DEBUG
+    std::cout << "(returned to " << scope->function->name << ")\n";
+#endif
+    // TODO: make this a proper tail call (return first)
+    if (curr->isReturn) {
+      ret.breakTo = RETURN_FLOW;
+    }
+    return ret;
+  }
+
+  Flow visitTableGet(TableGet* curr) {
+    NOTE_ENTER("TableGet");
+    Flow index = self()->visit(curr->index);
+    if (index.breaking()) {
+      return index;
+    }
+    auto info = getTableInterfaceInfo(curr->table);
+    return info.interface->tableLoad(info.name,
+                                     index.getSingleValue().geti32());
+  }
+  Flow visitTableSet(TableSet* curr) {
+    NOTE_ENTER("TableSet");
+    Flow indexFlow = self()->visit(curr->index);
+    if (indexFlow.breaking()) {
+      return indexFlow;
+    }
+    Flow valueFlow = self()->visit(curr->value);
+    if (valueFlow.breaking()) {
+      return valueFlow;
+    }
+    auto info = getTableInterfaceInfo(curr->table);
+    info.interface->tableStore(info.name,
+                               indexFlow.getSingleValue().geti32(),
+                               valueFlow.getSingleValue());
+    return Flow();
+  }
+
+  Flow visitTableSize(TableSize* curr) {
+    NOTE_ENTER("TableSize");
+    auto info = getTableInterfaceInfo(curr->table);
+    Index tableSize = info.interface->tableSize(curr->table);
+    return Literal::makeFromInt32(tableSize, Type::i32);
+  }
+
+  Flow visitTableGrow(TableGrow* curr) {
+    NOTE_ENTER("TableGrow");
+    Flow valueFlow = self()->visit(curr->value);
+    if (valueFlow.breaking()) {
+      return valueFlow;
+    }
+    Flow deltaFlow = self()->visit(curr->delta);
+    if (deltaFlow.breaking()) {
+      return deltaFlow;
+    }
+    Name tableName = curr->table;
+    auto info = getTableInterfaceInfo(tableName);
+
+    Index tableSize = info.interface->tableSize(tableName);
+    Flow ret = Literal::makeFromInt32(tableSize, Type::i32);
+    Flow fail = Literal::makeFromInt32(-1, Type::i32);
+    Index delta = deltaFlow.getSingleValue().geti32();
+
+    if (tableSize >= uint32_t(-1) - delta) {
+      return fail;
+    }
+    auto maxTableSize = self()->wasm.getTable(tableName)->max;
+    if (uint64_t(tableSize) + uint64_t(delta) > uint64_t(maxTableSize)) {
+      return fail;
+    }
+    Index newSize = tableSize + delta;
+    if (!info.interface->growTable(
+          tableName, valueFlow.getSingleValue(), tableSize, newSize)) {
+      // We failed to grow the table in practice, even though it was valid
+      // to try to do so.
+      return fail;
+    }
+    return ret;
+  }
+
+  Flow visitLocalGet(LocalGet* curr) {
+    NOTE_ENTER("LocalGet");
+    auto index = curr->index;
+    NOTE_EVAL1(index);
+    NOTE_EVAL1(scope->locals[index]);
+    return scope->locals[index];
+  }
+  Flow visitLocalSet(LocalSet* curr) {
+    NOTE_ENTER("LocalSet");
+    auto index = curr->index;
+    Flow flow = self()->visit(curr->value);
+    if (flow.breaking()) {
+      return flow;
+    }
+    NOTE_EVAL1(index);
+    NOTE_EVAL1(flow.getSingleValue());
+    assert(curr->isTee() ? Type::isSubType(flow.getType(), curr->type) : true);
+    scope->locals[index] = flow.values;
+    return curr->isTee() ? flow : Flow();
+  }
+
+  Flow visitGlobalGet(GlobalGet* curr) {
+    NOTE_ENTER("GlobalGet");
+    auto name = curr->name;
+    NOTE_EVAL1(name);
+    return getGlobal(name);
+  }
+  Flow visitGlobalSet(GlobalSet* curr) {
+    NOTE_ENTER("GlobalSet");
+    auto name = curr->name;
+    Flow flow = self()->visit(curr->value);
+    if (flow.breaking()) {
+      return flow;
+    }
+    NOTE_EVAL1(name);
+    NOTE_EVAL1(flow.getSingleValue());
+
+    getGlobal(name) = flow.values;
+    return Flow();
+  }
+
+  Flow visitLoad(Load* curr) {
+    NOTE_ENTER("Load");
+    Flow flow = self()->visit(curr->ptr);
+    if (flow.breaking()) {
+      return flow;
+    }
+    NOTE_EVAL1(flow);
+    auto info = getMemoryInstanceInfo(curr->memory);
+    auto memorySize = info.instance->getMemorySize(info.name);
+    auto addr =
+      info.instance->getFinalAddress(curr, flow.getSingleValue(), memorySize);
+    if (curr->isAtomic) {
+      info.instance->checkAtomicAddress(addr, curr->bytes, memorySize);
+    }
+    auto ret = info.instance->externalInterface->load(curr, addr, info.name);
+    NOTE_EVAL1(addr);
+    NOTE_EVAL1(ret);
+    return re
