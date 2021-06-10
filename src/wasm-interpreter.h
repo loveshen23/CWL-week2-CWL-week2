@@ -2253,4 +2253,342 @@ public:
     return Flow(NONCONSTANT_FLOW);
   }
   Flow visitRefAs(RefAs* curr) {
-    // TODO: Remove this once i
+    // TODO: Remove this once interpretation is implemented.
+    if (curr->op == ExternInternalize || curr->op == ExternExternalize) {
+      return Flow(NONCONSTANT_FLOW);
+    }
+    return ExpressionRunner<SubType>::visitRefAs(curr);
+  }
+
+  void trap(const char* why) override { throw NonconstantException(); }
+
+  void hostLimit(const char* why) override { throw NonconstantException(); }
+
+  virtual void throwException(const WasmException& exn) override {
+    throw NonconstantException();
+  }
+};
+
+using GlobalValueSet = std::map<Name, Literals>;
+
+//
+// A runner for a module. Each runner contains the information to execute the
+// module, such as the state of globals, and so forth, so it basically
+// encapsulates an instantiation of the wasm, and implements all the interpreter
+// instructions that use that info (like global.set etc.) that are not declared
+// in ExpressionRunner, which just looks at a single instruction.
+//
+// To embed this interpreter, you need to provide an ExternalInterface instance
+// (see below) which provides the embedding-specific details, that is, how to
+// connect to the embedding implementation.
+//
+// To call into the interpreter, use callExport.
+//
+
+template<typename SubType>
+class ModuleRunnerBase : public ExpressionRunner<SubType> {
+public:
+  //
+  // You need to implement one of these to create a concrete interpreter. The
+  // ExternalInterface provides embedding-specific functionality like calling
+  // an imported function or accessing memory.
+  //
+  struct ExternalInterface {
+    ExternalInterface(
+      std::map<Name, std::shared_ptr<SubType>> linkedInstances = {}) {}
+    virtual ~ExternalInterface() = default;
+    virtual void init(Module& wasm, SubType& instance) {}
+    virtual void importGlobals(GlobalValueSet& globals, Module& wasm) = 0;
+    virtual Literals callImport(Function* import, Literals& arguments) = 0;
+    virtual Literals callTable(Name tableName,
+                               Index index,
+                               HeapType sig,
+                               Literals& arguments,
+                               Type result,
+                               SubType& instance) = 0;
+    virtual bool growMemory(Name name, Address oldSize, Address newSize) = 0;
+    virtual bool growTable(Name name,
+                           const Literal& value,
+                           Index oldSize,
+                           Index newSize) = 0;
+    virtual void trap(const char* why) = 0;
+    virtual void hostLimit(const char* why) = 0;
+    virtual void throwException(const WasmException& exn) = 0;
+
+    // the default impls for load and store switch on the sizes. you can either
+    // customize load/store, or the sub-functions which they call
+    virtual Literal load(Load* load, Address addr, Name memory) {
+      switch (load->type.getBasic()) {
+        case Type::i32: {
+          switch (load->bytes) {
+            case 1:
+              return load->signed_ ? Literal((int32_t)load8s(addr, memory))
+                                   : Literal((int32_t)load8u(addr, memory));
+            case 2:
+              return load->signed_ ? Literal((int32_t)load16s(addr, memory))
+                                   : Literal((int32_t)load16u(addr, memory));
+            case 4:
+              return Literal((int32_t)load32s(addr, memory));
+            default:
+              WASM_UNREACHABLE("invalid size");
+          }
+          break;
+        }
+        case Type::i64: {
+          switch (load->bytes) {
+            case 1:
+              return load->signed_ ? Literal((int64_t)load8s(addr, memory))
+                                   : Literal((int64_t)load8u(addr, memory));
+            case 2:
+              return load->signed_ ? Literal((int64_t)load16s(addr, memory))
+                                   : Literal((int64_t)load16u(addr, memory));
+            case 4:
+              return load->signed_ ? Literal((int64_t)load32s(addr, memory))
+                                   : Literal((int64_t)load32u(addr, memory));
+            case 8:
+              return Literal((int64_t)load64s(addr, memory));
+            default:
+              WASM_UNREACHABLE("invalid size");
+          }
+          break;
+        }
+        case Type::f32:
+          return Literal(load32u(addr, memory)).castToF32();
+        case Type::f64:
+          return Literal(load64u(addr, memory)).castToF64();
+        case Type::v128:
+          return Literal(load128(addr, load->memory).data());
+        case Type::none:
+        case Type::unreachable:
+          WASM_UNREACHABLE("unexpected type");
+      }
+      WASM_UNREACHABLE("invalid type");
+    }
+    virtual void store(Store* store, Address addr, Literal value, Name memory) {
+      switch (store->valueType.getBasic()) {
+        case Type::i32: {
+          switch (store->bytes) {
+            case 1:
+              store8(addr, value.geti32(), memory);
+              break;
+            case 2:
+              store16(addr, value.geti32(), memory);
+              break;
+            case 4:
+              store32(addr, value.geti32(), memory);
+              break;
+            default:
+              WASM_UNREACHABLE("invalid store size");
+          }
+          break;
+        }
+        case Type::i64: {
+          switch (store->bytes) {
+            case 1:
+              store8(addr, value.geti64(), memory);
+              break;
+            case 2:
+              store16(addr, value.geti64(), memory);
+              break;
+            case 4:
+              store32(addr, value.geti64(), memory);
+              break;
+            case 8:
+              store64(addr, value.geti64(), memory);
+              break;
+            default:
+              WASM_UNREACHABLE("invalid store size");
+          }
+          break;
+        }
+        // write floats carefully, ensuring all bits reach memory
+        case Type::f32:
+          store32(addr, value.reinterpreti32(), memory);
+          break;
+        case Type::f64:
+          store64(addr, value.reinterpreti64(), memory);
+          break;
+        case Type::v128:
+          store128(addr, value.getv128(), memory);
+          break;
+        case Type::none:
+        case Type::unreachable:
+          WASM_UNREACHABLE("unexpected type");
+      }
+    }
+
+    virtual int8_t load8s(Address addr, Name memoryName) {
+      WASM_UNREACHABLE("unimp");
+    }
+    virtual uint8_t load8u(Address addr, Name memoryName) {
+      WASM_UNREACHABLE("unimp");
+    }
+    virtual int16_t load16s(Address addr, Name memoryName) {
+      WASM_UNREACHABLE("unimp");
+    }
+    virtual uint16_t load16u(Address addr, Name memoryName) {
+      WASM_UNREACHABLE("unimp");
+    }
+    virtual int32_t load32s(Address addr, Name memoryName) {
+      WASM_UNREACHABLE("unimp");
+    }
+    virtual uint32_t load32u(Address addr, Name memoryName) {
+      WASM_UNREACHABLE("unimp");
+    }
+    virtual int64_t load64s(Address addr, Name memoryName) {
+      WASM_UNREACHABLE("unimp");
+    }
+    virtual uint64_t load64u(Address addr, Name memoryName) {
+      WASM_UNREACHABLE("unimp");
+    }
+    virtual std::array<uint8_t, 16> load128(Address addr, Name memoryName) {
+      WASM_UNREACHABLE("unimp");
+    }
+
+    virtual void store8(Address addr, int8_t value, Name memoryName) {
+      WASM_UNREACHABLE("unimp");
+    }
+    virtual void store16(Address addr, int16_t value, Name memoryName) {
+      WASM_UNREACHABLE("unimp");
+    }
+    virtual void store32(Address addr, int32_t value, Name memoryName) {
+      WASM_UNREACHABLE("unimp");
+    }
+    virtual void store64(Address addr, int64_t value, Name memoryName) {
+      WASM_UNREACHABLE("unimp");
+    }
+    virtual void
+    store128(Address addr, const std::array<uint8_t, 16>&, Name memoryName) {
+      WASM_UNREACHABLE("unimp");
+    }
+
+    virtual Index tableSize(Name tableName) = 0;
+
+    virtual void tableStore(Name tableName, Index index, const Literal& entry) {
+      WASM_UNREACHABLE("unimp");
+    }
+    virtual Literal tableLoad(Name tableName, Index index) {
+      WASM_UNREACHABLE("unimp");
+    }
+  };
+
+  SubType* self() { return static_cast<SubType*>(this); }
+
+  // TODO: this duplicates module in ExpressionRunner, and can be removed
+  Module& wasm;
+
+  // Values of globals
+  GlobalValueSet globals;
+
+  // Multivalue ABI support (see push/pop).
+  std::vector<Literals> multiValues;
+
+  ModuleRunnerBase(
+    Module& wasm,
+    ExternalInterface* externalInterface,
+    std::map<Name, std::shared_ptr<SubType>> linkedInstances_ = {})
+    : ExpressionRunner<SubType>(&wasm), wasm(wasm),
+      externalInterface(externalInterface), linkedInstances(linkedInstances_) {
+    // import globals from the outside
+    externalInterface->importGlobals(globals, wasm);
+    // generate internal (non-imported) globals
+    ModuleUtils::iterDefinedGlobals(wasm, [&](Global* global) {
+      globals[global->name] = self()->visit(global->init).values;
+    });
+
+    // initialize the rest of the external interface
+    externalInterface->init(wasm, *self());
+
+    initializeTableContents();
+    initializeMemoryContents();
+
+    // run start, if present
+    if (wasm.start.is()) {
+      Literals arguments;
+      callFunction(wasm.start, arguments);
+    }
+  }
+
+  // call an exported function
+  Literals callExport(Name name, const Literals& arguments) {
+    Export* export_ = wasm.getExportOrNull(name);
+    if (!export_) {
+      externalInterface->trap("callExport not found");
+    }
+    return callFunction(export_->value, arguments);
+  }
+
+  Literals callExport(Name name) { return callExport(name, Literals()); }
+
+  // get an exported global
+  Literals getExport(Name name) {
+    Export* export_ = wasm.getExportOrNull(name);
+    if (!export_) {
+      externalInterface->trap("getExport external not found");
+    }
+    Name internalName = export_->value;
+    auto iter = globals.find(internalName);
+    if (iter == globals.end()) {
+      externalInterface->trap("getExport internal not found");
+    }
+    return iter->second;
+  }
+
+  std::string printFunctionStack() {
+    std::string ret = "/== (binaryen interpreter stack trace)\n";
+    for (int i = int(functionStack.size()) - 1; i >= 0; i--) {
+      ret += std::string("|: ") + functionStack[i].toString() + "\n";
+    }
+    ret += std::string("\\==\n");
+    return ret;
+  }
+
+private:
+  // Keep a record of call depth, to guard against excessive recursion.
+  size_t callDepth = 0;
+
+  // Function name stack. We maintain this explicitly to allow printing of
+  // stack traces.
+  std::vector<Name> functionStack;
+
+  std::unordered_set<size_t> droppedSegments;
+
+  struct TableInterfaceInfo {
+    // The external interface in which the table is defined.
+    ExternalInterface* interface;
+    // The name the table has in that interface.
+    Name name;
+  };
+
+  TableInterfaceInfo getTableInterfaceInfo(Name name) {
+    auto* table = wasm.getTable(name);
+    if (table->imported()) {
+      auto& importedInstance = linkedInstances.at(table->module);
+      auto* tableExport = importedInstance->wasm.getExport(table->base);
+      return TableInterfaceInfo{importedInstance->externalInterface,
+                                tableExport->value};
+    } else {
+      return TableInterfaceInfo{externalInterface, name};
+    }
+  }
+
+  void initializeTableContents() {
+    for (auto& table : wasm.tables) {
+      if (table->type.isNullable()) {
+        // Initial with nulls in a nullable table.
+        auto info = getTableInterfaceInfo(table->name);
+        auto null = Literal::makeNull(table->type.getHeapType());
+        for (Address i = 0; i < table->initial; i++) {
+          info.interface->tableStore(info.name, i, null);
+        }
+      }
+    }
+
+    ModuleUtils::iterActiveElementSegments(wasm, [&](ElementSegment* segment) {
+      Address offset =
+        (uint32_t)self()->visit(segment->offset).getSingleValue().geti32();
+
+      Table* table = wasm.getTable(segment->table);
+      ExternalInterface* extInterface = externalInterface;
+      Name tableName = segment->table;
+      if 
