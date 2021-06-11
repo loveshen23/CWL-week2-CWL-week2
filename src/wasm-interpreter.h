@@ -2969,4 +2969,361 @@ public:
     auto ret = info.instance->externalInterface->load(curr, addr, info.name);
     NOTE_EVAL1(addr);
     NOTE_EVAL1(ret);
-    return re
+    return ret;
+  }
+  Flow visitStore(Store* curr) {
+    NOTE_ENTER("Store");
+    Flow ptr = self()->visit(curr->ptr);
+    if (ptr.breaking()) {
+      return ptr;
+    }
+    Flow value = self()->visit(curr->value);
+    if (value.breaking()) {
+      return value;
+    }
+    auto info = getMemoryInstanceInfo(curr->memory);
+    auto memorySize = info.instance->getMemorySize(info.name);
+    auto addr =
+      info.instance->getFinalAddress(curr, ptr.getSingleValue(), memorySize);
+    if (curr->isAtomic) {
+      info.instance->checkAtomicAddress(addr, curr->bytes, memorySize);
+    }
+    NOTE_EVAL1(addr);
+    NOTE_EVAL1(value);
+    info.instance->externalInterface->store(
+      curr, addr, value.getSingleValue(), info.name);
+    return Flow();
+  }
+
+  Flow visitAtomicRMW(AtomicRMW* curr) {
+    NOTE_ENTER("AtomicRMW");
+    Flow ptr = self()->visit(curr->ptr);
+    if (ptr.breaking()) {
+      return ptr;
+    }
+    auto value = self()->visit(curr->value);
+    if (value.breaking()) {
+      return value;
+    }
+    NOTE_EVAL1(ptr);
+    auto info = getMemoryInstanceInfo(curr->memory);
+    auto memorySize = info.instance->getMemorySize(info.name);
+    auto addr =
+      info.instance->getFinalAddress(curr, ptr.getSingleValue(), memorySize);
+    NOTE_EVAL1(addr);
+    NOTE_EVAL1(value);
+    auto loaded = info.instance->doAtomicLoad(
+      addr, curr->bytes, curr->type, info.name, memorySize);
+    NOTE_EVAL1(loaded);
+    auto computed = value.getSingleValue();
+    switch (curr->op) {
+      case RMWAdd:
+        computed = loaded.add(computed);
+        break;
+      case RMWSub:
+        computed = loaded.sub(computed);
+        break;
+      case RMWAnd:
+        computed = loaded.and_(computed);
+        break;
+      case RMWOr:
+        computed = loaded.or_(computed);
+        break;
+      case RMWXor:
+        computed = loaded.xor_(computed);
+        break;
+      case RMWXchg:
+        break;
+    }
+    info.instance->doAtomicStore(
+      addr, curr->bytes, computed, info.name, memorySize);
+    return loaded;
+  }
+  Flow visitAtomicCmpxchg(AtomicCmpxchg* curr) {
+    NOTE_ENTER("AtomicCmpxchg");
+    Flow ptr = self()->visit(curr->ptr);
+    if (ptr.breaking()) {
+      return ptr;
+    }
+    NOTE_EVAL1(ptr);
+    auto expected = self()->visit(curr->expected);
+    if (expected.breaking()) {
+      return expected;
+    }
+    auto replacement = self()->visit(curr->replacement);
+    if (replacement.breaking()) {
+      return replacement;
+    }
+    auto info = getMemoryInstanceInfo(curr->memory);
+    auto memorySize = info.instance->getMemorySize(info.name);
+    auto addr =
+      info.instance->getFinalAddress(curr, ptr.getSingleValue(), memorySize);
+    expected = Flow(wrapToSmallerSize(expected.getSingleValue(), curr->bytes));
+    NOTE_EVAL1(addr);
+    NOTE_EVAL1(expected);
+    NOTE_EVAL1(replacement);
+    auto loaded = info.instance->doAtomicLoad(
+      addr, curr->bytes, curr->type, info.name, memorySize);
+    NOTE_EVAL1(loaded);
+    if (loaded == expected.getSingleValue()) {
+      info.instance->doAtomicStore(
+        addr, curr->bytes, replacement.getSingleValue(), info.name, memorySize);
+    }
+    return loaded;
+  }
+  Flow visitAtomicWait(AtomicWait* curr) {
+    NOTE_ENTER("AtomicWait");
+    Flow ptr = self()->visit(curr->ptr);
+    if (ptr.breaking()) {
+      return ptr;
+    }
+    NOTE_EVAL1(ptr);
+    auto expected = self()->visit(curr->expected);
+    NOTE_EVAL1(expected);
+    if (expected.breaking()) {
+      return expected;
+    }
+    auto timeout = self()->visit(curr->timeout);
+    NOTE_EVAL1(timeout);
+    if (timeout.breaking()) {
+      return timeout;
+    }
+    auto bytes = curr->expectedType.getByteSize();
+    auto info = getMemoryInstanceInfo(curr->memory);
+    auto memorySize = info.instance->getMemorySize(info.name);
+    auto addr = info.instance->getFinalAddress(
+      curr, ptr.getSingleValue(), bytes, memorySize);
+    auto loaded = info.instance->doAtomicLoad(
+      addr, bytes, curr->expectedType, info.name, memorySize);
+    NOTE_EVAL1(loaded);
+    if (loaded != expected.getSingleValue()) {
+      return Literal(int32_t(1)); // not equal
+    }
+    // TODO: add threads support!
+    //       for now, just assume we are woken up
+    return Literal(int32_t(0)); // woken up
+  }
+  Flow visitAtomicNotify(AtomicNotify* curr) {
+    NOTE_ENTER("AtomicNotify");
+    Flow ptr = self()->visit(curr->ptr);
+    if (ptr.breaking()) {
+      return ptr;
+    }
+    NOTE_EVAL1(ptr);
+    auto count = self()->visit(curr->notifyCount);
+    NOTE_EVAL1(count);
+    if (count.breaking()) {
+      return count;
+    }
+    auto info = getMemoryInstanceInfo(curr->memory);
+    auto memorySize = info.instance->getMemorySize(info.name);
+    auto addr =
+      info.instance->getFinalAddress(curr, ptr.getSingleValue(), 4, memorySize);
+    // Just check TODO actual threads support
+    info.instance->checkAtomicAddress(addr, 4, memorySize);
+    return Literal(int32_t(0)); // none woken up
+  }
+  Flow visitSIMDLoad(SIMDLoad* curr) {
+    NOTE_ENTER("SIMDLoad");
+    switch (curr->op) {
+      case Load8SplatVec128:
+      case Load16SplatVec128:
+      case Load32SplatVec128:
+      case Load64SplatVec128:
+        return visitSIMDLoadSplat(curr);
+      case Load8x8SVec128:
+      case Load8x8UVec128:
+      case Load16x4SVec128:
+      case Load16x4UVec128:
+      case Load32x2SVec128:
+      case Load32x2UVec128:
+        return visitSIMDLoadExtend(curr);
+      case Load32ZeroVec128:
+      case Load64ZeroVec128:
+        return visitSIMDLoadZero(curr);
+    }
+    WASM_UNREACHABLE("invalid op");
+  }
+  Flow visitSIMDLoadSplat(SIMDLoad* curr) {
+    Load load;
+    load.memory = curr->memory;
+    load.type = Type::i32;
+    load.bytes = curr->getMemBytes();
+    load.signed_ = false;
+    load.offset = curr->offset;
+    load.align = curr->align;
+    load.isAtomic = false;
+    load.ptr = curr->ptr;
+    Literal (Literal::*splat)() const = nullptr;
+    switch (curr->op) {
+      case Load8SplatVec128:
+        splat = &Literal::splatI8x16;
+        break;
+      case Load16SplatVec128:
+        splat = &Literal::splatI16x8;
+        break;
+      case Load32SplatVec128:
+        splat = &Literal::splatI32x4;
+        break;
+      case Load64SplatVec128:
+        load.type = Type::i64;
+        splat = &Literal::splatI64x2;
+        break;
+      default:
+        WASM_UNREACHABLE("invalid op");
+    }
+    load.finalize();
+    Flow flow = self()->visit(&load);
+    if (flow.breaking()) {
+      return flow;
+    }
+    return (flow.getSingleValue().*splat)();
+  }
+  Flow visitSIMDLoadExtend(SIMDLoad* curr) {
+    Flow flow = self()->visit(curr->ptr);
+    if (flow.breaking()) {
+      return flow;
+    }
+    NOTE_EVAL1(flow);
+    Address src(uint32_t(flow.getSingleValue().geti32()));
+    auto info = getMemoryInstanceInfo(curr->memory);
+    auto loadLane = [&](Address addr) {
+      switch (curr->op) {
+        case Load8x8SVec128:
+          return Literal(
+            int32_t(info.instance->externalInterface->load8s(addr, info.name)));
+        case Load8x8UVec128:
+          return Literal(
+            int32_t(info.instance->externalInterface->load8u(addr, info.name)));
+        case Load16x4SVec128:
+          return Literal(int32_t(
+            info.instance->externalInterface->load16s(addr, info.name)));
+        case Load16x4UVec128:
+          return Literal(int32_t(
+            info.instance->externalInterface->load16u(addr, info.name)));
+        case Load32x2SVec128:
+          return Literal(int64_t(
+            info.instance->externalInterface->load32s(addr, info.name)));
+        case Load32x2UVec128:
+          return Literal(int64_t(
+            info.instance->externalInterface->load32u(addr, info.name)));
+        default:
+          WASM_UNREACHABLE("unexpected op");
+      }
+      WASM_UNREACHABLE("invalid op");
+    };
+    auto memorySize = info.instance->getMemorySize(info.name);
+    auto fillLanes = [&](auto lanes, size_t laneBytes) {
+      for (auto& lane : lanes) {
+        lane = loadLane(info.instance->getFinalAddress(
+          curr, Literal(uint32_t(src)), laneBytes, memorySize));
+        src = Address(uint32_t(src) + laneBytes);
+      }
+      return Literal(lanes);
+    };
+    switch (curr->op) {
+      case Load8x8SVec128:
+      case Load8x8UVec128: {
+        std::array<Literal, 8> lanes;
+        return fillLanes(lanes, 1);
+      }
+      case Load16x4SVec128:
+      case Load16x4UVec128: {
+        std::array<Literal, 4> lanes;
+        return fillLanes(lanes, 2);
+      }
+      case Load32x2SVec128:
+      case Load32x2UVec128: {
+        std::array<Literal, 2> lanes;
+        return fillLanes(lanes, 4);
+      }
+      default:
+        WASM_UNREACHABLE("unexpected op");
+    }
+    WASM_UNREACHABLE("invalid op");
+  }
+  Flow visitSIMDLoadZero(SIMDLoad* curr) {
+    Flow flow = self()->visit(curr->ptr);
+    if (flow.breaking()) {
+      return flow;
+    }
+    NOTE_EVAL1(flow);
+    auto info = getMemoryInstanceInfo(curr->memory);
+    auto memorySize = info.instance->getMemorySize(info.name);
+    Address src = info.instance->getFinalAddress(
+      curr, flow.getSingleValue(), curr->getMemBytes(), memorySize);
+    auto zero =
+      Literal::makeZero(curr->op == Load32ZeroVec128 ? Type::i32 : Type::i64);
+    if (curr->op == Load32ZeroVec128) {
+      auto val =
+        Literal(info.instance->externalInterface->load32u(src, info.name));
+      return Literal(std::array<Literal, 4>{{val, zero, zero, zero}});
+    } else {
+      auto val =
+        Literal(info.instance->externalInterface->load64u(src, info.name));
+      return Literal(std::array<Literal, 2>{{val, zero}});
+    }
+  }
+  Flow visitSIMDLoadStoreLane(SIMDLoadStoreLane* curr) {
+    NOTE_ENTER("SIMDLoadStoreLane");
+    Flow flow = self()->visit(curr->ptr);
+    if (flow.breaking()) {
+      return flow;
+    }
+    NOTE_EVAL1(flow);
+    auto info = getMemoryInstanceInfo(curr->memory);
+    auto memorySize = info.instance->getMemorySize(info.name);
+    Address addr = info.instance->getFinalAddress(
+      curr, flow.getSingleValue(), curr->getMemBytes(), memorySize);
+    flow = self()->visit(curr->vec);
+    if (flow.breaking()) {
+      return flow;
+    }
+    Literal vec = flow.getSingleValue();
+    switch (curr->op) {
+      case Load8LaneVec128:
+      case Store8LaneVec128: {
+        std::array<Literal, 16> lanes = vec.getLanesUI8x16();
+        if (curr->isLoad()) {
+          lanes[curr->index] =
+            Literal(info.instance->externalInterface->load8u(addr, info.name));
+          return Literal(lanes);
+        } else {
+          info.instance->externalInterface->store8(
+            addr, lanes[curr->index].geti32(), info.name);
+          return {};
+        }
+      }
+      case Load16LaneVec128:
+      case Store16LaneVec128: {
+        std::array<Literal, 8> lanes = vec.getLanesUI16x8();
+        if (curr->isLoad()) {
+          lanes[curr->index] =
+            Literal(info.instance->externalInterface->load16u(addr, info.name));
+          return Literal(lanes);
+        } else {
+          info.instance->externalInterface->store16(
+            addr, lanes[curr->index].geti32(), info.name);
+          return {};
+        }
+      }
+      case Load32LaneVec128:
+      case Store32LaneVec128: {
+        std::array<Literal, 4> lanes = vec.getLanesI32x4();
+        if (curr->isLoad()) {
+          lanes[curr->index] =
+            Literal(info.instance->externalInterface->load32u(addr, info.name));
+          return Literal(lanes);
+        } else {
+          info.instance->externalInterface->store32(
+            addr, lanes[curr->index].geti32(), info.name);
+          return {};
+        }
+      }
+      case Store64LaneVec128:
+      case Load64LaneVec128: {
+        std::array<Literal, 2> lanes = vec.getLanesI64x2();
+        if (curr->isLoad()) {
+          lanes[curr->index] =
+            Literal(info.instance->externalInterface->load64u(addr, info.name));
+          return Literal(
