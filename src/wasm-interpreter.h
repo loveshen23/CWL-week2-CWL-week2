@@ -3326,4 +3326,363 @@ public:
         if (curr->isLoad()) {
           lanes[curr->index] =
             Literal(info.instance->externalInterface->load64u(addr, info.name));
-          return Literal(
+          return Literal(lanes);
+        } else {
+          info.instance->externalInterface->store64(
+            addr, lanes[curr->index].geti64(), info.name);
+          return {};
+        }
+      }
+    }
+    WASM_UNREACHABLE("unexpected op");
+  }
+  Flow visitMemorySize(MemorySize* curr) {
+    NOTE_ENTER("MemorySize");
+    auto info = getMemoryInstanceInfo(curr->memory);
+    auto memorySize = info.instance->getMemorySize(info.name);
+    auto* memory = info.instance->wasm.getMemory(info.name);
+    return Literal::makeFromInt64(memorySize, memory->indexType);
+  }
+  Flow visitMemoryGrow(MemoryGrow* curr) {
+    NOTE_ENTER("MemoryGrow");
+    Flow flow = self()->visit(curr->delta);
+    if (flow.breaking()) {
+      return flow;
+    }
+    auto info = getMemoryInstanceInfo(curr->memory);
+    auto memorySize = info.instance->getMemorySize(info.name);
+    auto* memory = info.instance->wasm.getMemory(info.name);
+    auto indexType = memory->indexType;
+    auto fail = Literal::makeFromInt64(-1, memory->indexType);
+    Flow ret = Literal::makeFromInt64(memorySize, indexType);
+    uint64_t delta = flow.getSingleValue().getUnsigned();
+    if (delta > uint32_t(-1) / Memory::kPageSize && indexType == Type::i32) {
+      return fail;
+    }
+    if (memorySize >= uint32_t(-1) - delta && indexType == Type::i32) {
+      return fail;
+    }
+    auto newSize = memorySize + delta;
+    if (newSize > memory->max) {
+      return fail;
+    }
+    if (!info.instance->externalInterface->growMemory(
+          info.name,
+          memorySize * Memory::kPageSize,
+          newSize * Memory::kPageSize)) {
+      // We failed to grow the memory in practice, even though it was valid
+      // to try to do so.
+      return fail;
+    }
+    memorySize = newSize;
+    info.instance->setMemorySize(info.name, memorySize);
+    return ret;
+  }
+  Flow visitMemoryInit(MemoryInit* curr) {
+    NOTE_ENTER("MemoryInit");
+    Flow dest = self()->visit(curr->dest);
+    if (dest.breaking()) {
+      return dest;
+    }
+    Flow offset = self()->visit(curr->offset);
+    if (offset.breaking()) {
+      return offset;
+    }
+    Flow size = self()->visit(curr->size);
+    if (size.breaking()) {
+      return size;
+    }
+    NOTE_EVAL1(dest);
+    NOTE_EVAL1(offset);
+    NOTE_EVAL1(size);
+
+    assert(curr->segment < wasm.dataSegments.size());
+    auto& segment = wasm.dataSegments[curr->segment];
+
+    Address destVal(dest.getSingleValue().getUnsigned());
+    Address offsetVal(uint32_t(offset.getSingleValue().geti32()));
+    Address sizeVal(uint32_t(size.getSingleValue().geti32()));
+
+    if (offsetVal + sizeVal > 0 && droppedSegments.count(curr->segment)) {
+      trap("out of bounds segment access in memory.init");
+    }
+    if ((uint64_t)offsetVal + sizeVal > segment->data.size()) {
+      trap("out of bounds segment access in memory.init");
+    }
+    auto info = getMemoryInstanceInfo(curr->memory);
+    auto memorySize = info.instance->getMemorySize(info.name);
+    if (destVal + sizeVal > memorySize * Memory::kPageSize) {
+      trap("out of bounds memory access in memory.init");
+    }
+    for (size_t i = 0; i < sizeVal; ++i) {
+      Literal addr(destVal + i);
+      info.instance->externalInterface->store8(
+        info.instance->getFinalAddressWithoutOffset(addr, 1, memorySize),
+        segment->data[offsetVal + i],
+        info.name);
+    }
+    return {};
+  }
+  Flow visitDataDrop(DataDrop* curr) {
+    NOTE_ENTER("DataDrop");
+    droppedSegments.insert(curr->segment);
+    return {};
+  }
+  Flow visitMemoryCopy(MemoryCopy* curr) {
+    NOTE_ENTER("MemoryCopy");
+    Flow dest = self()->visit(curr->dest);
+    if (dest.breaking()) {
+      return dest;
+    }
+    Flow source = self()->visit(curr->source);
+    if (source.breaking()) {
+      return source;
+    }
+    Flow size = self()->visit(curr->size);
+    if (size.breaking()) {
+      return size;
+    }
+    NOTE_EVAL1(dest);
+    NOTE_EVAL1(source);
+    NOTE_EVAL1(size);
+    Address destVal(dest.getSingleValue().getUnsigned());
+    Address sourceVal(source.getSingleValue().getUnsigned());
+    Address sizeVal(size.getSingleValue().getUnsigned());
+
+    auto destInfo = getMemoryInstanceInfo(curr->destMemory);
+    auto sourceInfo = getMemoryInstanceInfo(curr->sourceMemory);
+    auto destMemorySize = destInfo.instance->getMemorySize(destInfo.name);
+    auto sourceMemorySize = sourceInfo.instance->getMemorySize(sourceInfo.name);
+    if (sourceVal + sizeVal > sourceMemorySize * Memory::kPageSize ||
+        destVal + sizeVal > destMemorySize * Memory::kPageSize ||
+        // FIXME: better/cheaper way to detect wrapping?
+        sourceVal + sizeVal < sourceVal || sourceVal + sizeVal < sizeVal ||
+        destVal + sizeVal < destVal || destVal + sizeVal < sizeVal) {
+      trap("out of bounds segment access in memory.copy");
+    }
+
+    int64_t start = 0;
+    int64_t end = sizeVal;
+    int step = 1;
+    // Reverse direction if source is below dest
+    if (sourceVal < destVal) {
+      start = int64_t(sizeVal) - 1;
+      end = -1;
+      step = -1;
+    }
+    for (int64_t i = start; i != end; i += step) {
+      destInfo.instance->externalInterface->store8(
+        destInfo.instance->getFinalAddressWithoutOffset(
+          Literal(destVal + i), 1, destMemorySize),
+        sourceInfo.instance->externalInterface->load8s(
+          sourceInfo.instance->getFinalAddressWithoutOffset(
+            Literal(sourceVal + i), 1, sourceMemorySize),
+          sourceInfo.name),
+        destInfo.name);
+    }
+    return {};
+  }
+  Flow visitMemoryFill(MemoryFill* curr) {
+    NOTE_ENTER("MemoryFill");
+    Flow dest = self()->visit(curr->dest);
+    if (dest.breaking()) {
+      return dest;
+    }
+    Flow value = self()->visit(curr->value);
+    if (value.breaking()) {
+      return value;
+    }
+    Flow size = self()->visit(curr->size);
+    if (size.breaking()) {
+      return size;
+    }
+    NOTE_EVAL1(dest);
+    NOTE_EVAL1(value);
+    NOTE_EVAL1(size);
+    Address destVal(dest.getSingleValue().getUnsigned());
+    Address sizeVal(size.getSingleValue().getUnsigned());
+
+    auto info = getMemoryInstanceInfo(curr->memory);
+    auto memorySize = info.instance->getMemorySize(info.name);
+    // FIXME: cheaper wrapping detection?
+    if (destVal > memorySize * Memory::kPageSize ||
+        sizeVal > memorySize * Memory::kPageSize ||
+        destVal + sizeVal > memorySize * Memory::kPageSize) {
+      trap("out of bounds memory access in memory.fill");
+    }
+    uint8_t val(value.getSingleValue().geti32());
+    for (size_t i = 0; i < sizeVal; ++i) {
+      info.instance->externalInterface->store8(
+        info.instance->getFinalAddressWithoutOffset(
+          Literal(destVal + i), 1, memorySize),
+        val,
+        info.name);
+    }
+    return {};
+  }
+  Flow visitArrayNewSeg(ArrayNewSeg* curr) {
+    NOTE_ENTER("ArrayNewSeg");
+    auto offsetFlow = self()->visit(curr->offset);
+    if (offsetFlow.breaking()) {
+      return offsetFlow;
+    }
+    auto sizeFlow = self()->visit(curr->size);
+    if (sizeFlow.breaking()) {
+      return sizeFlow;
+    }
+
+    uint64_t offset = offsetFlow.getSingleValue().getUnsigned();
+    uint64_t size = sizeFlow.getSingleValue().getUnsigned();
+
+    auto heapType = curr->type.getHeapType();
+    const auto& element = heapType.getArray().element;
+    [[maybe_unused]] auto elemType = heapType.getArray().element.type;
+
+    Literals contents;
+
+    switch (curr->op) {
+      case NewData: {
+        assert(curr->segment < wasm.dataSegments.size());
+        assert(elemType.isNumber());
+        const auto& seg = *wasm.dataSegments[curr->segment];
+        auto elemBytes = element.getByteSize();
+        auto end = offset + size * elemBytes;
+        if ((size != 0ull && droppedSegments.count(curr->segment)) ||
+            end > seg.data.size()) {
+          trap("out of bounds segment access in array.new_data");
+        }
+        contents.reserve(size);
+        for (Index i = offset; i < end; i += elemBytes) {
+          auto addr = (void*)&seg.data[i];
+          contents.push_back(Literal::makeFromMemory(addr, element));
+        }
+        break;
+      }
+      case NewElem: {
+        assert(curr->segment < wasm.elementSegments.size());
+        const auto& seg = *wasm.elementSegments[curr->segment];
+        auto end = offset + size;
+        // TODO: Handle dropped element segments once we support those.
+        if (end > seg.data.size()) {
+          trap("out of bounds segment access in array.new_elem");
+        }
+        contents.reserve(size);
+        for (Index i = offset; i < end; ++i) {
+          auto val = self()->visit(seg.data[i]).getSingleValue();
+          contents.push_back(val);
+        }
+        break;
+      }
+      default:
+        WASM_UNREACHABLE("unexpected op");
+    }
+    return Literal(std::make_shared<GCData>(heapType, contents), heapType);
+  }
+  Flow visitTry(Try* curr) {
+    NOTE_ENTER("Try");
+    try {
+      return self()->visit(curr->body);
+    } catch (const WasmException& e) {
+      // If delegation is in progress and the current try is not the target of
+      // the delegation, don't handle it and just rethrow.
+      if (scope->currDelegateTarget.is()) {
+        if (scope->currDelegateTarget == curr->name) {
+          scope->currDelegateTarget = Name{};
+        } else {
+          throw;
+        }
+      }
+
+      auto processCatchBody = [&](Expression* catchBody) {
+        // Push the current exception onto the exceptionStack in case
+        // 'rethrow's use it
+        exceptionStack.push_back(std::make_pair(e, curr->name));
+        // We need to pop exceptionStack in either case: when the catch body
+        // exits normally or when a new exception is thrown
+        Flow ret;
+        try {
+          ret = self()->visit(catchBody);
+        } catch (const WasmException&) {
+          exceptionStack.pop_back();
+          throw;
+        }
+        exceptionStack.pop_back();
+        return ret;
+      };
+
+      for (size_t i = 0; i < curr->catchTags.size(); i++) {
+        if (curr->catchTags[i] == e.tag) {
+          multiValues.push_back(e.values);
+          return processCatchBody(curr->catchBodies[i]);
+        }
+      }
+      if (curr->hasCatchAll()) {
+        return processCatchBody(curr->catchBodies.back());
+      }
+      if (curr->isDelegate()) {
+        scope->currDelegateTarget = curr->delegateTarget;
+      }
+      // This exception is not caught by this try-catch. Rethrow it.
+      throw;
+    }
+  }
+  Flow visitRethrow(Rethrow* curr) {
+    for (int i = exceptionStack.size() - 1; i >= 0; i--) {
+      if (exceptionStack[i].second == curr->target) {
+        throwException(exceptionStack[i].first);
+      }
+    }
+    WASM_UNREACHABLE("rethrow");
+  }
+  Flow visitPop(Pop* curr) {
+    NOTE_ENTER("Pop");
+    assert(!multiValues.empty());
+    auto ret = multiValues.back();
+    assert(curr->type == ret.getType());
+    multiValues.pop_back();
+    return ret;
+  }
+
+  void trap(const char* why) override { externalInterface->trap(why); }
+
+  void hostLimit(const char* why) override {
+    externalInterface->hostLimit(why);
+  }
+
+  void throwException(const WasmException& exn) override {
+    externalInterface->throwException(exn);
+  }
+
+  // Given a value, wrap it to a smaller given number of bytes.
+  Literal wrapToSmallerSize(Literal value, Index bytes) {
+    if (value.type == Type::i32) {
+      switch (bytes) {
+        case 1: {
+          return value.and_(Literal(uint32_t(0xff)));
+        }
+        case 2: {
+          return value.and_(Literal(uint32_t(0xffff)));
+        }
+        case 4: {
+          break;
+        }
+        default:
+          WASM_UNREACHABLE("unexpected bytes");
+      }
+    } else {
+      assert(value.type == Type::i64);
+      switch (bytes) {
+        case 1: {
+          return value.and_(Literal(uint64_t(0xff)));
+        }
+        case 2: {
+          return value.and_(Literal(uint64_t(0xffff)));
+        }
+        case 4: {
+          return value.and_(Literal(uint64_t(0xffffffffUL)));
+        }
+        case 8: {
+          break;
+        }
+        default:
+          WASM_UNREACHABLE("unexpecte
