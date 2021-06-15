@@ -3685,4 +3685,174 @@ public:
           break;
         }
         default:
-          WASM_UNREACHABLE("unexpecte
+          WASM_UNREACHABLE("unexpected bytes");
+      }
+    }
+    return value;
+  }
+
+  // Call a function, starting an invocation.
+  Literals callFunction(Name name, const Literals& arguments) {
+    // if the last call ended in a jump up the stack, it might have left stuff
+    // for us to clean up here
+    callDepth = 0;
+    functionStack.clear();
+    return callFunctionInternal(name, arguments);
+  }
+
+  // Internal function call. Must be public so that callTable implementations
+  // can use it (refactor?)
+  Literals callFunctionInternal(Name name, const Literals& arguments) {
+    if (callDepth > maxDepth) {
+      externalInterface->trap("stack limit");
+    }
+    auto previousCallDepth = callDepth;
+    callDepth++;
+    auto previousFunctionStackSize = functionStack.size();
+    functionStack.push_back(name);
+
+    Function* function = wasm.getFunction(name);
+    assert(function);
+    FunctionScope scope(function, arguments, *self());
+
+#ifdef WASM_INTERPRETER_DEBUG
+    std::cout << "entering " << function->name << "\n  with arguments:\n";
+    for (unsigned i = 0; i < arguments.size(); ++i) {
+      std::cout << "    $" << i << ": " << arguments[i] << '\n';
+    }
+#endif
+
+    Flow flow = self()->visit(function->body);
+    // cannot still be breaking, it means we missed our stop
+    assert(!flow.breaking() || flow.breakTo == RETURN_FLOW);
+    auto type = flow.getType();
+    if (!Type::isSubType(type, function->getResults())) {
+      std::cerr << "calling " << function->name << " resulted in " << type
+                << " but the function type is " << function->getResults()
+                << '\n';
+      WASM_UNREACHABLE("unexpected result type");
+    }
+    // may decrease more than one, if we jumped up the stack
+    callDepth = previousCallDepth;
+    // if we jumped up the stack, we also need to pop higher frames
+    // TODO can FunctionScope handle this automatically?
+    while (functionStack.size() > previousFunctionStackSize) {
+      functionStack.pop_back();
+    }
+#ifdef WASM_INTERPRETER_DEBUG
+    std::cout << "exiting " << function->name << " with " << flow.values
+              << '\n';
+#endif
+    return flow.values;
+  }
+
+  // The maximum call stack depth to evaluate into.
+  static const Index maxDepth = 250;
+
+protected:
+  void trapIfGt(uint64_t lhs, uint64_t rhs, const char* msg) {
+    if (lhs > rhs) {
+      std::stringstream ss;
+      ss << msg << ": " << lhs << " > " << rhs;
+      externalInterface->trap(ss.str().c_str());
+    }
+  }
+
+  template<class LS>
+  Address
+  getFinalAddress(LS* curr, Literal ptr, Index bytes, Address memorySize) {
+    Address memorySizeBytes = memorySize * Memory::kPageSize;
+    uint64_t addr = ptr.type == Type::i32 ? ptr.geti32() : ptr.geti64();
+    trapIfGt(curr->offset, memorySizeBytes, "offset > memory");
+    trapIfGt(addr, memorySizeBytes - curr->offset, "final > memory");
+    addr += curr->offset;
+    trapIfGt(bytes, memorySizeBytes, "bytes > memory");
+    checkLoadAddress(addr, bytes, memorySize);
+    return addr;
+  }
+
+  template<class LS>
+  Address getFinalAddress(LS* curr, Literal ptr, Address memorySize) {
+    return getFinalAddress(curr, ptr, curr->bytes, memorySize);
+  }
+
+  Address
+  getFinalAddressWithoutOffset(Literal ptr, Index bytes, Address memorySize) {
+    uint64_t addr = ptr.type == Type::i32 ? ptr.geti32() : ptr.geti64();
+    checkLoadAddress(addr, bytes, memorySize);
+    return addr;
+  }
+
+  void checkLoadAddress(Address addr, Index bytes, Address memorySize) {
+    Address memorySizeBytes = memorySize * Memory::kPageSize;
+    trapIfGt(addr, memorySizeBytes - bytes, "highest > memory");
+  }
+
+  void checkAtomicAddress(Address addr, Index bytes, Address memorySize) {
+    checkLoadAddress(addr, bytes, memorySize);
+    // Unaligned atomics trap.
+    if (bytes > 1) {
+      if (addr & (bytes - 1)) {
+        externalInterface->trap("unaligned atomic operation");
+      }
+    }
+  }
+
+  Literal doAtomicLoad(
+    Address addr, Index bytes, Type type, Name memoryName, Address memorySize) {
+    checkAtomicAddress(addr, bytes, memorySize);
+    Const ptr;
+    ptr.value = Literal(int32_t(addr));
+    ptr.type = Type::i32;
+    Load load;
+    load.bytes = bytes;
+    // When an atomic loads a partial number of bytes for the type, it is
+    // always an unsigned extension.
+    load.signed_ = false;
+    load.align = bytes;
+    load.isAtomic = true; // understatement
+    load.ptr = &ptr;
+    load.type = type;
+    load.memory = memoryName;
+    return externalInterface->load(&load, addr, memoryName);
+  }
+
+  void doAtomicStore(Address addr,
+                     Index bytes,
+                     Literal toStore,
+                     Name memoryName,
+                     Address memorySize) {
+    checkAtomicAddress(addr, bytes, memorySize);
+    Const ptr;
+    ptr.value = Literal(int32_t(addr));
+    ptr.type = Type::i32;
+    Const value;
+    value.value = toStore;
+    value.type = toStore.type;
+    Store store;
+    store.bytes = bytes;
+    store.align = bytes;
+    store.isAtomic = true; // understatement
+    store.ptr = &ptr;
+    store.value = &value;
+    store.valueType = value.type;
+    store.memory = memoryName;
+    return externalInterface->store(&store, addr, toStore, memoryName);
+  }
+
+  ExternalInterface* externalInterface;
+  std::map<Name, std::shared_ptr<SubType>> linkedInstances;
+};
+
+class ModuleRunner : public ModuleRunnerBase<ModuleRunner> {
+public:
+  ModuleRunner(
+    Module& wasm,
+    ExternalInterface* externalInterface,
+    std::map<Name, std::shared_ptr<ModuleRunner>> linkedInstances = {})
+    : ModuleRunnerBase(wasm, externalInterface, linkedInstances) {}
+};
+
+} // namespace wasm
+
+#endif // wasm_wasm_interpreter_h
