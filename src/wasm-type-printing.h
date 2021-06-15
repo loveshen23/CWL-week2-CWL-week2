@@ -70,4 +70,57 @@ struct IndexedTypeNameGenerator
   : TypeNameGeneratorBase<IndexedTypeNameGenerator<FallbackGenerator>> {
   DefaultTypeNameGenerator defaultGenerator;
   FallbackGenerator& fallback;
-  std::unordered_map<
+  std::unordered_map<HeapType, TypeNames> names;
+
+  template<typename T>
+  IndexedTypeNameGenerator(T& types,
+                           FallbackGenerator& fallback,
+                           const std::string& prefix = "")
+    : fallback(fallback) {
+    for (size_t i = 0; i < types.size(); ++i) {
+      names.insert({types[i], {prefix + std::to_string(i), {}}});
+    }
+  }
+  template<typename T>
+  IndexedTypeNameGenerator(T& types, const std::string& prefix = "")
+    : IndexedTypeNameGenerator(types, defaultGenerator, prefix) {}
+
+  TypeNames getNames(HeapType type) {
+    if (auto it = names.find(type); it != names.end()) {
+      return it->second;
+    } else {
+      return fallback.getNames(type);
+    }
+  }
+};
+
+// Prints heap types stored in a module, falling back to the given
+// FallbackGenerator if the module does not have a name for type type.
+template<typename FallbackGenerator = DefaultTypeNameGenerator>
+struct ModuleTypeNameGenerator
+  : TypeNameGeneratorBase<ModuleTypeNameGenerator<FallbackGenerator>> {
+  const Module& wasm;
+  DefaultTypeNameGenerator defaultGenerator;
+  FallbackGenerator& fallback;
+
+  ModuleTypeNameGenerator(const Module& wasm, FallbackGenerator& fallback)
+    : wasm(wasm), fallback(fallback) {}
+
+  // TODO: Use C++20 `requires` to clean this up.
+  template<class T = FallbackGenerator>
+  ModuleTypeNameGenerator(
+    const Module& wasm,
+    std::enable_if_t<std::is_same_v<T, DefaultTypeNameGenerator>>* = nullptr)
+    : ModuleTypeNameGenerator(wasm, defaultGenerator) {}
+
+  TypeNames getNames(HeapType type) {
+    if (auto it = wasm.typeNames.find(type); it != wasm.typeNames.end()) {
+      return it->second;
+    }
+    return fallback.getNames(type);
+  }
+};
+
+} // namespace wasm
+
+#endif // wasm_wasm_type_printing_h
