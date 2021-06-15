@@ -189,4 +189,184 @@ private:
   Type stringToType(std::string_view str,
                     bool allowError = false,
                     bool prefix = false);
-  HeapType st
+  HeapType stringToHeapType(IString str, bool prefix = false) {
+    return stringToHeapType(str.str, prefix);
+  }
+  HeapType stringToHeapType(std::string_view str, bool prefix = false);
+  Type elementToType(Element& s);
+  // TODO: Use std::string_view for this and similar functions.
+  Type stringToLaneType(const char* str);
+  bool isType(IString str) { return stringToType(str, true) != Type::none; }
+  HeapType getFunctionType(Name name, Element& s);
+
+public:
+  Expression* parseExpression(Element* s) { return parseExpression(*s); }
+  Expression* parseExpression(Element& s);
+
+  Module& getModule() { return wasm; }
+
+private:
+  Expression* makeExpression(Element& s);
+  Expression* makeUnreachable();
+  Expression* makeNop();
+  Expression* makeBinary(Element& s, BinaryOp op);
+  Expression* makeUnary(Element& s, UnaryOp op);
+  Expression* makeSelect(Element& s);
+  Expression* makeDrop(Element& s);
+  Expression* makeMemorySize(Element& s);
+  Expression* makeMemoryGrow(Element& s);
+  Index getLocalIndex(Element& s);
+  Expression* makeLocalGet(Element& s);
+  Expression* makeLocalTee(Element& s);
+  Expression* makeLocalSet(Element& s);
+  Expression* makeGlobalGet(Element& s);
+  Expression* makeGlobalSet(Element& s);
+  Expression* makeBlock(Element& s);
+  Expression* makeThenOrElse(Element& s);
+  Expression* makeConst(Element& s, Type type);
+  Expression*
+  makeLoad(Element& s, Type type, bool signed_, int bytes, bool isAtomic);
+  Expression* makeStore(Element& s, Type type, int bytes, bool isAtomic);
+  Expression*
+  makeAtomicRMW(Element& s, AtomicRMWOp op, Type type, uint8_t bytes);
+  Expression* makeAtomicCmpxchg(Element& s, Type type, uint8_t bytes);
+  Expression* makeAtomicWait(Element& s, Type type);
+  Expression* makeAtomicNotify(Element& s);
+  Expression* makeAtomicFence(Element& s);
+  Expression* makeSIMDExtract(Element& s, SIMDExtractOp op, size_t lanes);
+  Expression* makeSIMDReplace(Element& s, SIMDReplaceOp op, size_t lanes);
+  Expression* makeSIMDShuffle(Element& s);
+  Expression* makeSIMDTernary(Element& s, SIMDTernaryOp op);
+  Expression* makeSIMDShift(Element& s, SIMDShiftOp op);
+  Expression* makeSIMDLoad(Element& s, SIMDLoadOp op, int bytes);
+  Expression*
+  makeSIMDLoadStoreLane(Element& s, SIMDLoadStoreLaneOp op, int bytes);
+  Expression* makeMemoryInit(Element& s);
+  Expression* makeDataDrop(Element& s);
+  Expression* makeMemoryCopy(Element& s);
+  Expression* makeMemoryFill(Element& s);
+  Expression* makePop(Element& s);
+  Expression* makeIf(Element& s);
+  Expression* makeMaybeBlock(Element& s, size_t i, Type type);
+  Expression* makeLoop(Element& s);
+  Expression* makeCall(Element& s, bool isReturn);
+  Expression* makeCallIndirect(Element& s, bool isReturn);
+  template<class T> void parseOperands(Element& s, Index i, Index j, T& list) {
+    while (i < j) {
+      list.push_back(parseExpression(s[i]));
+      i++;
+    }
+  }
+  template<class T>
+  void parseCallOperands(Element& s, Index i, Index j, T* call) {
+    parseOperands(s, i, j, call->operands);
+  }
+  enum class LabelType { Break, Exception };
+  Name getLabel(Element& s, LabelType labelType = LabelType::Break);
+  Expression* makeBreak(Element& s);
+  Expression* makeBreakTable(Element& s);
+  Expression* makeReturn(Element& s);
+  Expression* makeRefNull(Element& s);
+  Expression* makeRefIsNull(Element& s);
+  Expression* makeRefFunc(Element& s);
+  Expression* makeRefEq(Element& s);
+  Expression* makeTableGet(Element& s);
+  Expression* makeTableSet(Element& s);
+  Expression* makeTableSize(Element& s);
+  Expression* makeTableGrow(Element& s);
+  Expression* makeTry(Element& s);
+  Expression* makeTryOrCatchBody(Element& s, Type type, bool isTry);
+  Expression* makeThrow(Element& s);
+  Expression* makeRethrow(Element& s);
+  Expression* makeTupleMake(Element& s);
+  Expression* makeTupleExtract(Element& s);
+  Expression* makeCallRef(Element& s, bool isReturn);
+  Expression* makeI31New(Element& s);
+  Expression* makeI31Get(Element& s, bool signed_);
+  Expression* makeRefTest(Element& s,
+                          std::optional<Type> castType = std::nullopt);
+  Expression* makeRefCast(Element& s,
+                          std::optional<Type> castType = std::nullopt);
+  Expression* makeRefCastNop(Element& s);
+  Expression* makeBrOnNull(Element& s, bool onFail = false);
+  Expression*
+  makeBrOnCast(Element& s, std::optional<Type> castType, bool onFail = false);
+  Expression* makeStructNew(Element& s, bool default_);
+  Index getStructIndex(Element& type, Element& field);
+  Expression* makeStructGet(Element& s, bool signed_ = false);
+  Expression* makeStructSet(Element& s);
+  Expression* makeArrayNew(Element& s, bool default_);
+  Expression* makeArrayNewSeg(Element& s, ArrayNewSegOp op);
+  Expression* makeArrayNewFixed(Element& s);
+  Expression* makeArrayGet(Element& s, bool signed_ = false);
+  Expression* makeArraySet(Element& s);
+  Expression* makeArrayLen(Element& s);
+  Expression* makeArrayCopy(Element& s);
+  Expression* makeRefAs(Element& s, RefAsOp op);
+  Expression* makeRefAsNonNull(Element& s);
+  Expression* makeStringNew(Element& s, StringNewOp op, bool try_);
+  Expression* makeStringConst(Element& s);
+  Expression* makeStringMeasure(Element& s, StringMeasureOp op);
+  Expression* makeStringEncode(Element& s, StringEncodeOp op);
+  Expression* makeStringConcat(Element& s);
+  Expression* makeStringEq(Element& s, StringEqOp op);
+  Expression* makeStringAs(Element& s, StringAsOp op);
+  Expression* makeStringWTF8Advance(Element& s);
+  Expression* makeStringWTF16Get(Element& s);
+  Expression* makeStringIterNext(Element& s);
+  Expression* makeStringIterMove(Element& s, StringIterMoveOp op);
+  Expression* makeStringSliceWTF(Element& s, StringSliceWTFOp op);
+  Expression* makeStringSliceIter(Element& s);
+
+  // Helper functions
+  Type parseOptionalResultType(Element& s, Index& i);
+  Index parseMemoryLimits(Element& s, Index i, std::unique_ptr<Memory>& memory);
+  Index parseMemoryIndex(Element& s, Index i, std::unique_ptr<Memory>& memory);
+  Index parseMemoryForInstruction(const std::string& instrName,
+                                  Memory& memory,
+                                  Element& s,
+                                  Index i);
+  std::vector<Type> parseParamOrLocal(Element& s);
+  std::vector<NameType> parseParamOrLocal(Element& s, size_t& localIndex);
+  std::vector<Type> parseResults(Element& s);
+  HeapType parseTypeRef(Element& s);
+  size_t parseTypeUse(Element& s,
+                      size_t startPos,
+                      HeapType& functionType,
+                      std::vector<NameType>& namedParams);
+  size_t parseTypeUse(Element& s, size_t startPos, HeapType& functionType);
+
+  void
+  stringToBinary(Element& s, std::string_view str, std::vector<char>& data);
+  void parseMemory(Element& s, bool preParseImport = false);
+  void parseData(Element& s);
+  void parseInnerData(Element& s, Index i, std::unique_ptr<DataSegment>& seg);
+  void parseExport(Element& s);
+  void parseImport(Element& s);
+  void parseGlobal(Element& s, bool preParseImport = false);
+  void parseTable(Element& s, bool preParseImport = false);
+  void parseElem(Element& s, Table* table = nullptr);
+  ElementSegment* parseElemFinish(Element& s,
+                                  std::unique_ptr<ElementSegment>& segment,
+                                  Index i = 1,
+                                  bool usesExpressions = false);
+
+  // Parses something like (func ..), (array ..), (struct)
+  HeapType parseHeapType(Element& s);
+
+  void parseTag(Element& s, bool preParseImport = false);
+
+  Function::DebugLocation getDebugLocation(const SourceLocation& loc);
+
+  // Struct/Array instructions have an unnecessary heap type that is just for
+  // validation (except for the case of unreachability, but that's not a problem
+  // anyhow, we can ignore it there). That is, we also have a reference typed
+  // child from which we can infer the type anyhow, and we just need to check
+  // that type is the same.
+  void
+  validateHeapTypeUsingChild(Expression* child, HeapType heapType, Element& s);
+};
+
+} // namespace wasm
+
+#endif // wasm_wasm_s_parser_h
