@@ -188,4 +188,18 @@ assert(expr === 0);
 runner = new binaryen.ExpressionRunner(module, Flags.Default, 1);
 expr = runner.runAndDispose(
   module.block(null, [
-  
+    module.i32.const(1),
+  ], binaryen.i32)
+);
+assert(expr === 0);
+
+// Should not loop infinitely
+runner = new binaryen.ExpressionRunner(module, Flags.Default, 50, 3);
+expr = runner.runAndDispose(
+  module.loop("theLoop",
+    module.br("theLoop")
+  )
+);
+assert(expr === 0);
+
+module.dispose();
