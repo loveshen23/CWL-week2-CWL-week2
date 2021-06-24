@@ -473,4 +473,245 @@ function test_core() {
     module.f32x4.pmin(module.v128.const(v128_bytes), module.v128.const(v128_bytes)),
     module.f32x4.pmax(module.v128.const(v128_bytes), module.v128.const(v128_bytes)),
     module.f32x4.ceil(module.v128.const(v128_bytes), module.v128.const(v128_bytes)),
-    module.f32x4.floor(module.v128.c
+    module.f32x4.floor(module.v128.const(v128_bytes), module.v128.const(v128_bytes)),
+    module.f32x4.trunc(module.v128.const(v128_bytes), module.v128.const(v128_bytes)),
+    module.f32x4.nearest(module.v128.const(v128_bytes), module.v128.const(v128_bytes)),
+    module.f64x2.add(module.v128.const(v128_bytes), module.v128.const(v128_bytes)),
+    module.f64x2.sub(module.v128.const(v128_bytes), module.v128.const(v128_bytes)),
+    module.f64x2.mul(module.v128.const(v128_bytes), module.v128.const(v128_bytes)),
+    module.f64x2.div(module.v128.const(v128_bytes), module.v128.const(v128_bytes)),
+    module.f64x2.min(module.v128.const(v128_bytes), module.v128.const(v128_bytes)),
+    module.f64x2.max(module.v128.const(v128_bytes), module.v128.const(v128_bytes)),
+    module.f64x2.pmin(module.v128.const(v128_bytes), module.v128.const(v128_bytes)),
+    module.f64x2.pmax(module.v128.const(v128_bytes), module.v128.const(v128_bytes)),
+    module.f64x2.ceil(module.v128.const(v128_bytes), module.v128.const(v128_bytes)),
+    module.f64x2.floor(module.v128.const(v128_bytes), module.v128.const(v128_bytes)),
+    module.f64x2.trunc(module.v128.const(v128_bytes), module.v128.const(v128_bytes)),
+    module.f64x2.nearest(module.v128.const(v128_bytes), module.v128.const(v128_bytes)),
+    module.i8x16.narrow_i16x8_s(module.v128.const(v128_bytes), module.v128.const(v128_bytes)),
+    module.i8x16.narrow_i16x8_u(module.v128.const(v128_bytes), module.v128.const(v128_bytes)),
+    module.i16x8.narrow_i32x4_s(module.v128.const(v128_bytes), module.v128.const(v128_bytes)),
+    module.i16x8.narrow_i32x4_u(module.v128.const(v128_bytes), module.v128.const(v128_bytes)),
+    module.i8x16.swizzle(module.v128.const(v128_bytes), module.v128.const(v128_bytes)),
+    // SIMD lane manipulation
+    module.i8x16.extract_lane_s(module.v128.const(v128_bytes), 1),
+    module.i8x16.extract_lane_u(module.v128.const(v128_bytes), 1),
+    module.i16x8.extract_lane_s(module.v128.const(v128_bytes), 1),
+    module.i16x8.extract_lane_u(module.v128.const(v128_bytes), 1),
+    module.i32x4.extract_lane(module.v128.const(v128_bytes), 1),
+    module.i64x2.extract_lane(module.v128.const(v128_bytes), 1),
+    module.f32x4.extract_lane(module.v128.const(v128_bytes), 1),
+    module.f64x2.extract_lane(module.v128.const(v128_bytes), 1),
+    module.i16x8.replace_lane(module.v128.const(v128_bytes), 1, module.i32.const(42)),
+    module.i8x16.replace_lane(module.v128.const(v128_bytes), 1, module.i32.const(42)),
+    module.i32x4.replace_lane(module.v128.const(v128_bytes), 1, module.i32.const(42)),
+    module.i64x2.replace_lane(module.v128.const(v128_bytes), 1, module.i64.const(42, 43)),
+    module.f32x4.replace_lane(module.v128.const(v128_bytes), 1, module.f32.const(42)),
+    module.f64x2.replace_lane(module.v128.const(v128_bytes), 1, module.f64.const(42)),
+    // SIMD shift
+    module.i8x16.shl(module.v128.const(v128_bytes), module.i32.const(1)),
+    module.i8x16.shr_s(module.v128.const(v128_bytes), module.i32.const(1)),
+    module.i8x16.shr_u(module.v128.const(v128_bytes), module.i32.const(1)),
+    module.i16x8.shl(module.v128.const(v128_bytes), module.i32.const(1)),
+    module.i16x8.shr_s(module.v128.const(v128_bytes), module.i32.const(1)),
+    module.i16x8.shr_u(module.v128.const(v128_bytes), module.i32.const(1)),
+    module.i32x4.shl(module.v128.const(v128_bytes), module.i32.const(1)),
+    module.i32x4.shr_s(module.v128.const(v128_bytes), module.i32.const(1)),
+    module.i32x4.shr_u(module.v128.const(v128_bytes), module.i32.const(1)),
+    module.i64x2.shl(module.v128.const(v128_bytes), module.i32.const(1)),
+    module.i64x2.shr_s(module.v128.const(v128_bytes), module.i32.const(1)),
+    module.i64x2.shr_u(module.v128.const(v128_bytes), module.i32.const(1)),
+    // SIMD load
+    module.v128.load8_splat(0, 1, module.i32.const(128)),
+    module.v128.load16_splat(16, 1, module.i32.const(128)),
+    module.v128.load32_splat(16, 4, module.i32.const(128)),
+    module.v128.load64_splat(0, 4, module.i32.const(128)),
+    module.v128.load8x8_s(0, 8, module.i32.const(128)),
+    module.v128.load8x8_u(0, 8, module.i32.const(128)),
+    module.v128.load16x4_s(0, 8, module.i32.const(128)),
+    module.v128.load16x4_u(0, 8, module.i32.const(128)),
+    module.v128.load32x2_s(0, 8, module.i32.const(128)),
+    module.v128.load32x2_u(0, 8, module.i32.const(128)),
+    module.v128.load32_zero(0, 4, module.i32.const(128)),
+    module.v128.load64_zero(0, 8, module.i32.const(128)),
+    // SIMD load/store lane
+    module.v128.load8_lane(0, 1, 0, module.i32.const(128), module.v128.const(v128_bytes)),
+    module.v128.load8_lane(1, 1, 15, module.i32.const(128), module.v128.const(v128_bytes)),
+    module.v128.load16_lane(0, 2, 0, module.i32.const(128), module.v128.const(v128_bytes)),
+    module.v128.load16_lane(2, 1, 7, module.i32.const(128), module.v128.const(v128_bytes)),
+    module.v128.load32_lane(0, 4, 0, module.i32.const(128), module.v128.const(v128_bytes)),
+    module.v128.load32_lane(4, 2, 3, module.i32.const(128), module.v128.const(v128_bytes)),
+    module.v128.load64_lane(0, 8, 0, module.i32.const(128), module.v128.const(v128_bytes)),
+    module.v128.load64_lane(8, 4, 1, module.i32.const(128), module.v128.const(v128_bytes)),
+    module.v128.store8_lane(0, 1, 0, module.i32.const(128), module.v128.const(v128_bytes)),
+    module.v128.store8_lane(1, 1, 15, module.i32.const(128), module.v128.const(v128_bytes)),
+    module.v128.store16_lane(0, 2, 0, module.i32.const(128), module.v128.const(v128_bytes)),
+    module.v128.store16_lane(2, 1, 7, module.i32.const(128), module.v128.const(v128_bytes)),
+    module.v128.store32_lane(0, 4, 0, module.i32.const(128), module.v128.const(v128_bytes)),
+    module.v128.store32_lane(4, 2, 3, module.i32.const(128), module.v128.const(v128_bytes)),
+    module.v128.store64_lane(0, 8, 0, module.i32.const(128), module.v128.const(v128_bytes)),
+    module.v128.store64_lane(8, 4, 1, module.i32.const(128), module.v128.const(v128_bytes)),
+    // Other SIMD
+    module.i8x16.shuffle(module.v128.const(v128_bytes), module.v128.const(v128_bytes), v128_bytes),
+    module.v128.bitselect(module.v128.const(v128_bytes), module.v128.const(v128_bytes), module.v128.const(v128_bytes)),
+    // Bulk memory
+    module.memory.init(0, makeInt32(1024), makeInt32(0), makeInt32(12)),
+    module.data.drop(0),
+    module.memory.copy(makeInt32(2048), makeInt32(1024), makeInt32(12)),
+    module.memory.fill(makeInt32(0), makeInt32(42), makeInt32(1024)),
+    // All the rest
+    module.block('', []), // block with no name
+    module.if(temp1, temp2, temp3),
+    module.if(temp4, temp5),
+    module.loop("in", makeInt32(0)),
+    module.loop(null, makeInt32(0)),
+    module.break("the-value", temp6, temp7),
+    module.break("the-nothing", makeInt32(2)),
+    module.break("the-value", null, makeInt32(3)),
+    module.break("the-nothing"),
+    module.switch([ "the-value" ], "the-value", temp8, temp9),
+    module.switch([ "the-nothing" ], "the-nothing", makeInt32(2)),
+    module.i32.eqz( // check the output type of the call node
+      module.call("kitchen()sinker", [ makeInt32(13), makeInt64(37, 0), makeFloat32(1.3), makeFloat64(3.7) ], binaryen.i32)
+    ),
+    module.i32.eqz( // check the output type of the call node
+      module.i32.trunc_s.f32(
+        module.call("an-imported", [ makeInt32(13), makeFloat64(3.7) ], binaryen.f32)
+      )
+    ),
+    module.i32.eqz( // check the output type of the call node
+      module.call_indirect("t0", makeInt32(2449), [ makeInt32(13), makeInt64(37, 0), makeFloat32(1.3), makeFloat64(3.7) ], iIfF, binaryen.i32)
+    ),
+    module.drop(module.local.get(0, binaryen.i32)),
+    module.local.set(0, makeInt32(101)),
+    module.drop(module.local.tee(0, makeInt32(102), binaryen.i32)),
+    module.i32.load(0, 0, makeInt32(1)),
+    module.i64.load16_s(2, 1, makeInt32(8)),
+    module.f32.load(0, 0, makeInt32(2)),
+    module.f64.load(2, 8, makeInt32(9)),
+    module.i32.store(0, 0, temp13, temp14),
+    module.i64.store(2, 4, temp15, temp16),
+    module.select(temp10, temp11, temp12),
+    module.return(makeInt32(1337)),
+    // Tail Call
+    module.return_call("kitchen()sinker", [ makeInt32(13), makeInt64(37, 0), makeFloat32(1.3), makeFloat64(3.7) ], binaryen.i32),
+    module.return_call_indirect("t0", makeInt32(2449), [ makeInt32(13), makeInt64(37, 0), makeFloat32(1.3), makeFloat64(3.7) ], iIfF, binaryen.i32),
+
+    // Reference types
+    module.ref.is_null(module.ref.null(binaryen.externref)),
+    module.ref.is_null(module.ref.null(binaryen.funcref)),
+    module.ref.is_null(module.ref.func("kitchen()sinker", binaryen.funcref)),
+    module.select(temp10, module.ref.null(binaryen.funcref), module.ref.func("kitchen()sinker", binaryen.funcref), binaryen.funcref),
+
+    // GC
+    module.ref.eq(module.ref.null(binaryen.eqref), module.ref.null(binaryen.eqref)),
+
+    // Exception handling
+    module.try(
+      '',
+      module.throw("a-tag", [module.i32.const(0)]),
+      ["a-tag"],
+      [module.drop(module.i32.pop())],
+      ''
+    ),
+
+    // Atomics
+    module.i32.atomic.store(0,
+      module.i32.const(0),
+      module.i32.atomic.load(0,
+        module.i32.const(0)
+      )
+    ),
+    module.drop(
+      module.memory.atomic.wait32(
+        module.i32.const(0),
+        module.i32.const(0),
+        module.i64.const(0)
+      )
+    ),
+    module.drop(
+      module.memory.atomic.notify(
+        module.i32.const(0),
+        module.i32.const(0)
+      )
+    ),
+    module.atomic.fence(),
+
+    // Tuples
+    module.tuple.make(
+      [ makeInt32(13), makeInt64(37, 0), makeFloat32(1.3), makeFloat64(3.7) ]
+    ),
+    module.tuple.extract(
+      module.tuple.make(
+        [ makeInt32(13), makeInt64(37, 0), makeFloat32(1.3), makeFloat64(3.7) ]
+      ), 2
+    ),
+
+    // Pop
+    module.i32.pop(),
+    module.i64.pop(),
+    module.f32.pop(),
+    module.f64.pop(),
+    module.v128.pop(),
+    module.funcref.pop(),
+    module.externref.pop(),
+    module.anyref.pop(),
+    module.eqref.pop(),
+    module.i31ref.pop(),
+    module.structref.pop(),
+    module.stringref.pop(),
+    module.stringview_wtf8.pop(),
+    module.stringview_wtf16.pop(),
+    module.stringview_iter.pop(),
+
+    // Memory
+    module.memory.size(),
+    module.memory.grow(makeInt32(0)),
+
+    // GC
+    module.i31.new(
+      module.i32.const(0)
+    ),
+    module.i31.get_s(
+      module.i31.new(
+        module.i32.const(1)
+      )
+    ),
+    module.i31.get_u(
+      module.i31.new(
+        module.i32.const(2)
+      )
+    ),
+
+    // Other
+    module.nop(),
+    module.unreachable(),
+  ];
+
+  // Test expression utility
+  console.log("getExpressionInfo=" + JSON.stringify(cleanInfo(binaryen.getExpressionInfo(valueList[3]))));
+  console.log(binaryen.emitText(valueList[3])); // test printing a standalone expression
+
+  console.log("getExpressionInfo(i32.const)=" + JSON.stringify(binaryen.getExpressionInfo(module.i32.const(5))));
+  console.log("getExpressionInfo(i64.const)=" + JSON.stringify(binaryen.getExpressionInfo(module.i64.const(6, 7))));
+  console.log("getExpressionInfo(f32.const)=" + JSON.stringify(binaryen.getExpressionInfo(module.f32.const(8.5))));
+  console.log("getExpressionInfo(f64.const)=" + JSON.stringify(binaryen.getExpressionInfo(module.f64.const(9.5))));
+  var elements = binaryen.getExpressionInfo(
+    module.tuple.make([ makeInt32(13), makeInt64(37, 0), makeFloat32(1.3), makeFloat64(3.7) ])
+  ).operands;
+  for (var i = 0; i < elements.length; i++) {
+    console.log("getExpressionInfo(tuple[" + i + "])=" + JSON.stringify(binaryen.getExpressionInfo(elements[i])));
+  }
+
+  // Make the main body of the function. and one block with a return value, one without
+  var value = module.block("the-value", valueList);
+  var droppedValue = module.drop(value);
+  var nothing = module.block("the-nothing", [ droppedValue ]);
+  var body = module.block("the-body", [ nothing, makeInt32(42) ]);
+
+  // Create the function
+  var sinker = module.addFunction("kitchen()sinker", iIfF, binaryen.i32, [ binaryen.i32 ], body);
+
+  // Create a global
+  var initExpr = module.i32.const(1);
+  var global = module.addGlobal("a-global", b
