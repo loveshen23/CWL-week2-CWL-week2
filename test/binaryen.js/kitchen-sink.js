@@ -1000,4 +1000,180 @@ function test_binaries() {
   module.dispose();
 }
 
-fu
+function test_interpret() {
+  // create a simple module with a start method that prints a number, and interpret it, printing that number.
+  module = new binaryen.Module();
+
+  module.addFunctionImport("print-i32", "spectest", "print", binaryen.i32, binaryen.none);
+  var call = module.call("print-i32", [ makeInt32(1234) ], binaryen.None);
+  var starter = module.addFunction("starter", binaryen.none, binaryen.none, [], call);
+  module.setStart(starter);
+
+  console.log(module.emitText());
+  assert(module.validate());
+  module.interpret();
+  module.dispose();
+}
+
+function test_nonvalid() {
+  // create a module that fails to validate
+  module = new binaryen.Module();
+
+  var func = module.addFunction("func", binaryen.none, binaryen.none, [ binaryen.i32 ],
+    module.local.set(0, makeInt64(1234, 0)) // wrong type!
+  );
+
+  console.log(module.emitText());
+  console.log("validation: " + module.validate());
+
+  module.dispose();
+}
+
+function test_parsing() {
+  var text;
+
+  // create a module and write it to text
+  module = new binaryen.Module();
+  module.setFeatures(binaryen.Features.All);
+
+  var ii = binaryen.createType([binaryen.i32, binaryen.i32]);
+  var x = module.local.get(0, binaryen.i32),
+      y = module.local.get(1, binaryen.i32);
+  var add = module.i32.add(x, y);
+  var adder = module.addFunction("adder", ii, binaryen.i32, [], add);
+  var initExpr = module.i32.const(3);
+  var global = module.addGlobal("a-global", binaryen.i32, false, initExpr)
+  var tag = module.addTag("a-tag", binaryen.i32, binaryen.none);
+  text = module.emitText();
+  module.dispose();
+  module = null;
+  console.log('test_parsing text:\n' + text);
+
+  text = text.replace('adder', 'ADD_ER');
+
+  var module2 = binaryen.parseText(text);
+  module2.setFeatures(binaryen.Features.All);
+  assert(module2.validate());
+  console.log("module loaded from text form:");
+  console.log(module2.emitText());
+  module2.dispose();
+}
+
+function test_internals() {
+  console.log('sizeof Literal: ' + binaryen['_BinaryenSizeofLiteral']());
+}
+
+function test_for_each() {
+  module = new binaryen.Module();
+
+  var funcNames = [ "fn0", "fn1", "fn2" ];
+
+  var fns = [
+    module.addFunction(funcNames[0], binaryen.none, binaryen.none, [], module.nop()),
+    module.addFunction(funcNames[1], binaryen.none, binaryen.none, [], module.nop()),
+    module.addFunction(funcNames[2], binaryen.none, binaryen.none, [], module.nop())
+  ];
+
+  var i;
+  for (i = 0; i < module.getNumFunctions(); i++) {
+    assert(module.getFunctionByIndex(i) === fns[i]);
+  }
+
+  var exps = [
+    module.addFunctionExport(funcNames[0], "export0"),
+    module.addFunctionExport(funcNames[1], "export1"),
+    module.addFunctionExport(funcNames[2], "export2")
+  ];
+
+  for (i = 0; i < module.getNumExports(); i++) {
+    assert(module.getExportByIndex(i) === exps[i]);
+  }
+
+  var expected_offsets = [10, 125, null];
+  var expected_data = ["hello, world", "segment data 2", "hello, passive"];
+  var expected_passive = [false, false, true];
+
+  var glos = [
+    module.addGlobal("a-global", binaryen.i32, false, module.i32.const(expected_offsets[1])),
+    module.addGlobal("a-global2", binaryen.i32, false, module.i32.const(2)),
+    module.addGlobal("a-global3", binaryen.i32, false, module.i32.const(3))
+  ];
+
+  for (i = 0; i < module.getNumGlobals(); i++) {
+    assert(module.getGlobalByIndex(i) === glos[i]);
+  }
+
+  module.setMemory(1, 256, "mem", [
+    {
+      passive: expected_passive[0],
+      offset: module.i32.const(expected_offsets[0]),
+      data: expected_data[0].split('').map(function(x) { return x.charCodeAt(0) })
+    },
+    {
+      passive: expected_passive[1],
+      offset: module.global.get("a-global"),
+      data: expected_data[1].split('').map(function(x) { return x.charCodeAt(0) })
+    },
+    {
+      passive: expected_passive[2],
+      offset: expected_offsets[2],
+      data: expected_data[2].split('').map(function(x) { return x.charCodeAt(0) })
+    }
+  ], false);
+  for (i = 0; i < module.getNumMemorySegments(); i++) {
+    var segment = module.getMemorySegmentInfoByIndex(i);
+    assert(expected_offsets[i] === segment.offset);
+    var data8 = new Uint8Array(segment.data);
+    var str = String.fromCharCode.apply(null, data8);
+    assert(expected_data[i] === str);
+    assert(expected_passive[i] === segment.passive);
+  }
+
+  module.addTable("t0", 1, 0xffffffff);
+  var ftable = module.getTable("t0");
+  var constExprRef = module.i32.const(0);
+  module.addActiveElementSegment("t0", "e0", funcNames, constExprRef);
+
+  var tableInfo = binaryen.getTableInfo(ftable);
+  assert("" === tableInfo.module);
+  assert("" === tableInfo.base);
+
+  var segments = module.getTableSegments(ftable);
+  assert(1 === segments.length);
+
+  var elemSegment = binaryen.getElementSegmentInfo(segments[0]);
+  assert(constExprRef === elemSegment.offset);
+  assert(3 === elemSegment.data.length);
+  for (i = 0; i < elemSegment.data.length; i++) {
+    assert(funcNames[i] === elemSegment.data[i]);
+  }
+
+  console.log(module.emitText());
+  module.dispose();
+}
+
+function test_expression_info() {
+  module = new binaryen.Module();
+  module.setMemory(1, 1, null);
+
+  // Issue #2392
+  console.log("getExpressionInfo(memory.grow)=" + JSON.stringify(binaryen.getExpressionInfo(module.memory.grow(1))));
+
+  // Issue #2396
+  console.log("getExpressionInfo(switch)=" + JSON.stringify(binaryen.getExpressionInfo(module.switch([ "label" ], "label", 0))));
+
+  module.dispose();
+}
+
+test_types();
+test_features();
+test_ids();
+test_core();
+test_relooper();
+test_binaries();
+test_interpret();
+test_nonvalid();
+test_parsing();
+test_internals();
+test_for_each();
+test_expression_info();
