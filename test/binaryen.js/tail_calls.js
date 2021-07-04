@@ -33,4 +33,5 @@ console.log(
 );
 
 console.log(
-  binaryen.getExpressionInfo(binaryen.get
+  binaryen.getExpressionInfo(binaryen.getFunctionInfo(bar).body).isReturn
+);
