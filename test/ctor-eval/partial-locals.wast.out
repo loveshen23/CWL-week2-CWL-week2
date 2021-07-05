@@ -1,0 +1,7 @@
+
+(module
+ (type $none_=>_none (func))
+ (import "import" "import" (func $import))
+ (global $sp (mut i32) (i32.const 104))
+ (memory $0 256 256)
+ (data (i32.const 10) "__s______________")
