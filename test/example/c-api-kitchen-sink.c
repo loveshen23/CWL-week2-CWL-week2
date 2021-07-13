@@ -489,4 +489,237 @@ void test_core() {
   //   )
   //   (catch_all)
   // )
-  BinaryenExpressionRef tryBody = Bina
+  BinaryenExpressionRef tryBody = BinaryenThrow(
+    module, "a-tag", (BinaryenExpressionRef[]){makeInt32(module, 0)}, 1);
+  BinaryenExpressionRef catchBody =
+    BinaryenDrop(module, BinaryenPop(module, BinaryenTypeInt32()));
+  BinaryenExpressionRef catchAllBody = BinaryenNop(module);
+  const char* catchTags[] = {"a-tag"};
+  BinaryenExpressionRef catchBodies[] = {catchBody, catchAllBody};
+  const char* emptyCatchTags[] = {};
+  BinaryenExpressionRef emptyCatchBodies[] = {};
+  BinaryenExpressionRef nopCatchBody[] = {BinaryenNop(module)};
+
+  BinaryenType i32 = BinaryenTypeInt32();
+  BinaryenType i64 = BinaryenTypeInt64();
+  BinaryenType f32 = BinaryenTypeFloat32();
+  BinaryenType f64 = BinaryenTypeFloat64();
+  BinaryenType v128 = BinaryenTypeVec128();
+  BinaryenType i8Array;
+  BinaryenType i16Array;
+  BinaryenType i32Struct;
+  {
+    TypeBuilderRef tb = TypeBuilderCreate(3);
+    TypeBuilderSetArrayType(
+      tb, 0, BinaryenTypeInt32(), BinaryenPackedTypeInt8(), true);
+    TypeBuilderSetArrayType(
+      tb, 1, BinaryenTypeInt32(), BinaryenPackedTypeInt16(), true);
+    TypeBuilderSetStructType(
+      tb,
+      2,
+      (BinaryenType[]){BinaryenTypeInt32()},
+      (BinaryenPackedType[]){BinaryenPackedTypeNotPacked()},
+      (bool[]){true},
+      1);
+    BinaryenHeapType builtHeapTypes[3];
+    TypeBuilderBuildAndDispose(tb, (BinaryenHeapType*)&builtHeapTypes, 0, 0);
+    i8Array = BinaryenTypeFromHeapType(builtHeapTypes[0], true);
+    i16Array = BinaryenTypeFromHeapType(builtHeapTypes[1], true);
+    i32Struct = BinaryenTypeFromHeapType(builtHeapTypes[2], true);
+  }
+
+  // Memory. Add it before creating any memory-using instructions.
+
+  const char* segments[] = {"hello, world", "I am passive"};
+  bool segmentPassive[] = {false, true};
+  BinaryenExpressionRef segmentOffsets[] = {
+    BinaryenConst(module, BinaryenLiteralInt32(10)), NULL};
+  BinaryenIndex segmentSizes[] = {12, 12};
+  BinaryenSetMemory(module,
+                    1,
+                    256,
+                    "mem",
+                    segments,
+                    segmentPassive,
+                    segmentOffsets,
+                    segmentSizes,
+                    2,
+                    1,
+                    0,
+                    "0");
+
+  BinaryenExpressionRef valueList[] = {
+    // Unary
+    makeUnary(module, BinaryenClzInt32(), i32),
+    makeUnary(module, BinaryenCtzInt64(), i64),
+    makeUnary(module, BinaryenPopcntInt32(), i32),
+    makeUnary(module, BinaryenNegFloat32(), f32),
+    makeUnary(module, BinaryenAbsFloat64(), f64),
+    makeUnary(module, BinaryenCeilFloat32(), f32),
+    makeUnary(module, BinaryenFloorFloat64(), f64),
+    makeUnary(module, BinaryenTruncFloat32(), f32),
+    makeUnary(module, BinaryenNearestFloat32(), f32),
+    makeUnary(module, BinaryenSqrtFloat64(), f64),
+    makeUnary(module, BinaryenEqZInt32(), i32),
+    makeUnary(module, BinaryenExtendSInt32(), i32),
+    makeUnary(module, BinaryenExtendUInt32(), i32),
+    makeUnary(module, BinaryenWrapInt64(), i64),
+    makeUnary(module, BinaryenTruncSFloat32ToInt32(), f32),
+    makeUnary(module, BinaryenTruncSFloat32ToInt64(), f32),
+    makeUnary(module, BinaryenTruncUFloat32ToInt32(), f32),
+    makeUnary(module, BinaryenTruncUFloat32ToInt64(), f32),
+    makeUnary(module, BinaryenTruncSFloat64ToInt32(), f64),
+    makeUnary(module, BinaryenTruncSFloat64ToInt64(), f64),
+    makeUnary(module, BinaryenTruncUFloat64ToInt32(), f64),
+    makeUnary(module, BinaryenTruncUFloat64ToInt64(), f64),
+    makeUnary(module, BinaryenTruncSatSFloat32ToInt32(), f32),
+    makeUnary(module, BinaryenTruncSatSFloat32ToInt64(), f32),
+    makeUnary(module, BinaryenTruncSatUFloat32ToInt32(), f32),
+    makeUnary(module, BinaryenTruncSatUFloat32ToInt64(), f32),
+    makeUnary(module, BinaryenTruncSatSFloat64ToInt32(), f64),
+    makeUnary(module, BinaryenTruncSatSFloat64ToInt64(), f64),
+    makeUnary(module, BinaryenTruncSatUFloat64ToInt32(), f64),
+    makeUnary(module, BinaryenTruncSatUFloat64ToInt64(), f64),
+    makeUnary(module, BinaryenReinterpretFloat32(), f32),
+    makeUnary(module, BinaryenReinterpretFloat64(), f64),
+    makeUnary(module, BinaryenConvertSInt32ToFloat32(), i32),
+    makeUnary(module, BinaryenConvertSInt32ToFloat64(), i32),
+    makeUnary(module, BinaryenConvertUInt32ToFloat32(), i32),
+    makeUnary(module, BinaryenConvertUInt32ToFloat64(), i32),
+    makeUnary(module, BinaryenConvertSInt64ToFloat32(), i64),
+    makeUnary(module, BinaryenConvertSInt64ToFloat64(), i64),
+    makeUnary(module, BinaryenConvertUInt64ToFloat32(), i64),
+    makeUnary(module, BinaryenConvertUInt64ToFloat64(), i64),
+    makeUnary(module, BinaryenPromoteFloat32(), f32),
+    makeUnary(module, BinaryenDemoteFloat64(), f64),
+    makeUnary(module, BinaryenReinterpretInt32(), i32),
+    makeUnary(module, BinaryenReinterpretInt64(), i64),
+    makeUnary(module, BinaryenSplatVecI8x16(), i32),
+    makeUnary(module, BinaryenSplatVecI16x8(), i32),
+    makeUnary(module, BinaryenSplatVecI32x4(), i32),
+    makeUnary(module, BinaryenSplatVecI64x2(), i64),
+    makeUnary(module, BinaryenSplatVecF32x4(), f32),
+    makeUnary(module, BinaryenSplatVecF64x2(), f64),
+    makeUnary(module, BinaryenNotVec128(), v128),
+    makeUnary(module, BinaryenAnyTrueVec128(), v128),
+    makeUnary(module, BinaryenPopcntVecI8x16(), v128),
+    makeUnary(module, BinaryenAbsVecI8x16(), v128),
+    makeUnary(module, BinaryenNegVecI8x16(), v128),
+    makeUnary(module, BinaryenAllTrueVecI8x16(), v128),
+    makeUnary(module, BinaryenBitmaskVecI8x16(), v128),
+    makeUnary(module, BinaryenAbsVecI16x8(), v128),
+    makeUnary(module, BinaryenNegVecI16x8(), v128),
+    makeUnary(module, BinaryenAllTrueVecI16x8(), v128),
+    makeUnary(module, BinaryenBitmaskVecI16x8(), v128),
+    makeUnary(module, BinaryenAbsVecI32x4(), v128),
+    makeUnary(module, BinaryenNegVecI32x4(), v128),
+    makeUnary(module, BinaryenAllTrueVecI32x4(), v128),
+    makeUnary(module, BinaryenBitmaskVecI32x4(), v128),
+    makeUnary(module, BinaryenAbsVecI64x2(), v128),
+    makeUnary(module, BinaryenNegVecI64x2(), v128),
+    makeUnary(module, BinaryenAllTrueVecI64x2(), v128),
+    makeUnary(module, BinaryenBitmaskVecI64x2(), v128),
+    makeUnary(module, BinaryenAbsVecF32x4(), v128),
+    makeUnary(module, BinaryenNegVecF32x4(), v128),
+    makeUnary(module, BinaryenSqrtVecF32x4(), v128),
+    makeUnary(module, BinaryenAbsVecF64x2(), v128),
+    makeUnary(module, BinaryenNegVecF64x2(), v128),
+    makeUnary(module, BinaryenSqrtVecF64x2(), v128),
+    makeUnary(module, BinaryenTruncSatSVecF32x4ToVecI32x4(), v128),
+    makeUnary(module, BinaryenTruncSatUVecF32x4ToVecI32x4(), v128),
+    makeUnary(module, BinaryenConvertSVecI32x4ToVecF32x4(), v128),
+    makeUnary(module, BinaryenConvertUVecI32x4ToVecF32x4(), v128),
+    makeUnary(module, BinaryenExtendLowSVecI8x16ToVecI16x8(), v128),
+    makeUnary(module, BinaryenExtendHighSVecI8x16ToVecI16x8(), v128),
+    makeUnary(module, BinaryenExtendLowUVecI8x16ToVecI16x8(), v128),
+    makeUnary(module, BinaryenExtendHighUVecI8x16ToVecI16x8(), v128),
+    makeUnary(module, BinaryenExtendLowSVecI16x8ToVecI32x4(), v128),
+    makeUnary(module, BinaryenExtendHighSVecI16x8ToVecI32x4(), v128),
+    makeUnary(module, BinaryenExtendLowUVecI16x8ToVecI32x4(), v128),
+    makeUnary(module, BinaryenExtendHighUVecI16x8ToVecI32x4(), v128),
+    makeUnary(module, BinaryenExtendLowSVecI32x4ToVecI64x2(), v128),
+    makeUnary(module, BinaryenExtendHighSVecI32x4ToVecI64x2(), v128),
+    makeUnary(module, BinaryenExtendLowUVecI32x4ToVecI64x2(), v128),
+    makeUnary(module, BinaryenExtendHighUVecI32x4ToVecI64x2(), v128),
+    makeUnary(module, BinaryenConvertLowSVecI32x4ToVecF64x2(), v128),
+    makeUnary(module, BinaryenConvertLowUVecI32x4ToVecF64x2(), v128),
+    makeUnary(module, BinaryenTruncSatZeroSVecF64x2ToVecI32x4(), v128),
+    makeUnary(module, BinaryenTruncSatZeroUVecF64x2ToVecI32x4(), v128),
+    makeUnary(module, BinaryenDemoteZeroVecF64x2ToVecF32x4(), v128),
+    makeUnary(module, BinaryenPromoteLowVecF32x4ToVecF64x2(), v128),
+    makeUnary(module, BinaryenRelaxedTruncSVecF32x4ToVecI32x4(), v128),
+    makeUnary(module, BinaryenRelaxedTruncUVecF32x4ToVecI32x4(), v128),
+    makeUnary(module, BinaryenRelaxedTruncZeroSVecF64x2ToVecI32x4(), v128),
+    makeUnary(module, BinaryenRelaxedTruncZeroUVecF64x2ToVecI32x4(), v128),
+    // Binary
+    makeBinary(module, BinaryenAddInt32(), i32),
+    makeBinary(module, BinaryenSubFloat64(), f64),
+    makeBinary(module, BinaryenDivSInt32(), i32),
+    makeBinary(module, BinaryenDivUInt64(), i64),
+    makeBinary(module, BinaryenRemSInt64(), i64),
+    makeBinary(module, BinaryenRemUInt32(), i32),
+    makeBinary(module, BinaryenAndInt32(), i32),
+    makeBinary(module, BinaryenOrInt64(), i64),
+    makeBinary(module, BinaryenXorInt32(), i32),
+    makeBinary(module, BinaryenShlInt64(), i64),
+    makeBinary(module, BinaryenShrUInt64(), i64),
+    makeBinary(module, BinaryenShrSInt32(), i32),
+    makeBinary(module, BinaryenRotLInt32(), i32),
+    makeBinary(module, BinaryenRotRInt64(), i64),
+    makeBinary(module, BinaryenDivFloat32(), f32),
+    makeBinary(module, BinaryenCopySignFloat64(), f64),
+    makeBinary(module, BinaryenMinFloat32(), f32),
+    makeBinary(module, BinaryenMaxFloat64(), f64),
+    makeBinary(module, BinaryenEqInt32(), i32),
+    makeBinary(module, BinaryenNeFloat32(), f32),
+    makeBinary(module, BinaryenLtSInt32(), i32),
+    makeBinary(module, BinaryenLtUInt64(), i64),
+    makeBinary(module, BinaryenLeSInt64(), i64),
+    makeBinary(module, BinaryenLeUInt32(), i32),
+    makeBinary(module, BinaryenGtSInt64(), i64),
+    makeBinary(module, BinaryenGtUInt32(), i32),
+    makeBinary(module, BinaryenGeSInt32(), i32),
+    makeBinary(module, BinaryenGeUInt64(), i64),
+    makeBinary(module, BinaryenLtFloat32(), f32),
+    makeBinary(module, BinaryenLeFloat64(), f64),
+    makeBinary(module, BinaryenGtFloat64(), f64),
+    makeBinary(module, BinaryenGeFloat32(), f32),
+    makeBinary(module, BinaryenEqVecI8x16(), v128),
+    makeBinary(module, BinaryenNeVecI8x16(), v128),
+    makeBinary(module, BinaryenLtSVecI8x16(), v128),
+    makeBinary(module, BinaryenLtUVecI8x16(), v128),
+    makeBinary(module, BinaryenGtSVecI8x16(), v128),
+    makeBinary(module, BinaryenGtUVecI8x16(), v128),
+    makeBinary(module, BinaryenLeSVecI8x16(), v128),
+    makeBinary(module, BinaryenLeUVecI8x16(), v128),
+    makeBinary(module, BinaryenGeSVecI8x16(), v128),
+    makeBinary(module, BinaryenGeUVecI8x16(), v128),
+    makeBinary(module, BinaryenEqVecI16x8(), v128),
+    makeBinary(module, BinaryenNeVecI16x8(), v128),
+    makeBinary(module, BinaryenLtSVecI16x8(), v128),
+    makeBinary(module, BinaryenLtUVecI16x8(), v128),
+    makeBinary(module, BinaryenGtSVecI16x8(), v128),
+    makeBinary(module, BinaryenGtUVecI16x8(), v128),
+    makeBinary(module, BinaryenLeSVecI16x8(), v128),
+    makeBinary(module, BinaryenLeUVecI16x8(), v128),
+    makeBinary(module, BinaryenGeSVecI16x8(), v128),
+    makeBinary(module, BinaryenGeUVecI16x8(), v128),
+    makeBinary(module, BinaryenEqVecI32x4(), v128),
+    makeBinary(module, BinaryenNeVecI32x4(), v128),
+    makeBinary(module, BinaryenLtSVecI32x4(), v128),
+    makeBinary(module, BinaryenLtUVecI32x4(), v128),
+    makeBinary(module, BinaryenGtSVecI32x4(), v128),
+    makeBinary(module, BinaryenGtUVecI32x4(), v128),
+    makeBinary(module, BinaryenLeSVecI32x4(), v128),
+    makeBinary(module, BinaryenLeUVecI32x4(), v128),
+    makeBinary(module, BinaryenGeSVecI32x4(), v128),
+    makeBinary(module, BinaryenGeUVecI32x4(), v128),
+    makeBinary(module, BinaryenEqVecI64x2(), v128),
+    makeBinary(module, BinaryenNeVecI64x2(), v128),
+    makeBinary(module, BinaryenLtSVecI64x2(), v128),
+    makeBinary(module, BinaryenGtSVecI64x2(), v128),
+    makeBinary(module, BinaryenLeSVecI64x2(), v128),
+    makeBinary(module, BinaryenGeSVecI64x2(), v128),
+    makeBinary(module, BinaryenEqVecF32x4(), v128),
+    makeBinary(module, BinaryenNeVecF32x4(), v128),
+    makeBinary(module, BinaryenLtVecF32x4(), v128)
