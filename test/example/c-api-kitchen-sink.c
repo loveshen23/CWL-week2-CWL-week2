@@ -1237,4 +1237,334 @@ void test_core() {
     BinaryenStringMeasure(
       module,
       BinaryenStringMeasureWTF8(),
-    
+      BinaryenGlobalGet(module, "string-global", BinaryenTypeStringref())),
+    BinaryenStringMeasure(
+      module,
+      BinaryenStringMeasureWTF16(),
+      BinaryenGlobalGet(module, "string-global", BinaryenTypeStringref())),
+    BinaryenStringMeasure(
+      module,
+      BinaryenStringMeasureIsUSV(),
+      BinaryenGlobalGet(module, "string-global", BinaryenTypeStringref())),
+    BinaryenStringMeasure(
+      module,
+      BinaryenStringMeasureWTF16View(),
+      BinaryenStringAs(
+        module,
+        BinaryenStringAsWTF16(),
+        BinaryenGlobalGet(module, "string-global", BinaryenTypeStringref()))),
+    BinaryenStringEncode(
+      module,
+      BinaryenStringEncodeUTF8(),
+      BinaryenGlobalGet(module, "string-global", BinaryenTypeStringref()),
+      makeInt32(module, 0),
+      0),
+    BinaryenStringEncode(
+      module,
+      BinaryenStringEncodeWTF8(),
+      BinaryenGlobalGet(module, "string-global", BinaryenTypeStringref()),
+      makeInt32(module, 0),
+      0),
+    BinaryenStringEncode(
+      module,
+      BinaryenStringEncodeWTF16(),
+      BinaryenGlobalGet(module, "string-global", BinaryenTypeStringref()),
+      makeInt32(module, 0),
+      0),
+    BinaryenStringEncode(
+      module,
+      BinaryenStringEncodeUTF8Array(),
+      BinaryenGlobalGet(module, "string-global", BinaryenTypeStringref()),
+      BinaryenGlobalGet(module, "i8Array-global", i8Array),
+      makeInt32(module, 0)),
+    BinaryenStringEncode(
+      module,
+      BinaryenStringEncodeWTF8Array(),
+      BinaryenGlobalGet(module, "string-global", BinaryenTypeStringref()),
+      BinaryenGlobalGet(module, "i8Array-global", i8Array),
+      makeInt32(module, 0)),
+    BinaryenStringEncode(
+      module,
+      BinaryenStringEncodeWTF16Array(),
+      BinaryenGlobalGet(module, "string-global", BinaryenTypeStringref()),
+      BinaryenGlobalGet(module, "i16Array-global", i16Array),
+      makeInt32(module, 0)),
+    BinaryenStringConcat(
+      module,
+      BinaryenGlobalGet(module, "string-global", BinaryenTypeStringref()),
+      BinaryenGlobalGet(module, "string-global", BinaryenTypeStringref())),
+    BinaryenStringEq(
+      module,
+      BinaryenStringEqEqual(),
+      BinaryenGlobalGet(module, "string-global", BinaryenTypeStringref()),
+      BinaryenGlobalGet(module, "string-global", BinaryenTypeStringref())),
+    BinaryenStringEq(
+      module,
+      BinaryenStringEqCompare(),
+      BinaryenGlobalGet(module, "string-global", BinaryenTypeStringref()),
+      BinaryenGlobalGet(module, "string-global", BinaryenTypeStringref())),
+    BinaryenStringAs(
+      module,
+      BinaryenStringAsWTF8(),
+      BinaryenGlobalGet(module, "string-global", BinaryenTypeStringref())),
+    BinaryenStringAs(
+      module,
+      BinaryenStringAsWTF16(),
+      BinaryenGlobalGet(module, "string-global", BinaryenTypeStringref())),
+    BinaryenStringAs(
+      module,
+      BinaryenStringAsIter(),
+      BinaryenGlobalGet(module, "string-global", BinaryenTypeStringref())),
+    BinaryenStringWTF8Advance(
+      module,
+      BinaryenStringAs(
+        module,
+        BinaryenStringAsWTF8(),
+        BinaryenGlobalGet(module, "string-global", BinaryenTypeStringref())),
+      makeInt32(module, 0),
+      makeInt32(module, 0)),
+    BinaryenStringWTF16Get(
+      module,
+      BinaryenStringAs(
+        module,
+        BinaryenStringAsWTF16(),
+        BinaryenGlobalGet(module, "string-global", BinaryenTypeStringref())),
+      makeInt32(module, 0)),
+    BinaryenStringIterNext(
+      module,
+      BinaryenStringAs(
+        module,
+        BinaryenStringAsIter(),
+        BinaryenGlobalGet(module, "string-global", BinaryenTypeStringref()))),
+    BinaryenStringIterMove(
+      module,
+      BinaryenStringIterMoveAdvance(),
+      BinaryenStringAs(
+        module,
+        BinaryenStringAsIter(),
+        BinaryenGlobalGet(module, "string-global", BinaryenTypeStringref())),
+      makeInt32(module, 1)),
+    BinaryenStringIterMove(
+      module,
+      BinaryenStringIterMoveRewind(),
+      BinaryenStringAs(
+        module,
+        BinaryenStringAsIter(),
+        BinaryenGlobalGet(module, "string-global", BinaryenTypeStringref())),
+      makeInt32(module, 1)),
+    BinaryenStringSliceWTF(
+      module,
+      BinaryenStringSliceWTF8(),
+      BinaryenStringAs(
+        module,
+        BinaryenStringAsWTF8(),
+        BinaryenGlobalGet(module, "string-global", BinaryenTypeStringref())),
+      makeInt32(module, 0),
+      makeInt32(module, 0)),
+    BinaryenStringSliceWTF(
+      module,
+      BinaryenStringSliceWTF16(),
+      BinaryenStringAs(
+        module,
+        BinaryenStringAsWTF16(),
+        BinaryenGlobalGet(module, "string-global", BinaryenTypeStringref())),
+      makeInt32(module, 0),
+      makeInt32(module, 0)),
+    BinaryenStringSliceIter(
+      module,
+      BinaryenStringAs(
+        module,
+        BinaryenStringAsIter(),
+        BinaryenGlobalGet(module, "string-global", BinaryenTypeStringref())),
+      makeInt32(module, 0)),
+    // Other
+    BinaryenNop(module),
+    BinaryenUnreachable(module),
+  };
+
+  BinaryenExpressionPrint(
+    valueList[3]); // test printing a standalone expression
+
+  // Make the main body of the function. and one block with a return value, one
+  // without
+  BinaryenExpressionRef value =
+    BinaryenBlock(module,
+                  "the-value",
+                  valueList,
+                  sizeof(valueList) / sizeof(BinaryenExpressionRef),
+                  BinaryenTypeAuto());
+  BinaryenExpressionRef droppedValue = BinaryenDrop(module, value);
+  BinaryenExpressionRef nothing =
+    BinaryenBlock(module, "the-nothing", &droppedValue, 1, -1);
+  BinaryenExpressionRef bodyList[] = {nothing, makeInt32(module, 42)};
+  BinaryenExpressionRef body =
+    BinaryenBlock(module, "the-body", bodyList, 2, BinaryenTypeAuto());
+
+  // Create the function
+  BinaryenType localTypes[] = {BinaryenTypeInt32(), BinaryenTypeExternref()};
+  BinaryenFunctionRef sinker = BinaryenAddFunction(
+    module, "kitchen()sinker", iIfF, BinaryenTypeInt32(), localTypes, 2, body);
+
+  // Globals
+
+  BinaryenAddGlobal(
+    module, "a-global", BinaryenTypeInt32(), 0, makeInt32(module, 7));
+  BinaryenAddGlobal(module,
+                    "a-mutable-global",
+                    BinaryenTypeFloat32(),
+                    1,
+                    makeFloat32(module, 7.5));
+  BinaryenAddGlobal(
+    module,
+    "i8Array-global",
+    i8Array,
+    true,
+    BinaryenArrayNew(
+      module, BinaryenTypeGetHeapType(i8Array), makeInt32(module, 0), 0));
+  BinaryenAddGlobal(
+    module,
+    "i16Array-global",
+    i16Array,
+    true,
+    BinaryenArrayNew(
+      module, BinaryenTypeGetHeapType(i16Array), makeInt32(module, 0), 0));
+  BinaryenAddGlobal(
+    module,
+    "i32Struct-global",
+    i32Struct,
+    true,
+    BinaryenStructNew(module, 0, 0, BinaryenTypeGetHeapType(i32Struct)));
+  BinaryenAddGlobal(module,
+                    "string-global",
+                    BinaryenTypeStringref(),
+                    true,
+                    BinaryenStringConst(module, ""));
+
+  // Imports
+
+  BinaryenType iF_[2] = {BinaryenTypeInt32(), BinaryenTypeFloat64()};
+  BinaryenType iF = BinaryenTypeCreate(iF_, 2);
+  BinaryenAddFunctionImport(
+    module, "an-imported", "module", "base", iF, BinaryenTypeFloat32());
+
+  // Exports
+
+  BinaryenAddFunctionExport(module, "kitchen()sinker", "kitchen_sinker");
+
+  // Function table. One per module
+  const char* funcNames[] = {BinaryenFunctionGetName(sinker)};
+  BinaryenAddTable(module, "0", 1, 1, BinaryenTypeFuncref());
+  BinaryenAddActiveElementSegment(
+    module,
+    "0",
+    "0",
+    funcNames,
+    1,
+    BinaryenConst(module, BinaryenLiteralInt32(0)));
+  BinaryenAddPassiveElementSegment(module, "passive", funcNames, 1);
+  BinaryenAddPassiveElementSegment(module, "p2", funcNames, 1);
+  BinaryenRemoveElementSegment(module, "p2");
+
+  BinaryenExpressionRef funcrefExpr1 =
+    BinaryenRefFunc(module, "kitchen()sinker", BinaryenTypeFuncref());
+
+  BinaryenExpressionPrint(BinaryenTableSet(
+    module, "0", BinaryenConst(module, BinaryenLiteralInt32(0)), funcrefExpr1));
+
+  BinaryenExpressionRef funcrefExpr2 =
+    BinaryenTableGet(module,
+                     "0",
+                     BinaryenConst(module, BinaryenLiteralInt32(0)),
+                     BinaryenTypeFuncref());
+
+  BinaryenExpressionPrint(funcrefExpr2);
+
+  BinaryenExpressionRef tablesize = BinaryenTableSize(module, "0");
+  BinaryenExpressionPrint(tablesize);
+
+  const char* table = BinaryenTableSizeGetTable(tablesize);
+  BinaryenTableSizeSetTable(tablesize, table);
+
+  BinaryenExpressionRef valueExpr =
+    BinaryenRefNull(module, BinaryenTypeNullFuncref());
+  BinaryenExpressionRef sizeExpr = makeInt32(module, 0);
+  BinaryenExpressionRef growExpr =
+    BinaryenTableGrow(module, "0", valueExpr, sizeExpr);
+  BinaryenExpressionPrint(growExpr);
+
+  // Start function. One per module
+
+  BinaryenFunctionRef starter = BinaryenAddFunction(module,
+                                                    "starter",
+                                                    BinaryenTypeNone(),
+                                                    BinaryenTypeNone(),
+                                                    NULL,
+                                                    0,
+                                                    BinaryenNop(module));
+  BinaryenSetStart(module, starter);
+
+  // A bunch of our code needs drop(), auto-add it
+  BinaryenModuleAutoDrop(module);
+
+  BinaryenFeatures features = BinaryenFeatureAll();
+  BinaryenModuleSetFeatures(module, features);
+  assert(BinaryenModuleGetFeatures(module) == features);
+
+  // Print it out
+  BinaryenModulePrint(module);
+
+  // Verify it validates
+  assert(BinaryenModuleValidate(module));
+
+  // Clean up the module, which owns all the objects we created above
+  BinaryenModuleDispose(module);
+}
+
+void test_unreachable() {
+  BinaryenModuleRef module = BinaryenModuleCreate();
+  BinaryenExpressionRef body = BinaryenCallIndirect(module,
+                                                    "invalid-table",
+                                                    BinaryenUnreachable(module),
+                                                    NULL,
+                                                    0,
+                                                    BinaryenTypeNone(),
+                                                    BinaryenTypeInt64());
+  BinaryenFunctionRef fn = BinaryenAddFunction(module,
+                                               "unreachable-fn",
+                                               BinaryenTypeNone(),
+                                               BinaryenTypeInt32(),
+                                               NULL,
+                                               0,
+                                               body);
+
+  assert(BinaryenModuleValidate(module));
+  BinaryenModulePrint(module);
+  BinaryenModuleDispose(module);
+}
+
+BinaryenExpressionRef makeCallCheck(BinaryenModuleRef module, int x) {
+  BinaryenExpressionRef callOperands[] = {makeInt32(module, x)};
+  return BinaryenCall(module, "check", callOperands, 1, BinaryenTypeNone());
+}
+
+void test_relooper() {
+  BinaryenModuleRef module = BinaryenModuleCreate();
+  BinaryenType localTypes[] = {BinaryenTypeInt32()};
+
+  BinaryenAddFunctionImport(module,
+                            "check",
+                            "module",
+                            "check",
+                            BinaryenTypeInt32(),
+                            BinaryenTypeNone());
+
+  { // trivial: just one block
+    RelooperRef relooper = RelooperCreate(module);
+    RelooperBlockRef block =
+      RelooperAddBlock(relooper, makeCallCheck(module, 1337));
+    BinaryenExpressionRef body = RelooperRenderAndDispose(relooper, block, 0);
+    BinaryenFunctionRef sinker = BinaryenAddFunction(module,
+                                                     "just-one-block",
+                                                     BinaryenTypeNone(),
+                                                     BinaryenTypeNone(),
+                
