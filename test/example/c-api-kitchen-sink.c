@@ -1792,4 +1792,312 @@ void test_relooper() {
       BinaryenAddFunction(module,
                           "nontrivial-loop-plus-phi-to-head",
                           BinaryenTypeNone(),
-                          Binarye
+                          BinaryenTypeNone(),
+                          localTypes,
+                          1,
+                          body);
+  }
+  { // switch
+    RelooperRef relooper = RelooperCreate(module);
+    BinaryenExpressionRef temp = makeInt32(module, -99);
+    RelooperBlockRef block0 =
+      RelooperAddBlockWithSwitch(relooper, makeCallCheck(module, 0), temp);
+    // TODO: this example is not very good, the blocks should end in a |return|
+    // as otherwise they
+    //       fall through to each other. A relooper block should end in
+    //       something that stops control flow, if it doesn't have branches
+    //       going out
+    RelooperBlockRef block1 =
+      RelooperAddBlock(relooper, makeCallCheck(module, 1));
+    RelooperBlockRef block2 =
+      RelooperAddBlock(relooper, makeCallCheck(module, 2));
+    RelooperBlockRef block3 =
+      RelooperAddBlock(relooper, makeCallCheck(module, 3));
+    BinaryenIndex to_block1[] = {2, 5};
+    RelooperAddBranchForSwitch(block0, block1, to_block1, 2, NULL);
+    BinaryenIndex to_block2[] = {4};
+    RelooperAddBranchForSwitch(
+      block0, block2, to_block2, 1, makeDroppedInt32(module, 55));
+    RelooperAddBranchForSwitch(block0, block3, NULL, 0, NULL);
+    BinaryenExpressionRef body = RelooperRenderAndDispose(relooper, block0, 0);
+    BinaryenFunctionRef sinker = BinaryenAddFunction(module,
+                                                     "switch",
+                                                     BinaryenTypeNone(),
+                                                     BinaryenTypeNone(),
+                                                     localTypes,
+                                                     1,
+                                                     body);
+  }
+  { // duff's device
+    RelooperRef relooper = RelooperCreate(module);
+    RelooperBlockRef block0 =
+      RelooperAddBlock(relooper, makeCallCheck(module, 0));
+    RelooperBlockRef block1 =
+      RelooperAddBlock(relooper, makeCallCheck(module, 1));
+    RelooperBlockRef block2 =
+      RelooperAddBlock(relooper, makeCallCheck(module, 2));
+    RelooperAddBranch(block0, block1, makeInt32(module, 10), NULL);
+    RelooperAddBranch(block0, block2, NULL, NULL);
+    RelooperAddBranch(block1, block2, NULL, NULL);
+    RelooperAddBranch(block2, block1, NULL, NULL);
+    BinaryenExpressionRef body =
+      RelooperRenderAndDispose(relooper, block0, 3); // use $3 as the helper var
+    BinaryenType localTypes[] = {BinaryenTypeInt32(),
+                                 BinaryenTypeInt32(),
+                                 BinaryenTypeInt64(),
+                                 BinaryenTypeInt32(),
+                                 BinaryenTypeFloat32(),
+                                 BinaryenTypeFloat64(),
+                                 BinaryenTypeInt32()};
+    BinaryenFunctionRef sinker =
+      BinaryenAddFunction(module,
+                          "duffs-device",
+                          BinaryenTypeNone(),
+                          BinaryenTypeNone(),
+                          localTypes,
+                          sizeof(localTypes) / sizeof(BinaryenType),
+                          body);
+  }
+
+  { // return in a block
+    RelooperRef relooper = RelooperCreate(module);
+    BinaryenExpressionRef listList[] = {
+      makeCallCheck(module, 42),
+      BinaryenReturn(module, makeInt32(module, 1337))};
+    BinaryenExpressionRef list =
+      BinaryenBlock(module, "the-list", listList, 2, -1);
+    RelooperBlockRef block = RelooperAddBlock(relooper, list);
+    BinaryenExpressionRef body = RelooperRenderAndDispose(relooper, block, 0);
+    BinaryenFunctionRef sinker = BinaryenAddFunction(module,
+                                                     "return",
+                                                     BinaryenTypeNone(),
+                                                     BinaryenTypeInt32(),
+                                                     localTypes,
+                                                     1,
+                                                     body);
+  }
+
+  printf("raw:\n");
+  BinaryenModulePrint(module);
+
+  assert(BinaryenModuleValidate(module));
+
+  BinaryenModuleOptimize(module);
+
+  assert(BinaryenModuleValidate(module));
+
+  printf("optimized:\n");
+  BinaryenModulePrint(module);
+
+  BinaryenModuleDispose(module);
+}
+
+void test_binaries() {
+  char buffer[1024];
+  size_t size;
+
+  { // create a module and write it to binary
+    BinaryenModuleRef module = BinaryenModuleCreate();
+    BinaryenType ii_[2] = {BinaryenTypeInt32(), BinaryenTypeInt32()};
+    BinaryenType ii = BinaryenTypeCreate(ii_, 2);
+    BinaryenExpressionRef x = BinaryenLocalGet(module, 0, BinaryenTypeInt32()),
+                          y = BinaryenLocalGet(module, 1, BinaryenTypeInt32());
+    BinaryenExpressionRef add =
+      BinaryenBinary(module, BinaryenAddInt32(), x, y);
+    BinaryenFunctionRef adder = BinaryenAddFunction(
+      module, "adder", ii, BinaryenTypeInt32(), NULL, 0, add);
+    BinaryenSetDebugInfo(1);                          // include names section
+    size = BinaryenModuleWrite(module, buffer, 1024); // write out the module
+    BinaryenSetDebugInfo(0);
+    BinaryenModuleDispose(module);
+  }
+
+  assert(size > 0);
+  assert(size < 512); // this is a tiny module
+
+  // read the module from the binary
+  BinaryenModuleRef module = BinaryenModuleRead(buffer, size);
+
+  // validate, print, and free
+  assert(BinaryenModuleValidate(module));
+  printf("module loaded from binary form:\n");
+  BinaryenModulePrint(module);
+
+  // write the s-expr representation of the module.
+  BinaryenModuleWriteText(module, buffer, 1024);
+  printf("module s-expr printed (in memory):\n%s\n", buffer);
+
+  // writ the s-expr representation to a pointer which is managed by the
+  // caller
+  char* text = BinaryenModuleAllocateAndWriteText(module);
+  printf("module s-expr printed (in memory, caller-owned):\n%s\n", text);
+  free(text);
+
+  BinaryenModuleDispose(module);
+}
+
+void test_interpret() {
+  // create a simple module with a start method that prints a number, and
+  // interpret it, printing that number.
+  BinaryenModuleRef module = BinaryenModuleCreate();
+
+  BinaryenType iparams[2] = {BinaryenTypeInt32()};
+  BinaryenAddFunctionImport(module,
+                            "print-i32",
+                            "spectest",
+                            "print",
+                            BinaryenTypeInt32(),
+                            BinaryenTypeNone());
+
+  BinaryenExpressionRef callOperands[] = {makeInt32(module, 1234)};
+  BinaryenExpressionRef call =
+    BinaryenCall(module, "print-i32", callOperands, 1, BinaryenTypeNone());
+  BinaryenFunctionRef starter = BinaryenAddFunction(
+    module, "starter", BinaryenTypeNone(), BinaryenTypeNone(), NULL, 0, call);
+  BinaryenSetStart(module, starter);
+
+  BinaryenModulePrint(module);
+  assert(BinaryenModuleValidate(module));
+  BinaryenModuleInterpret(module);
+  BinaryenModuleDispose(module);
+}
+
+void test_nonvalid() {
+  // create a module that fails to validate
+  {
+    BinaryenModuleRef module = BinaryenModuleCreate();
+
+    BinaryenType localTypes[] = {BinaryenTypeInt32()};
+    BinaryenFunctionRef func = BinaryenAddFunction(
+      module,
+      "func",
+      BinaryenTypeNone(),
+      BinaryenTypeNone(),
+      localTypes,
+      1,
+      BinaryenLocalSet(module, 0, makeInt64(module, 1234)) // wrong type!
+    );
+
+    BinaryenModulePrint(module);
+    printf("validation: %d\n", BinaryenModuleValidate(module));
+
+    BinaryenModuleDispose(module);
+  }
+}
+
+void test_color_status() {
+  int i;
+
+  // save old state
+  const int old_state = BinaryenAreColorsEnabled();
+
+  // Check that we can set the state to both {0, 1}
+  for (i = 0; i <= 1; i++) {
+    BinaryenSetColorsEnabled(i);
+    assert(BinaryenAreColorsEnabled() == i);
+  }
+
+  BinaryenSetColorsEnabled(old_state);
+}
+
+void test_for_each() {
+  BinaryenIndex i;
+
+  BinaryenModuleRef module = BinaryenModuleCreate();
+  BinaryenFunctionRef fns[3] = {};
+  fns[0] = BinaryenAddFunction(module,
+                               "fn0",
+                               BinaryenTypeNone(),
+                               BinaryenTypeNone(),
+                               NULL,
+                               0,
+                               BinaryenNop(module));
+  fns[1] = BinaryenAddFunction(module,
+                               "fn1",
+                               BinaryenTypeNone(),
+                               BinaryenTypeNone(),
+                               NULL,
+                               0,
+                               BinaryenNop(module));
+  fns[2] = BinaryenAddFunction(module,
+                               "fn2",
+                               BinaryenTypeNone(),
+                               BinaryenTypeNone(),
+                               NULL,
+                               0,
+                               BinaryenNop(module));
+  {
+    for (i = 0; i < BinaryenGetNumFunctions(module); i++) {
+      assert(BinaryenGetFunctionByIndex(module, i) == fns[i]);
+    }
+
+    BinaryenExportRef exps[3] = {0};
+    exps[0] = BinaryenAddFunctionExport(module, "fn0", "export0");
+    exps[1] = BinaryenAddFunctionExport(module, "fn1", "export1");
+    exps[2] = BinaryenAddFunctionExport(module, "fn2", "export2");
+
+    for (i = 0; i < BinaryenGetNumExports(module); i++) {
+      assert(BinaryenGetExportByIndex(module, i) == exps[i]);
+    }
+
+    const char* segments[] = {"hello, world", "segment data 2"};
+    const uint32_t expected_offsets[] = {10, 125};
+    bool segmentPassive[] = {false, false};
+    BinaryenIndex segmentSizes[] = {12, 14};
+
+    BinaryenExpressionRef segmentOffsets[] = {
+      BinaryenConst(module, BinaryenLiteralInt32(expected_offsets[0])),
+      BinaryenGlobalGet(module, "a-global", BinaryenTypeInt32())};
+    BinaryenSetMemory(module,
+                      1,
+                      256,
+                      "mem",
+                      segments,
+                      segmentPassive,
+                      segmentOffsets,
+                      segmentSizes,
+                      2,
+                      0,
+                      0,
+                      "0");
+    BinaryenAddGlobal(module,
+                      "a-global",
+                      BinaryenTypeInt32(),
+                      0,
+                      makeInt32(module, expected_offsets[1]));
+
+    for (i = 0; i < BinaryenGetNumMemorySegments(module); i++) {
+      char out[15] = {};
+      assert(BinaryenGetMemorySegmentByteOffset(module, i) ==
+             expected_offsets[i]);
+      assert(BinaryenGetMemorySegmentByteLength(module, i) == segmentSizes[i]);
+      BinaryenCopyMemorySegmentData(module, i, out);
+      assert(0 == strcmp(segments[i], out));
+    }
+  }
+  {
+    const char* funcNames[] = {BinaryenFunctionGetName(fns[0]),
+                               BinaryenFunctionGetName(fns[1]),
+                               BinaryenFunctionGetName(fns[2])};
+    BinaryenExpressionRef constExprRef =
+      BinaryenConst(module, BinaryenLiteralInt32(0));
+    BinaryenAddTable(module, "0", 1, 1, BinaryenTypeFuncref());
+    BinaryenAddActiveElementSegment(
+      module, "0", "0", funcNames, 3, constExprRef);
+    assert(1 == BinaryenGetNumElementSegments(module));
+    BinaryenElementSegmentRef segment =
+      BinaryenGetElementSegmentByIndex(module, 0);
+    assert(constExprRef == BinaryenElementSegmentGetOffset(segment));
+    for (i = 0; i != BinaryenElementSegmentGetLength(segment); ++i) {
+      const char* str = BinaryenElementSegmentGetData(segment, i);
+      assert(0 == strcmp(funcNames[i], str));
+    }
+  }
+  BinaryenModulePrint(module);
+  BinaryenModuleDispose(module);
+}
+
+void test_func_opt() {
+  BinaryenModuleRef module = BinaryenModuleCreate();
+  BinaryenType ii_[2] = {BinaryenTypeInt32(), BinaryenTypeInt32()};
+  BinaryenType ii = BinaryenTypeCreate(ii_, 2);
