@@ -1567,4 +1567,229 @@ void test_relooper() {
                                                      "just-one-block",
                                                      BinaryenTypeNone(),
                                                      BinaryenTypeNone(),
-                
+                                                     localTypes,
+                                                     1,
+                                                     body);
+  }
+  { // two blocks
+    RelooperRef relooper = RelooperCreate(module);
+    RelooperBlockRef block0 =
+      RelooperAddBlock(relooper, makeCallCheck(module, 0));
+    RelooperBlockRef block1 =
+      RelooperAddBlock(relooper, makeCallCheck(module, 1));
+    RelooperAddBranch(
+      block0, block1, NULL, NULL); // no condition, no code on branch
+    BinaryenExpressionRef body = RelooperRenderAndDispose(relooper, block0, 0);
+    BinaryenFunctionRef sinker = BinaryenAddFunction(module,
+                                                     "two-blocks",
+                                                     BinaryenTypeNone(),
+                                                     BinaryenTypeNone(),
+                                                     localTypes,
+                                                     1,
+                                                     body);
+  }
+  { // two blocks with code between them
+    RelooperRef relooper = RelooperCreate(module);
+    RelooperBlockRef block0 =
+      RelooperAddBlock(relooper, makeCallCheck(module, 0));
+    RelooperBlockRef block1 =
+      RelooperAddBlock(relooper, makeCallCheck(module, 1));
+    RelooperAddBranch(
+      block0, block1, NULL, makeDroppedInt32(module, 77)); // code on branch
+    BinaryenExpressionRef body = RelooperRenderAndDispose(relooper, block0, 0);
+    BinaryenFunctionRef sinker = BinaryenAddFunction(module,
+                                                     "two-blocks-plus-code",
+                                                     BinaryenTypeNone(),
+                                                     BinaryenTypeNone(),
+                                                     localTypes,
+                                                     1,
+                                                     body);
+  }
+  { // two blocks in a loop
+    RelooperRef relooper = RelooperCreate(module);
+    RelooperBlockRef block0 =
+      RelooperAddBlock(relooper, makeCallCheck(module, 0));
+    RelooperBlockRef block1 =
+      RelooperAddBlock(relooper, makeCallCheck(module, 1));
+    RelooperAddBranch(block0, block1, NULL, NULL);
+    RelooperAddBranch(block1, block0, NULL, NULL);
+    BinaryenExpressionRef body = RelooperRenderAndDispose(relooper, block0, 0);
+    BinaryenFunctionRef sinker = BinaryenAddFunction(module,
+                                                     "loop",
+                                                     BinaryenTypeNone(),
+                                                     BinaryenTypeNone(),
+                                                     localTypes,
+                                                     1,
+                                                     body);
+  }
+  { // two blocks in a loop with codes
+    RelooperRef relooper = RelooperCreate(module);
+    RelooperBlockRef block0 =
+      RelooperAddBlock(relooper, makeCallCheck(module, 0));
+    RelooperBlockRef block1 =
+      RelooperAddBlock(relooper, makeCallCheck(module, 1));
+    RelooperAddBranch(block0, block1, NULL, makeDroppedInt32(module, 33));
+    RelooperAddBranch(block1, block0, NULL, makeDroppedInt32(module, -66));
+    BinaryenExpressionRef body = RelooperRenderAndDispose(relooper, block0, 0);
+    BinaryenFunctionRef sinker = BinaryenAddFunction(module,
+                                                     "loop-plus-code",
+                                                     BinaryenTypeNone(),
+                                                     BinaryenTypeNone(),
+                                                     localTypes,
+                                                     1,
+                                                     body);
+  }
+  { // split
+    RelooperRef relooper = RelooperCreate(module);
+    RelooperBlockRef block0 =
+      RelooperAddBlock(relooper, makeCallCheck(module, 0));
+    RelooperBlockRef block1 =
+      RelooperAddBlock(relooper, makeCallCheck(module, 1));
+    RelooperBlockRef block2 =
+      RelooperAddBlock(relooper, makeCallCheck(module, 2));
+    RelooperAddBranch(block0, block1, makeInt32(module, 55), NULL);
+    RelooperAddBranch(block0, block2, NULL, NULL);
+    BinaryenExpressionRef body = RelooperRenderAndDispose(relooper, block0, 0);
+    BinaryenFunctionRef sinker = BinaryenAddFunction(module,
+                                                     "split",
+                                                     BinaryenTypeNone(),
+                                                     BinaryenTypeNone(),
+                                                     localTypes,
+                                                     1,
+                                                     body);
+  }
+  { // split + code
+    RelooperRef relooper = RelooperCreate(module);
+    RelooperBlockRef block0 =
+      RelooperAddBlock(relooper, makeCallCheck(module, 0));
+    RelooperBlockRef block1 =
+      RelooperAddBlock(relooper, makeCallCheck(module, 1));
+    RelooperBlockRef block2 =
+      RelooperAddBlock(relooper, makeCallCheck(module, 2));
+    BinaryenExpressionRef temp = makeDroppedInt32(module, 10);
+    RelooperAddBranch(block0, block1, makeInt32(module, 55), temp);
+    RelooperAddBranch(block0, block2, NULL, makeDroppedInt32(module, 20));
+    BinaryenExpressionRef body = RelooperRenderAndDispose(relooper, block0, 0);
+    BinaryenFunctionRef sinker = BinaryenAddFunction(module,
+                                                     "split-plus-code",
+                                                     BinaryenTypeNone(),
+                                                     BinaryenTypeNone(),
+                                                     localTypes,
+                                                     1,
+                                                     body);
+  }
+  { // if
+    RelooperRef relooper = RelooperCreate(module);
+    RelooperBlockRef block0 =
+      RelooperAddBlock(relooper, makeCallCheck(module, 0));
+    RelooperBlockRef block1 =
+      RelooperAddBlock(relooper, makeCallCheck(module, 1));
+    RelooperBlockRef block2 =
+      RelooperAddBlock(relooper, makeCallCheck(module, 2));
+    RelooperAddBranch(block0, block1, makeInt32(module, 55), NULL);
+    RelooperAddBranch(block0, block2, NULL, NULL);
+    RelooperAddBranch(block1, block2, NULL, NULL);
+    BinaryenExpressionRef body = RelooperRenderAndDispose(relooper, block0, 0);
+    BinaryenFunctionRef sinker = BinaryenAddFunction(module,
+                                                     "if",
+                                                     BinaryenTypeNone(),
+                                                     BinaryenTypeNone(),
+                                                     localTypes,
+                                                     1,
+                                                     body);
+  }
+  { // if + code
+    RelooperRef relooper = RelooperCreate(module);
+    RelooperBlockRef block0 =
+      RelooperAddBlock(relooper, makeCallCheck(module, 0));
+    RelooperBlockRef block1 =
+      RelooperAddBlock(relooper, makeCallCheck(module, 1));
+    RelooperBlockRef block2 =
+      RelooperAddBlock(relooper, makeCallCheck(module, 2));
+    BinaryenExpressionRef temp = makeDroppedInt32(module, -1);
+    RelooperAddBranch(block0, block1, makeInt32(module, 55), temp);
+    RelooperAddBranch(block0, block2, NULL, makeDroppedInt32(module, -2));
+    RelooperAddBranch(block1, block2, NULL, makeDroppedInt32(module, -3));
+    BinaryenExpressionRef body = RelooperRenderAndDispose(relooper, block0, 0);
+    BinaryenFunctionRef sinker = BinaryenAddFunction(module,
+                                                     "if-plus-code",
+                                                     BinaryenTypeNone(),
+                                                     BinaryenTypeNone(),
+                                                     localTypes,
+                                                     1,
+                                                     body);
+  }
+  { // if-else
+    RelooperRef relooper = RelooperCreate(module);
+    RelooperBlockRef block0 =
+      RelooperAddBlock(relooper, makeCallCheck(module, 0));
+    RelooperBlockRef block1 =
+      RelooperAddBlock(relooper, makeCallCheck(module, 1));
+    RelooperBlockRef block2 =
+      RelooperAddBlock(relooper, makeCallCheck(module, 2));
+    RelooperBlockRef block3 =
+      RelooperAddBlock(relooper, makeCallCheck(module, 3));
+    RelooperAddBranch(block0, block1, makeInt32(module, 55), NULL);
+    RelooperAddBranch(block0, block2, NULL, NULL);
+    RelooperAddBranch(block1, block3, NULL, NULL);
+    RelooperAddBranch(block2, block3, NULL, NULL);
+    BinaryenExpressionRef body = RelooperRenderAndDispose(relooper, block0, 0);
+    BinaryenFunctionRef sinker = BinaryenAddFunction(module,
+                                                     "if-else",
+                                                     BinaryenTypeNone(),
+                                                     BinaryenTypeNone(),
+                                                     localTypes,
+                                                     1,
+                                                     body);
+  }
+  { // loop+tail
+    RelooperRef relooper = RelooperCreate(module);
+    RelooperBlockRef block0 =
+      RelooperAddBlock(relooper, makeCallCheck(module, 0));
+    RelooperBlockRef block1 =
+      RelooperAddBlock(relooper, makeCallCheck(module, 1));
+    RelooperBlockRef block2 =
+      RelooperAddBlock(relooper, makeCallCheck(module, 2));
+    RelooperAddBranch(block0, block1, NULL, NULL);
+    RelooperAddBranch(block1, block0, makeInt32(module, 10), NULL);
+    RelooperAddBranch(block1, block2, NULL, NULL);
+    BinaryenExpressionRef body = RelooperRenderAndDispose(relooper, block0, 0);
+    BinaryenFunctionRef sinker = BinaryenAddFunction(module,
+                                                     "loop-tail",
+                                                     BinaryenTypeNone(),
+                                                     BinaryenTypeNone(),
+                                                     localTypes,
+                                                     1,
+                                                     body);
+  }
+  { // nontrivial loop + phi to head
+    RelooperRef relooper = RelooperCreate(module);
+    RelooperBlockRef block0 =
+      RelooperAddBlock(relooper, makeCallCheck(module, 0));
+    RelooperBlockRef block1 =
+      RelooperAddBlock(relooper, makeCallCheck(module, 1));
+    RelooperBlockRef block2 =
+      RelooperAddBlock(relooper, makeCallCheck(module, 2));
+    RelooperBlockRef block3 =
+      RelooperAddBlock(relooper, makeCallCheck(module, 3));
+    RelooperBlockRef block4 =
+      RelooperAddBlock(relooper, makeCallCheck(module, 4));
+    RelooperBlockRef block5 =
+      RelooperAddBlock(relooper, makeCallCheck(module, 5));
+    RelooperBlockRef block6 =
+      RelooperAddBlock(relooper, makeCallCheck(module, 6));
+    RelooperAddBranch(block0, block1, NULL, makeDroppedInt32(module, 10));
+    RelooperAddBranch(block1, block2, makeInt32(module, -2), NULL);
+    RelooperAddBranch(block1, block6, NULL, makeDroppedInt32(module, 20));
+    RelooperAddBranch(block2, block3, makeInt32(module, -6), NULL);
+    RelooperAddBranch(block2, block1, NULL, makeDroppedInt32(module, 30));
+    RelooperAddBranch(block3, block4, makeInt32(module, -10), NULL);
+    RelooperAddBranch(block3, block5, NULL, NULL);
+    RelooperAddBranch(block4, block5, NULL, NULL);
+    RelooperAddBranch(block5, block6, NULL, makeDroppedInt32(module, 40));
+    BinaryenExpressionRef body = RelooperRenderAndDispose(relooper, block0, 0);
+    BinaryenFunctionRef sinker =
+      BinaryenAddFunction(module,
+                          "nontrivial-loop-plus-phi-to-head",
+                          BinaryenTypeNone(),
+                          Binarye
