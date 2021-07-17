@@ -2101,3 +2101,267 @@ void test_func_opt() {
   BinaryenModuleRef module = BinaryenModuleCreate();
   BinaryenType ii_[2] = {BinaryenTypeInt32(), BinaryenTypeInt32()};
   BinaryenType ii = BinaryenTypeCreate(ii_, 2);
+  BinaryenExpressionRef x = BinaryenConst(module, BinaryenLiteralInt32(1)),
+                        y = BinaryenConst(module, BinaryenLiteralInt32(3));
+  BinaryenExpressionRef add = BinaryenBinary(module, BinaryenAddInt32(), x, y);
+  BinaryenFunctionRef adder = BinaryenAddFunction(
+    module, "adder", BinaryenTypeNone(), BinaryenTypeInt32(), NULL, 0, add);
+
+  puts("module with a function to optimize:");
+  BinaryenModulePrint(module);
+
+  assert(BinaryenModuleValidate(module));
+
+  BinaryenFunctionOptimize(adder, module);
+
+  assert(BinaryenModuleValidate(module));
+
+  puts("optimized:");
+  BinaryenModulePrint(module);
+
+  BinaryenModuleDispose(module);
+}
+
+void test_typesystem() {
+  BinaryenTypeSystem defaultTypeSystem = BinaryenGetTypeSystem();
+  assert(defaultTypeSystem == BinaryenTypeSystemIsorecursive());
+  BinaryenSetTypeSystem(BinaryenTypeSystemNominal());
+  assert(BinaryenGetTypeSystem() == BinaryenTypeSystemNominal());
+  printf("BinaryenTypeSystemNominal: %d\n", BinaryenTypeSystemNominal());
+  BinaryenSetTypeSystem(BinaryenTypeSystemIsorecursive());
+  assert(BinaryenGetTypeSystem() == BinaryenTypeSystemIsorecursive());
+  printf("BinaryenTypeSystemIsorecursive: %d\n",
+         BinaryenTypeSystemIsorecursive());
+  BinaryenSetTypeSystem(defaultTypeSystem);
+}
+
+void test_typebuilder() {
+  BinaryenTypeSystem defaultTypeSystem = BinaryenGetTypeSystem();
+  BinaryenSetTypeSystem(BinaryenTypeSystemIsorecursive());
+
+  printf("TypeBuilderErrorReasonSelfSupertype: %d\n",
+         TypeBuilderErrorReasonSelfSupertype());
+  printf("TypeBuilderErrorReasonInvalidSupertype: %d\n",
+         TypeBuilderErrorReasonInvalidSupertype());
+  printf("TypeBuilderErrorReasonForwardSupertypeReference: %d\n",
+         TypeBuilderErrorReasonForwardSupertypeReference());
+  printf("TypeBuilderErrorReasonForwardChildReference: %d\n",
+         TypeBuilderErrorReasonForwardChildReference());
+
+  TypeBuilderRef builder = TypeBuilderCreate(0);
+  assert(TypeBuilderGetSize(builder) == 0);
+  TypeBuilderGrow(builder, 5);
+  assert(TypeBuilderGetSize(builder) == 5);
+
+  // Create a recursive array of its own type
+  const BinaryenIndex tempArrayIndex = 0;
+  BinaryenHeapType tempArrayHeapType =
+    TypeBuilderGetTempHeapType(builder, tempArrayIndex);
+  BinaryenType tempArrayType =
+    TypeBuilderGetTempRefType(builder, tempArrayHeapType, true);
+  TypeBuilderSetArrayType(builder,
+                          tempArrayIndex,
+                          tempArrayType,
+                          BinaryenPackedTypeNotPacked(),
+                          true);
+
+  // Create a recursive struct with a field of its own type
+  const BinaryenIndex tempStructIndex = 1;
+  BinaryenHeapType tempStructHeapType =
+    TypeBuilderGetTempHeapType(builder, tempStructIndex);
+  BinaryenType tempStructType =
+    TypeBuilderGetTempRefType(builder, tempStructHeapType, true);
+  {
+    BinaryenType fieldTypes[] = {tempStructType};
+    BinaryenPackedType fieldPackedTypes[] = {BinaryenPackedTypeNotPacked()};
+    bool fieldMutables[] = {true};
+    TypeBuilderSetStructType(
+      builder, tempStructIndex, fieldTypes, fieldPackedTypes, fieldMutables, 1);
+  }
+
+  // Create a recursive signature with parameter and result including its own
+  // type
+  const BinaryenIndex tempSignatureIndex = 2;
+  BinaryenHeapType tempSignatureHeapType =
+    TypeBuilderGetTempHeapType(builder, tempSignatureIndex);
+  BinaryenType tempSignatureType =
+    TypeBuilderGetTempRefType(builder, tempSignatureHeapType, true);
+  {
+    BinaryenType paramTypes[] = {tempSignatureType, tempArrayType};
+    TypeBuilderSetSignatureType(
+      builder,
+      tempSignatureIndex,
+      TypeBuilderGetTempTupleType(builder, (BinaryenType*)&paramTypes, 2),
+      tempSignatureType);
+  }
+
+  // Create a basic heap type
+  const BinaryenIndex tempBasicIndex = 3;
+  TypeBuilderSetBasicHeapType(
+    builder, 3, BinaryenTypeGetHeapType(BinaryenTypeEqref()));
+  assert(TypeBuilderIsBasic(builder, tempBasicIndex));
+  assert(TypeBuilderGetBasic(builder, tempBasicIndex) ==
+         BinaryenTypeGetHeapType(BinaryenTypeEqref()));
+  assert(!TypeBuilderIsBasic(builder, tempArrayIndex));
+  assert(!TypeBuilderIsBasic(builder, tempStructIndex));
+  assert(!TypeBuilderIsBasic(builder, tempSignatureIndex));
+
+  // Create a subtype (with an additional immutable packed field)
+  const BinaryenIndex tempSubStructIndex = 4;
+  BinaryenHeapType tempSubStructHeapType =
+    TypeBuilderGetTempHeapType(builder, tempSubStructIndex);
+  BinaryenType tempSubStructType =
+    TypeBuilderGetTempRefType(builder, tempSubStructHeapType, true);
+  {
+    BinaryenType fieldTypes[] = {
+      tempStructType, BinaryenTypeInt32()}; // must repeat existing fields
+    BinaryenPackedType fieldPackedTypes[] = {BinaryenPackedTypeNotPacked(),
+                                             BinaryenPackedTypeInt8()};
+    bool fieldMutables[] = {true, false};
+    TypeBuilderSetStructType(builder,
+                             tempSubStructIndex,
+                             fieldTypes,
+                             fieldPackedTypes,
+                             fieldMutables,
+                             2);
+  }
+  TypeBuilderSetSubType(builder, tempSubStructIndex, tempStructHeapType);
+
+  // TODO: Rtts (post-MVP?)
+
+  // Build the type hierarchy and dispose the builder
+  BinaryenHeapType heapTypes[5];
+  BinaryenIndex errorIndex;
+  TypeBuilderErrorReason errorReason;
+  bool didBuildAndDispose = TypeBuilderBuildAndDispose(
+    builder, (BinaryenHeapType*)&heapTypes, &errorIndex, &errorReason);
+  assert(didBuildAndDispose);
+
+  BinaryenHeapType arrayHeapType = heapTypes[tempArrayIndex];
+  assert(!BinaryenHeapTypeIsBasic(arrayHeapType));
+  assert(!BinaryenHeapTypeIsSignature(arrayHeapType));
+  assert(!BinaryenHeapTypeIsStruct(arrayHeapType));
+  assert(BinaryenHeapTypeIsArray(arrayHeapType));
+  assert(!BinaryenHeapTypeIsBottom(arrayHeapType));
+  assert(BinaryenHeapTypeIsSubType(arrayHeapType, BinaryenHeapTypeArray()));
+  BinaryenType arrayType = BinaryenTypeFromHeapType(arrayHeapType, true);
+  assert(BinaryenArrayTypeGetElementType(arrayHeapType) == arrayType);
+  assert(BinaryenArrayTypeGetElementPackedType(arrayHeapType) ==
+         BinaryenPackedTypeNotPacked());
+  assert(BinaryenArrayTypeIsElementMutable(arrayHeapType));
+
+  BinaryenHeapType structHeapType = heapTypes[tempStructIndex];
+  assert(!BinaryenHeapTypeIsBasic(structHeapType));
+  assert(!BinaryenHeapTypeIsSignature(structHeapType));
+  assert(BinaryenHeapTypeIsStruct(structHeapType));
+  assert(!BinaryenHeapTypeIsArray(structHeapType));
+  assert(!BinaryenHeapTypeIsBottom(structHeapType));
+  assert(BinaryenHeapTypeIsSubType(structHeapType, BinaryenHeapTypeStruct()));
+  BinaryenType structType = BinaryenTypeFromHeapType(structHeapType, true);
+  assert(BinaryenStructTypeGetNumFields(structHeapType) == 1);
+  assert(BinaryenStructTypeGetFieldType(structHeapType, 0) == structType);
+  assert(BinaryenStructTypeGetFieldPackedType(structHeapType, 0) ==
+         BinaryenPackedTypeNotPacked());
+  assert(BinaryenStructTypeIsFieldMutable(structHeapType, 0));
+
+  BinaryenHeapType signatureHeapType = heapTypes[tempSignatureIndex];
+  assert(!BinaryenHeapTypeIsBasic(signatureHeapType));
+  assert(BinaryenHeapTypeIsSignature(signatureHeapType));
+  assert(!BinaryenHeapTypeIsStruct(signatureHeapType));
+  assert(!BinaryenHeapTypeIsArray(signatureHeapType));
+  assert(!BinaryenHeapTypeIsBottom(signatureHeapType));
+  assert(BinaryenHeapTypeIsSubType(signatureHeapType, BinaryenHeapTypeFunc()));
+  BinaryenType signatureType =
+    BinaryenTypeFromHeapType(signatureHeapType, true);
+  BinaryenType signatureParams =
+    BinaryenSignatureTypeGetParams(signatureHeapType);
+  assert(BinaryenTypeArity(signatureParams) == 2);
+  BinaryenType expandedSignatureParams[2];
+  BinaryenTypeExpand(signatureParams, (BinaryenType*)expandedSignatureParams);
+  assert(expandedSignatureParams[0] == signatureType);
+  assert(expandedSignatureParams[1] == arrayType);
+  BinaryenType signatureResults =
+    BinaryenSignatureTypeGetResults(signatureHeapType);
+  assert(BinaryenTypeArity(signatureResults) == 1);
+  assert(signatureResults == signatureType);
+
+  BinaryenHeapType basicHeapType = heapTypes[tempBasicIndex]; // = eq
+  assert(BinaryenHeapTypeIsBasic(basicHeapType));
+  assert(!BinaryenHeapTypeIsSignature(basicHeapType));
+  assert(!BinaryenHeapTypeIsStruct(basicHeapType));
+  assert(!BinaryenHeapTypeIsArray(basicHeapType));
+  assert(!BinaryenHeapTypeIsBottom(basicHeapType));
+  assert(BinaryenHeapTypeIsSubType(basicHeapType, BinaryenHeapTypeAny()));
+  BinaryenType basicType = BinaryenTypeFromHeapType(basicHeapType, true);
+
+  BinaryenHeapType subStructHeapType = heapTypes[tempSubStructIndex];
+  assert(!BinaryenHeapTypeIsBasic(subStructHeapType));
+  assert(!BinaryenHeapTypeIsSignature(subStructHeapType));
+  assert(BinaryenHeapTypeIsStruct(subStructHeapType));
+  assert(!BinaryenHeapTypeIsArray(subStructHeapType));
+  assert(!BinaryenHeapTypeIsBottom(subStructHeapType));
+  assert(
+    BinaryenHeapTypeIsSubType(subStructHeapType, BinaryenHeapTypeStruct()));
+  assert(BinaryenHeapTypeIsSubType(subStructHeapType, structHeapType));
+  BinaryenType subStructType =
+    BinaryenTypeFromHeapType(subStructHeapType, true);
+  assert(BinaryenStructTypeGetNumFields(subStructHeapType) == 2);
+  assert(BinaryenStructTypeGetFieldType(subStructHeapType, 0) == structType);
+  assert(BinaryenStructTypeGetFieldType(subStructHeapType, 1) ==
+         BinaryenTypeInt32());
+  assert(BinaryenStructTypeGetFieldPackedType(subStructHeapType, 0) ==
+         BinaryenPackedTypeNotPacked());
+  assert(BinaryenStructTypeGetFieldPackedType(subStructHeapType, 1) ==
+         BinaryenPackedTypeInt8());
+  assert(BinaryenStructTypeIsFieldMutable(subStructHeapType, 0));
+  assert(!BinaryenStructTypeIsFieldMutable(subStructHeapType, 1));
+
+  // Build a simple test module, validate and print it
+  BinaryenModuleRef module = BinaryenModuleCreate();
+  BinaryenModuleSetTypeName(module, arrayHeapType, "SomeArray");
+  BinaryenModuleSetTypeName(module, structHeapType, "SomeStruct");
+  BinaryenModuleSetFieldName(module, structHeapType, 0, "SomeField");
+  BinaryenModuleSetTypeName(module, signatureHeapType, "SomeSignature");
+  BinaryenModuleSetTypeName(module, basicHeapType, "does-nothing");
+  BinaryenModuleSetTypeName(module, subStructHeapType, "SomeSubStruct");
+  BinaryenModuleSetFieldName(module, subStructHeapType, 0, "SomeField");
+  BinaryenModuleSetFieldName(module, subStructHeapType, 1, "SomePackedField");
+  BinaryenModuleSetFeatures(
+    module, BinaryenFeatureReferenceTypes() | BinaryenFeatureGC());
+  {
+    BinaryenType varTypes[] = {
+      arrayType, structType, signatureType, basicType, subStructType};
+    BinaryenAddFunction(module,
+                        "test",
+                        BinaryenTypeNone(),
+                        BinaryenTypeNone(),
+                        varTypes,
+                        5,
+                        BinaryenNop(module));
+  }
+  bool didValidate = BinaryenModuleValidate(module);
+  assert(didValidate);
+  printf("module with recursive GC types:\n");
+  BinaryenModulePrint(module);
+  BinaryenModuleDispose(module);
+
+  BinaryenSetTypeSystem(defaultTypeSystem);
+}
+
+int main() {
+  test_types();
+  test_features();
+  test_core();
+  test_unreachable();
+  test_relooper();
+  test_binaries();
+  test_interpret();
+  test_nonvalid();
+  test_color_status();
+  test_for_each();
+  test_func_opt();
+  test_typesystem();
+  test_typebuilder();
+
+  return 0;
+}
