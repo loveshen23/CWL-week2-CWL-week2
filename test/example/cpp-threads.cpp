@@ -44,4 +44,17 @@ int main() {
   std::vector<std::thread> threads;
 
   std::cout << "create threads...\n";
-  for (int i = 0; i < NUM_THRE
+  for (int i = 0; i < NUM_THREADS; i++) {
+    threads.emplace_back(worker);
+  }
+  std::cout << "threads running in parallel...\n";
+
+  std::cout << "waiting for threads to join...\n";
+  for (auto& thread : threads) {
+    thread.join();
+  }
+
+  std::cout << "all done.\n";
+
+  return 0;
+}
