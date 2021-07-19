@@ -424,4 +424,63 @@ int main() {
     (module
      (table $table 1 1 funcref)
      (elem (i32.const 0) $foo)
-   
+     (func $foo (param i32) (result i32)
+      (call $bar (i32.const 0))
+     )
+     (func $bar (param i32) (result i32)
+      (call $foo (i32.const 1))
+     )
+    ))");
+
+  // Multiple exports of a secondary function
+  do_test({}, R"(
+    (module
+     (export "foo1" (func $foo))
+     (export "foo2" (func $foo))
+     (func $foo)
+    ))");
+
+  test_minimized_exports();
+}
+
+void test_minimized_exports() {
+  Module primary;
+  primary.features = FeatureSet::All;
+
+  std::set<Name> keep;
+  Expression* callBody = nullptr;
+
+  Builder builder(primary);
+  auto funcType = Signature(Type::none, Type::none);
+
+  for (size_t i = 0; i < 10; ++i) {
+    Name name = std::to_string(i);
+    primary.addFunction(
+      Builder::makeFunction(name, funcType, {}, builder.makeNop()));
+    keep.insert(name);
+    callBody =
+      builder.blockify(callBody, builder.makeCall(name, {}, Type::none));
+
+    if (i == 3) {
+      primary.addExport(
+        Builder::makeExport("already_exported", name, ExternalKind::Function));
+    }
+    if (i == 7) {
+      primary.addExport(
+        Builder::makeExport("%b", name, ExternalKind::Function));
+    }
+  }
+
+  primary.addFunction(Builder::makeFunction("call", funcType, {}, callBody));
+
+  ModuleSplitting::Config config;
+  config.primaryFuncs = std::move(keep);
+  config.newExportPrefix = "%";
+  config.minimizeNewExportNames = true;
+
+  auto secondary = splitFunctions(primary, config).secondary;
+  std::cout << "Minimized names primary:\n";
+  std::cout << primary << "\n";
+  std::cout << "Minimized names secondary:\n";
+  std::cout << *secondary << "\n";
+}
