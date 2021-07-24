@@ -196,18 +196,33 @@ int main() {
 
   // Separate branch for each.
   // In this testcase, target blocks have identical contents (print 1),
-  // and branches have no phi codes, and no loops.
+  // and branches have identical phis.
   {
     BinaryenIndex indexes[] = {1, 4, 9};
-    RelooperAddBranchForSwitch(b0, b1, indexes, 3, NULL);
+    RelooperAddBranchForSwitch(
+      b0,
+      b1,
+      indexes,
+      3,
+      BinaryenDrop(module, BinaryenConst(module, BinaryenLiteralInt32(4))));
   }
   {
     BinaryenIndex indexes[] = {3, 6};
-    RelooperAddBranchForSwitch(b0, b2, indexes, 2, NULL);
+    RelooperAddBranchForSwitch(
+      b0,
+      b2,
+      indexes,
+      2,
+      BinaryenDrop(module, BinaryenConst(module, BinaryenLiteralInt32(4))));
   }
   {
     BinaryenIndex indexes[] = {5, 25, 125};
-    RelooperAddBranchForSwitch(b0, b3, indexes, 3, NULL);
+    RelooperAddBranchForSwitch(
+      b0,
+      b3,
+      indexes,
+      3,
+      BinaryenDrop(module, BinaryenConst(module, BinaryenLiteralInt32(4))));
   }
   RelooperAddBranchForSwitch(b0, b4, NULL, 0, NULL);
 

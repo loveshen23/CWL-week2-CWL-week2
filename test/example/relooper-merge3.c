@@ -1,4 +1,3 @@
-
 #include <assert.h>
 #include <stdio.h>
 
@@ -167,7 +166,7 @@ int main() {
   RelooperBlockRef b3;
   {
     BinaryenExpressionRef args[] = {
-      BinaryenConst(module, BinaryenLiteralInt32(1))};
+      BinaryenConst(module, BinaryenLiteralInt32(2))};
     BinaryenExpressionRef list[] = {
       BinaryenCall(module, "print", args, 1, BinaryenTypeNone()),
       BinaryenLocalSet(
@@ -182,7 +181,7 @@ int main() {
   RelooperBlockRef b4;
   {
     BinaryenExpressionRef args[] = {
-      BinaryenConst(module, BinaryenLiteralInt32(1))};
+      BinaryenConst(module, BinaryenLiteralInt32(3))};
     BinaryenExpressionRef list[] = {
       BinaryenCall(module, "print", args, 1, BinaryenTypeNone()),
       BinaryenLocalSet(
@@ -195,57 +194,6 @@ int main() {
   }
 
   // Separate branch for each.
-  // In this testcase, target blocks have identical contents (print 1),
-  // and branches have no phi codes, and no loops.
+  // In this testcase, two blocks out of 4 can be merged.
   {
-    BinaryenIndex indexes[] = {1, 4, 9};
-    RelooperAddBranchForSwitch(b0, b1, indexes, 3, NULL);
-  }
-  {
-    BinaryenIndex indexes[] = {3, 6};
-    RelooperAddBranchForSwitch(b0, b2, indexes, 2, NULL);
-  }
-  {
-    BinaryenIndex indexes[] = {5, 25, 125};
-    RelooperAddBranchForSwitch(b0, b3, indexes, 3, NULL);
-  }
-  RelooperAddBranchForSwitch(b0, b4, NULL, 0, NULL);
-
-  BinaryenExpressionRef body = RelooperRenderAndDispose(relooper, b0, 1);
-
-  // locals: state, free-for-label
-  BinaryenType localTypes[] = {BinaryenTypeInt32(), BinaryenTypeInt32()};
-  BinaryenFunctionRef theMain = BinaryenAddFunction(module,
-                                                    "main",
-                                                    BinaryenTypeNone(),
-                                                    BinaryenTypeNone(),
-                                                    localTypes,
-                                                    2,
-                                                    body);
-  BinaryenSetStart(module, theMain);
-
-  // import
-  BinaryenAddFunctionImport(module,
-                            "print",
-                            "spectest",
-                            "print",
-                            BinaryenTypeInt32(),
-                            BinaryenTypeNone());
-
-  // memory
-  BinaryenSetMemory(module, 1, 1, "mem", NULL, NULL, NULL, NULL, 0, 0, 0, "0");
-
-  // optionally, optimize
-  if (0)
-    BinaryenModuleOptimize(module);
-
-  assert(BinaryenModuleValidate(module));
-
-  // write it out
-
-  BinaryenModulePrint(module);
-
-  BinaryenModuleDispose(module);
-
-  return 0;
-}
+    BinaryenInd
