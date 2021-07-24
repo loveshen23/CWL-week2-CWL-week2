@@ -1,3 +1,4 @@
+
 #include <assert.h>
 #include <stdio.h>
 
@@ -166,7 +167,7 @@ int main() {
   RelooperBlockRef b3;
   {
     BinaryenExpressionRef args[] = {
-      BinaryenConst(module, BinaryenLiteralInt32(2))};
+      BinaryenConst(module, BinaryenLiteralInt32(1))};
     BinaryenExpressionRef list[] = {
       BinaryenCall(module, "print", args, 1, BinaryenTypeNone()),
       BinaryenLocalSet(
@@ -181,7 +182,7 @@ int main() {
   RelooperBlockRef b4;
   {
     BinaryenExpressionRef args[] = {
-      BinaryenConst(module, BinaryenLiteralInt32(3))};
+      BinaryenConst(module, BinaryenLiteralInt32(1))};
     BinaryenExpressionRef list[] = {
       BinaryenCall(module, "print", args, 1, BinaryenTypeNone()),
       BinaryenLocalSet(
@@ -194,20 +195,23 @@ int main() {
   }
 
   // Separate branch for each.
-  // In this testcase, two blocks out of 4 can be merged.
-  {
-    BinaryenIndex indexes[] = {1, 4, 9};
-    RelooperAddBranchForSwitch(b0, b1, indexes, 3, NULL);
-  }
-  {
-    BinaryenIndex indexes[] = {3, 6};
-    RelooperAddBranchForSwitch(b0, b2, indexes, 2, NULL);
-  }
-  {
-    BinaryenIndex indexes[] = {5};
-    RelooperAddBranchForSwitch(b0, b3, indexes, 1, NULL);
-  }
-  RelooperAddBranchForSwitch(b0, b4, NULL, 0, NULL);
+  // In this testcase, we can merge multiple consecutive blocks with phis.
+  RelooperAddBranch(
+    b0,
+    b1,
+    NULL,
+    BinaryenDrop(module, BinaryenConst(module, BinaryenLiteralInt32(10))));
+  RelooperAddBranch(
+    b1,
+    b2,
+    NULL,
+    BinaryenDrop(module, BinaryenConst(module, BinaryenLiteralInt32(11))));
+  RelooperAddBranch(b2, b3, NULL, NULL);
+  RelooperAddBranch(
+    b3,
+    b4,
+    NULL,
+    BinaryenDrop(module, BinaryenConst(module, BinaryenLiteralInt32(12))));
 
   BinaryenExpressionRef body = RelooperRenderAndDispose(relooper, b0, 1);
 

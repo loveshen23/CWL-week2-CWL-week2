@@ -1,3 +1,4 @@
+
 #include <assert.h>
 #include <stdio.h>
 
@@ -195,9 +196,10 @@ int main() {
 
   // Separate branch for each.
   // In this testcase, two blocks out of 4 can be merged.
+  RelooperAddBranchForSwitch(b0, b1, NULL, 0, NULL);
   {
     BinaryenIndex indexes[] = {1, 4, 9};
-    RelooperAddBranchForSwitch(b0, b1, indexes, 3, NULL);
+    RelooperAddBranchForSwitch(b0, b4, indexes, 3, NULL);
   }
   {
     BinaryenIndex indexes[] = {3, 6};
@@ -207,7 +209,6 @@ int main() {
     BinaryenIndex indexes[] = {5};
     RelooperAddBranchForSwitch(b0, b3, indexes, 1, NULL);
   }
-  RelooperAddBranchForSwitch(b0, b4, NULL, 0, NULL);
 
   BinaryenExpressionRef body = RelooperRenderAndDispose(relooper, b0, 1);
 
