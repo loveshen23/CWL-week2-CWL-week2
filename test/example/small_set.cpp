@@ -183,4 +183,99 @@ template<typename T> void testInternals() {
     s.insert(0);
     assert(s.TEST_ONLY_NEVER_USE_usingFixed());
     // Adding one more item forces us to use flexible storage.
-    s.insert(1
+    s.insert(1);
+    assert(!s.TEST_ONLY_NEVER_USE_usingFixed());
+    // Removing an item returns us to size 1, *but we keep using flexible
+    // storage*. We do not ping-pong between flexible and fixed; once flexible,
+    // we stay that way.
+    s.erase(0);
+    assert(!s.TEST_ONLY_NEVER_USE_usingFixed());
+    // However, removing all items does return us to using fixed storage, should
+    // we ever insert again.
+    s.erase(1);
+    assert(s.empty());
+    assert(s.TEST_ONLY_NEVER_USE_usingFixed());
+    // And once more we can add an additional item while remaining fixed.
+    s.insert(10);
+    assert(s.TEST_ONLY_NEVER_USE_usingFixed());
+  }
+}
+
+// Iterate over an input object and check we have the same items, in the same
+// order, as we expect.
+template<typename T>
+void assertEqualOrdered(const T& t, const std::vector<int>& expected) {
+  size_t index = 0;
+  for (auto x : t) {
+    assert(index < expected.size());
+    assert(x == expected[index]);
+    index++;
+  }
+}
+
+template<typename T> void testOrdering() {
+  T t;
+
+  // Do some inserts at the end.
+  t.insert(1);
+  assertEqualOrdered(t, {1});
+
+  t.insert(2);
+  assertEqualOrdered(t, {1, 2});
+
+  t.insert(3);
+  assertEqualOrdered(t, {1, 2, 3});
+
+  // Erase the start.
+  t.erase(1);
+  assertEqualOrdered(t, {2, 3});
+
+  // Insert at the start.
+  t.insert(1);
+  assertEqualOrdered(t, {1, 2, 3});
+
+  // Erase the end.
+  t.erase(3);
+  assertEqualOrdered(t, {1, 2});
+
+  // Erase the end.
+  t.erase(2);
+  assertEqualOrdered(t, {1});
+
+  // Insert at the end.
+  t.insert(3);
+  assertEqualOrdered(t, {1, 3});
+
+  // Insert at the middle.
+  t.insert(2);
+  assertEqualOrdered(t, {1, 2, 3});
+
+  // Erase the middle.
+  t.erase(2);
+  assertEqualOrdered(t, {1, 3});
+}
+
+int main() {
+  testAPI<SmallSet<int, 0>>();
+  testAPI<SmallSet<int, 1>>();
+  testAPI<SmallSet<int, 2>>();
+  testAPI<SmallSet<int, 3>>();
+  testAPI<SmallSet<int, 10>>();
+
+  testAPI<SmallUnorderedSet<int, 0>>();
+  testAPI<SmallUnorderedSet<int, 1>>();
+  testAPI<SmallUnorderedSet<int, 2>>();
+  testAPI<SmallUnorderedSet<int, 3>>();
+  testAPI<SmallUnorderedSet<int, 10>>();
+
+  testInternals<SmallSet<int, 1>>();
+  testInternals<SmallUnorderedSet<int, 1>>();
+
+  testOrdering<SmallSet<int, 0>>();
+  testOrdering<SmallSet<int, 1>>();
+  testOrdering<SmallSet<int, 2>>();
+  testOrdering<SmallSet<int, 3>>();
+  testOrdering<SmallSet<int, 10>>();
+
+  std::cout << "ok.\n";
+}
