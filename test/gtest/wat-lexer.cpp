@@ -756,4 +756,492 @@ TEST(LexerTest, LexFloat) {
     EXPECT_EQ(*lexer, expected);
   }
   {
-    Lexer lexe
+    Lexer lexer("42.e1"sv);
+    ASSERT_FALSE(lexer.empty());
+    Token expected{"42.e1"sv, FloatTok{{}, 42.e1}};
+    EXPECT_EQ(*lexer, expected);
+  }
+  {
+    Lexer lexer("42E1"sv);
+    ASSERT_FALSE(lexer.empty());
+    Token expected{"42E1"sv, FloatTok{{}, 42E1}};
+    EXPECT_EQ(*lexer, expected);
+  }
+  {
+    Lexer lexer("42e+2"sv);
+    ASSERT_FALSE(lexer.empty());
+    Token expected{"42e+2"sv, FloatTok{{}, 42e+2}};
+    EXPECT_EQ(*lexer, expected);
+  }
+  {
+    Lexer lexer("42.E-02"sv);
+    ASSERT_FALSE(lexer.empty());
+    Token expected{"42.E-02"sv, FloatTok{{}, 42.E-02}};
+    EXPECT_EQ(*lexer, expected);
+  }
+  {
+    Lexer lexer("42.0e0"sv);
+    ASSERT_FALSE(lexer.empty());
+    Token expected{"42.0e0"sv, FloatTok{{}, 42.0e0}};
+    EXPECT_EQ(*lexer, expected);
+  }
+  {
+    Lexer lexer("42.0E1"sv);
+    ASSERT_FALSE(lexer.empty());
+    Token expected{"42.0E1"sv, FloatTok{{}, 42.0E1}};
+    EXPECT_EQ(*lexer, expected);
+  }
+  {
+    Lexer lexer("42.0e+2"sv);
+    ASSERT_FALSE(lexer.empty());
+    Token expected{"42.0e+2"sv, FloatTok{{}, 42.0e+2}};
+    EXPECT_EQ(*lexer, expected);
+  }
+  {
+    Lexer lexer("42.0E-2"sv);
+    ASSERT_FALSE(lexer.empty());
+    Token expected{"42.0E-2"sv, FloatTok{{}, 42.0E-2}};
+    EXPECT_EQ(*lexer, expected);
+  }
+  {
+    Lexer lexer("+42.0e+2"sv);
+    ASSERT_FALSE(lexer.empty());
+    Token expected{"+42.0e+2"sv, FloatTok{{}, +42.0e+2}};
+    EXPECT_EQ(*lexer, expected);
+  }
+  {
+    Lexer lexer("-42.0e+2"sv);
+    ASSERT_FALSE(lexer.empty());
+    Token expected{"-42.0e+2"sv, FloatTok{{}, -42.0e+2}};
+    EXPECT_EQ(*lexer, expected);
+  }
+  {
+    Lexer lexer("4_2.0_0e+0_2"sv);
+    ASSERT_FALSE(lexer.empty());
+    Token expected{"4_2.0_0e+0_2"sv, FloatTok{{}, 42.00e+02}};
+    EXPECT_EQ(*lexer, expected);
+  }
+  {
+    Lexer lexer("+junk"sv);
+    EXPECT_TRUE(lexer.empty());
+  }
+  {
+    Lexer lexer("42junk"sv);
+    EXPECT_TRUE(lexer.empty());
+  }
+  {
+    Lexer lexer("42.junk"sv);
+    EXPECT_TRUE(lexer.empty());
+  }
+  {
+    Lexer lexer("42.0junk"sv);
+    EXPECT_TRUE(lexer.empty());
+  }
+  {
+    Lexer lexer("42.Ejunk"sv);
+    EXPECT_TRUE(lexer.empty());
+  }
+  {
+    Lexer lexer("42.e-junk"sv);
+    EXPECT_TRUE(lexer.empty());
+  }
+  {
+    Lexer lexer("42.e-10junk"sv);
+    EXPECT_TRUE(lexer.empty());
+  }
+  {
+    Lexer lexer("+"sv);
+    EXPECT_TRUE(lexer.empty());
+  }
+  {
+    Lexer lexer("42e"sv);
+    EXPECT_TRUE(lexer.empty());
+  }
+  {
+    Lexer lexer("42eABC"sv);
+    EXPECT_TRUE(lexer.empty());
+  }
+  {
+    Lexer lexer("42e0xABC"sv);
+    EXPECT_TRUE(lexer.empty());
+  }
+  {
+    Lexer lexer("+-42"sv);
+    EXPECT_TRUE(lexer.empty());
+  }
+  {
+    Lexer lexer("-+42"sv);
+    EXPECT_TRUE(lexer.empty());
+  }
+  {
+    Lexer lexer("42e+-0"sv);
+    EXPECT_TRUE(lexer.empty());
+  }
+  {
+    Lexer lexer("42e-+0"sv);
+    EXPECT_TRUE(lexer.empty());
+  }
+  {
+    Lexer lexer("42p0"sv);
+    EXPECT_TRUE(lexer.empty());
+  }
+  {
+    Lexer lexer("42P0"sv);
+    EXPECT_TRUE(lexer.empty());
+  }
+}
+
+TEST(LexerTest, LexHexFloat) {
+  {
+    Lexer lexer("0x4B"sv);
+    ASSERT_FALSE(lexer.empty());
+    Token expected{"0x4B"sv, IntTok{0x4B, NoSign}};
+    EXPECT_EQ(*lexer, expected);
+  }
+  {
+    Lexer lexer("0x4B."sv);
+    ASSERT_FALSE(lexer.empty());
+    Token expected{"0x4B."sv, FloatTok{{}, 0x4Bp0}};
+    EXPECT_EQ(*lexer, expected);
+  }
+  {
+    Lexer lexer("0x4B.5"sv);
+    ASSERT_FALSE(lexer.empty());
+    Token expected{"0x4B.5"sv, FloatTok{{}, 0x4B.5p0}};
+    EXPECT_EQ(*lexer, expected);
+  }
+  {
+    Lexer lexer("0x4Bp0"sv);
+    ASSERT_FALSE(lexer.empty());
+    Token expected{"0x4Bp0"sv, FloatTok{{}, 0x4Bp0}};
+    EXPECT_EQ(*lexer, expected);
+  }
+  {
+    Lexer lexer("0x4B.p1"sv);
+    ASSERT_FALSE(lexer.empty());
+    Token expected{"0x4B.p1"sv, FloatTok{{}, 0x4B.p1}};
+    EXPECT_EQ(*lexer, expected);
+  }
+  {
+    Lexer lexer("0x4BP1"sv);
+    ASSERT_FALSE(lexer.empty());
+    Token expected{"0x4BP1"sv, FloatTok{{}, 0x4BP1}};
+    EXPECT_EQ(*lexer, expected);
+  }
+  {
+    Lexer lexer("0x4Bp+2"sv);
+    ASSERT_FALSE(lexer.empty());
+    Token expected{"0x4Bp+2"sv, FloatTok{{}, 0x4Bp+2}};
+    EXPECT_EQ(*lexer, expected);
+  }
+  {
+    Lexer lexer("0x4B.P-02"sv);
+    ASSERT_FALSE(lexer.empty());
+    Token expected{"0x4B.P-02"sv, FloatTok{{}, 0x4B.P-02}};
+    EXPECT_EQ(*lexer, expected);
+  }
+  {
+    Lexer lexer("0x4B.0p0"sv);
+    ASSERT_FALSE(lexer.empty());
+    Token expected{"0x4B.0p0"sv, FloatTok{{}, 0x4B.0p0}};
+    EXPECT_EQ(*lexer, expected);
+  }
+  {
+    Lexer lexer("0x4B.0P1"sv);
+    ASSERT_FALSE(lexer.empty());
+    Token expected{"0x4B.0P1"sv, FloatTok{{}, 0x4B.0P1}};
+    EXPECT_EQ(*lexer, expected);
+  }
+  {
+    Lexer lexer("0x4B.0p+2"sv);
+    ASSERT_FALSE(lexer.empty());
+    Token expected{"0x4B.0p+2"sv, FloatTok{{}, 0x4B.0p+2}};
+    EXPECT_EQ(*lexer, expected);
+  }
+  {
+    Lexer lexer("0x4B.0P-2"sv);
+    ASSERT_FALSE(lexer.empty());
+    Token expected{"0x4B.0P-2"sv, FloatTok{{}, 0x4B.0P-2}};
+    EXPECT_EQ(*lexer, expected);
+  }
+  {
+    Lexer lexer("+0x4B.0p+2"sv);
+    ASSERT_FALSE(lexer.empty());
+    Token expected{"+0x4B.0p+2"sv, FloatTok{{}, +0x4B.0p+2}};
+    EXPECT_EQ(*lexer, expected);
+  }
+  {
+    Lexer lexer("-0x4B.0p+2"sv);
+    ASSERT_FALSE(lexer.empty());
+    Token expected{"-0x4B.0p+2"sv, FloatTok{{}, -0x4B.0p+2}};
+    EXPECT_EQ(*lexer, expected);
+  }
+  {
+    Lexer lexer("0x4_2.0_0p+0_2"sv);
+    ASSERT_FALSE(lexer.empty());
+    Token expected{"0x4_2.0_0p+0_2"sv, FloatTok{{}, 0x42.00p+02}};
+    EXPECT_EQ(*lexer, expected);
+  }
+  {
+    Lexer lexer("0x4Bjunk"sv);
+    EXPECT_TRUE(lexer.empty());
+  }
+  {
+    Lexer lexer("0x4B.junk"sv);
+    EXPECT_TRUE(lexer.empty());
+  }
+  {
+    Lexer lexer("0x4B.0junk"sv);
+    EXPECT_TRUE(lexer.empty());
+  }
+  {
+    Lexer lexer("0x4B.Pjunk"sv);
+    EXPECT_TRUE(lexer.empty());
+  }
+  {
+    Lexer lexer("0x4B.p-junk"sv);
+    EXPECT_TRUE(lexer.empty());
+  }
+  {
+    Lexer lexer("0x4B.p-10junk"sv);
+    EXPECT_TRUE(lexer.empty());
+  }
+  {
+    Lexer lexer("+0x"sv);
+    EXPECT_TRUE(lexer.empty());
+  }
+  {
+    Lexer lexer("0x4Bp"sv);
+    EXPECT_TRUE(lexer.empty());
+  }
+  {
+    Lexer lexer("0x4BpABC"sv);
+    EXPECT_TRUE(lexer.empty());
+  }
+  {
+    Lexer lexer("0x4Bp0xABC"sv);
+    EXPECT_TRUE(lexer.empty());
+  }
+  {
+    Lexer lexer("0x+0"sv);
+    EXPECT_TRUE(lexer.empty());
+  }
+  {
+    Lexer lexer("+-0x4B"sv);
+    EXPECT_TRUE(lexer.empty());
+  }
+  {
+    Lexer lexer("-+0x4B"sv);
+    EXPECT_TRUE(lexer.empty());
+  }
+  {
+    Lexer lexer("0x4Bp+-0"sv);
+    EXPECT_TRUE(lexer.empty());
+  }
+  {
+    Lexer lexer("0x4Bp-+0"sv);
+    EXPECT_TRUE(lexer.empty());
+  }
+  {
+    Lexer lexer("0x4B.e+0"sv);
+    EXPECT_TRUE(lexer.empty());
+  }
+  {
+    Lexer lexer("0x4B.E-0"sv);
+    EXPECT_TRUE(lexer.empty());
+  }
+}
+
+TEST(LexerTest, LexInfinity) {
+  {
+    Lexer lexer("inf"sv);
+    ASSERT_FALSE(lexer.empty());
+    Token expected{"inf"sv, FloatTok{{}, INFINITY}};
+    EXPECT_EQ(*lexer, expected);
+  }
+  {
+    Lexer lexer("+inf"sv);
+    ASSERT_FALSE(lexer.empty());
+    Token expected{"+inf"sv, FloatTok{{}, INFINITY}};
+    EXPECT_EQ(*lexer, expected);
+  }
+  {
+    Lexer lexer("-inf"sv);
+    ASSERT_FALSE(lexer.empty());
+    Token expected{"-inf"sv, FloatTok{{}, -INFINITY}};
+    EXPECT_EQ(*lexer, expected);
+  }
+  {
+    Lexer lexer("infjunk"sv);
+    ASSERT_FALSE(lexer.empty());
+    Token expected{"infjunk"sv, KeywordTok{}};
+    EXPECT_EQ(*lexer, expected);
+  }
+  {
+    Lexer lexer("Inf"sv);
+    EXPECT_TRUE(lexer.empty());
+  }
+  {
+    Lexer lexer("INF"sv);
+    EXPECT_TRUE(lexer.empty());
+  }
+  {
+    Lexer lexer("infinity"sv);
+    ASSERT_FALSE(lexer.empty());
+    Token expected{"infinity"sv, KeywordTok{}};
+    EXPECT_EQ(*lexer, expected);
+  }
+}
+
+TEST(LexerTest, LexNan) {
+  const double posNan = std::copysign(NAN, 1.0);
+  const double negNan = std::copysign(NAN, -1.0);
+  {
+    Lexer lexer("nan"sv);
+    ASSERT_FALSE(lexer.empty());
+    Token expected{"nan"sv, FloatTok{{}, posNan}};
+    EXPECT_EQ(*lexer, expected);
+  }
+  {
+    Lexer lexer("+nan"sv);
+    ASSERT_FALSE(lexer.empty());
+    Token expected{"+nan"sv, FloatTok{{}, posNan}};
+    EXPECT_EQ(*lexer, expected);
+  }
+  {
+    Lexer lexer("-nan"sv);
+    ASSERT_FALSE(lexer.empty());
+    Token expected{"-nan"sv, FloatTok{{}, negNan}};
+    EXPECT_EQ(*lexer, expected);
+  }
+  {
+    Lexer lexer("nan:0x01"sv);
+    ASSERT_FALSE(lexer.empty());
+    Token expected{"nan:0x01"sv, FloatTok{{1}, posNan}};
+    EXPECT_EQ(*lexer, expected);
+  }
+  {
+    Lexer lexer("+nan:0x01"sv);
+    ASSERT_FALSE(lexer.empty());
+    Token expected{"+nan:0x01"sv, FloatTok{{1}, posNan}};
+    EXPECT_EQ(*lexer, expected);
+  }
+  {
+    Lexer lexer("-nan:0x01"sv);
+    ASSERT_FALSE(lexer.empty());
+    Token expected{"-nan:0x01"sv, FloatTok{{1}, negNan}};
+    EXPECT_EQ(*lexer, expected);
+  }
+  {
+    Lexer lexer("nan:0x1234"sv);
+    ASSERT_FALSE(lexer.empty());
+    Token expected{"nan:0x1234"sv, FloatTok{{0x1234}, posNan}};
+    EXPECT_EQ(*lexer, expected);
+  }
+  {
+    Lexer lexer("nan:0xf_ffff_ffff_ffff"sv);
+    ASSERT_FALSE(lexer.empty());
+    Token expected{"nan:0xf_ffff_ffff_ffff"sv,
+                   FloatTok{{0xfffffffffffff}, posNan}};
+    EXPECT_EQ(*lexer, expected);
+  }
+  {
+    Lexer lexer("nanjunk"sv);
+    ASSERT_FALSE(lexer.empty());
+    Token expected{"nanjunk", KeywordTok{}};
+    EXPECT_EQ(*lexer, expected);
+  }
+  {
+    Lexer lexer("nan:"sv);
+    ASSERT_FALSE(lexer.empty());
+    Token expected{"nan:"sv, KeywordTok{}};
+    EXPECT_EQ(*lexer, expected);
+  }
+  {
+    Lexer lexer("nan:0x"sv);
+    ASSERT_FALSE(lexer.empty());
+    Token expected{"nan:0x"sv, KeywordTok{}};
+    EXPECT_EQ(*lexer, expected);
+  }
+  {
+    Lexer lexer("nan:0xjunk"sv);
+    ASSERT_FALSE(lexer.empty());
+    Token expected{"nan:0xjunk"sv, KeywordTok{}};
+    EXPECT_EQ(*lexer, expected);
+  }
+  {
+    Lexer lexer("nan:-0x1"sv);
+    ASSERT_FALSE(lexer.empty());
+    Token expected{"nan:-0x1"sv, KeywordTok{}};
+    EXPECT_EQ(*lexer, expected);
+  }
+  {
+    Lexer lexer("nan:+0x1"sv);
+    ASSERT_FALSE(lexer.empty());
+    Token expected{"nan:+0x1"sv, KeywordTok{}};
+    EXPECT_EQ(*lexer, expected);
+  }
+  {
+    Lexer lexer("nan:0x0"sv);
+    ASSERT_FALSE(lexer.empty());
+    Token expected{"nan:0x0"sv, FloatTok{{0}, posNan}};
+    EXPECT_EQ(*lexer, expected);
+  }
+  {
+    Lexer lexer("nan:0x10_0000_0000_0000"sv);
+    ASSERT_FALSE(lexer.empty());
+    Token expected{"nan:0x10_0000_0000_0000"sv,
+                   FloatTok{{0x10000000000000}, posNan}};
+    EXPECT_EQ(*lexer, expected);
+  }
+  {
+    Lexer lexer("nan:0x1_0000_0000_0000_0000"sv);
+    ASSERT_FALSE(lexer.empty());
+    Token expected{"nan:0x1_0000_0000_0000_0000"sv, KeywordTok{}};
+    EXPECT_EQ(*lexer, expected);
+  }
+  {
+    Lexer lexer("NAN"sv);
+    EXPECT_TRUE(lexer.empty());
+  }
+  {
+    Lexer lexer("NaN"sv);
+    EXPECT_TRUE(lexer.empty());
+  }
+}
+
+TEST(LexerTest, ClassifyFloat) {
+  constexpr int signif64 = 52;
+  constexpr int signif32 = 23;
+  constexpr uint64_t payloadMask64 = (1ull << signif64) - 1;
+  constexpr uint32_t payloadMask32 = (1u << signif32) - 1;
+  constexpr uint64_t dnanDefault = 1ull << (signif64 - 1);
+  constexpr uint32_t fnanDefault = 1u << (signif32 - 1);
+  {
+    Lexer lexer("340282346638528859811704183484516925440."sv);
+    ASSERT_FALSE(lexer.empty());
+    ASSERT_TRUE(lexer->getF64());
+    EXPECT_TRUE(lexer->getF32());
+    EXPECT_EQ(*lexer->getF64(), FLT_MAX);
+    EXPECT_EQ(*lexer->getF32(), FLT_MAX);
+  }
+  {
+    Lexer lexer("17976931348623157081452742373170435679807056752584499659891747"
+                "68031572607800285387605895586327668781715404589535143824642343"
+                "21326889464182768467546703537516986049910576551282076245490090"
+                "38932894407586850845513394230458323690322294816580855933212334"
+                "8274797826204144723168738177180919299881250404026184124858368"
+                "."sv);
+    ASSERT_FALSE(lexer.empty());
+    ASSERT_TRUE(lexer->getF64());
+    ASSERT_TRUE(lexer->getF32());
+    EXPECT_EQ(*lexer->getF64(), DBL_MAX);
+    EXPECT_EQ(*lexer->getF32(), INFINITY);
+  }
+  {
+    Lexer lexer("nan");
+    ASSERT_FALSE(lexer.empty());
+
+    ASSERT_TRUE(lexer->getF64());
+    double d = *lexer->getF64();
+  
