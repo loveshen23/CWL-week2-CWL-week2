@@ -1244,4 +1244,276 @@ TEST(LexerTest, ClassifyFloat) {
 
     ASSERT_TRUE(lexer->getF64());
     double d = *lexer->getF64();
-  
+    EXPECT_TRUE(std::isnan(d));
+    EXPECT_FALSE(std::signbit(d));
+    uint64_t dbits;
+    memcpy(&dbits, &d, sizeof(dbits));
+    EXPECT_EQ(dbits & payloadMask64, dnanDefault);
+
+    ASSERT_TRUE(lexer->getF32());
+    float f = *lexer->getF32();
+    EXPECT_TRUE(std::isnan(f));
+    EXPECT_FALSE(std::signbit(f));
+    uint32_t fbits;
+    memcpy(&fbits, &f, sizeof(fbits));
+    EXPECT_EQ(fbits & payloadMask32, fnanDefault);
+  }
+  {
+    Lexer lexer("-nan");
+    ASSERT_FALSE(lexer.empty());
+
+    ASSERT_TRUE(lexer->getF64());
+    double d = *lexer->getF64();
+    EXPECT_TRUE(std::isnan(d));
+    EXPECT_TRUE(std::signbit(d));
+    uint64_t dbits;
+    memcpy(&dbits, &d, sizeof(dbits));
+    EXPECT_EQ(dbits & payloadMask64, dnanDefault);
+
+    ASSERT_TRUE(lexer->getF32());
+    float f = *lexer->getF32();
+    EXPECT_TRUE(std::isnan(f));
+    EXPECT_TRUE(std::signbit(f));
+    uint32_t fbits;
+    memcpy(&fbits, &f, sizeof(fbits));
+    EXPECT_EQ(fbits & payloadMask32, fnanDefault);
+  }
+  {
+    Lexer lexer("+nan");
+    ASSERT_FALSE(lexer.empty());
+
+    ASSERT_TRUE(lexer->getF64());
+    double d = *lexer->getF64();
+    EXPECT_TRUE(std::isnan(d));
+    EXPECT_FALSE(std::signbit(d));
+    uint64_t dbits;
+    memcpy(&dbits, &d, sizeof(dbits));
+    EXPECT_EQ(dbits & payloadMask64, dnanDefault);
+
+    ASSERT_TRUE(lexer->getF32());
+    float f = *lexer->getF32();
+    EXPECT_TRUE(std::isnan(f));
+    EXPECT_FALSE(std::signbit(f));
+    uint32_t fbits;
+    memcpy(&fbits, &f, sizeof(fbits));
+    EXPECT_EQ(fbits & payloadMask32, fnanDefault);
+  }
+  {
+    Lexer lexer("nan:0x1234");
+    ASSERT_FALSE(lexer.empty());
+
+    ASSERT_TRUE(lexer->getF64());
+    double d = *lexer->getF64();
+    EXPECT_TRUE(std::isnan(d));
+    uint64_t dbits;
+    memcpy(&dbits, &d, sizeof(dbits));
+    EXPECT_EQ(dbits & payloadMask64, 0x1234ull);
+
+    ASSERT_TRUE(lexer->getF32());
+    float f = *lexer->getF32();
+    EXPECT_TRUE(std::isnan(f));
+    uint32_t fbits;
+    memcpy(&fbits, &f, sizeof(fbits));
+    EXPECT_EQ(fbits & payloadMask32, 0x1234u);
+  }
+  {
+    Lexer lexer("nan:0x7FFFFF");
+    ASSERT_FALSE(lexer.empty());
+
+    ASSERT_TRUE(lexer->getF64());
+    double d = *lexer->getF64();
+    EXPECT_TRUE(std::isnan(d));
+    uint64_t dbits;
+    memcpy(&dbits, &d, sizeof(dbits));
+    EXPECT_EQ(dbits & payloadMask64, 0x7fffffull);
+
+    ASSERT_TRUE(lexer->getF32());
+    float f = *lexer->getF32();
+    EXPECT_TRUE(std::isnan(f));
+    uint32_t fbits;
+    memcpy(&fbits, &f, sizeof(fbits));
+    EXPECT_EQ(fbits & payloadMask32, 0x7fffffu);
+  }
+  {
+    Lexer lexer("nan:0x800000");
+    ASSERT_FALSE(lexer.empty());
+
+    ASSERT_TRUE(lexer->getF64());
+    double d = *lexer->getF64();
+    EXPECT_TRUE(std::isnan(d));
+    uint64_t dbits;
+    memcpy(&dbits, &d, sizeof(dbits));
+    EXPECT_EQ(dbits & payloadMask64, 0x800000ull);
+
+    ASSERT_FALSE(lexer->getF32());
+  }
+  {
+    Lexer lexer("nan:0x0");
+    ASSERT_FALSE(lexer.empty());
+
+    ASSERT_FALSE(lexer->getF64());
+    ASSERT_FALSE(lexer->getF32());
+  }
+}
+
+TEST(LexerTest, LexIdent) {
+  {
+    Lexer lexer("$09azAZ!#$%&'*+-./:<=>?@\\^_`|~"sv);
+    ASSERT_FALSE(lexer.empty());
+    Token expected{"$09azAZ!#$%&'*+-./:<=>?@\\^_`|~"sv, IdTok{}};
+    EXPECT_EQ(*lexer, expected);
+    EXPECT_TRUE(lexer->getID());
+    EXPECT_EQ(*lexer->getID(), "09azAZ!#$%&'*+-./:<=>?@\\^_`|~"sv);
+  }
+  {
+    Lexer lexer("$[]{}"sv);
+    EXPECT_TRUE(lexer.empty());
+  }
+  {
+    Lexer lexer("$abc[]"sv);
+    EXPECT_TRUE(lexer.empty());
+  }
+  {
+    Lexer lexer("$"sv);
+    EXPECT_TRUE(lexer.empty());
+  }
+}
+
+TEST(LexerTest, LexString) {
+  {
+    auto pangram = "\"The quick brown fox jumps over the lazy dog\""sv;
+    Lexer lexer(pangram);
+    ASSERT_FALSE(lexer.empty());
+    Token expected{pangram, StringTok{{}}};
+    EXPECT_EQ(*lexer, expected);
+    EXPECT_TRUE(lexer->getString());
+    EXPECT_EQ(*lexer->getString(),
+              "The quick brown fox jumps over the lazy dog"sv);
+  }
+  {
+    auto chars = "\"`~!@#$%^&*()_-+0123456789|,.<>/?;:'\""sv;
+    Lexer lexer(chars);
+    ASSERT_FALSE(lexer.empty());
+    Token expected{chars, StringTok{{}}};
+    EXPECT_EQ(*lexer, expected);
+  }
+  {
+    auto escapes = "\"_\\t_\\n_\\r_\\\\_\\\"_\\'_\""sv;
+    Lexer lexer(escapes);
+    ASSERT_FALSE(lexer.empty());
+    Token expected{escapes, StringTok{{"_\t_\n_\r_\\_\"_'_"}}};
+    EXPECT_EQ(*lexer, expected);
+    EXPECT_TRUE(lexer->getString());
+    EXPECT_EQ(*lexer->getString(), "_\t_\n_\r_\\_\"_'_"sv);
+  }
+  {
+    auto escapes = "\"_\\00_\\07_\\20_\\5A_\\7F_\\ff_\\ffff_\""sv;
+    Lexer lexer(escapes);
+    ASSERT_FALSE(lexer.empty());
+    std::string escaped{"_\0_\7_ _Z_\x7f_\xff_\xff"
+                        "ff_"sv};
+    Token expected{escapes, StringTok{{escaped}}};
+    EXPECT_EQ(*lexer, expected);
+  }
+  {
+    // _$_£_€_𐍈_
+    auto unicode = "\"_\\u{24}_\\u{00a3}_\\u{20AC}_\\u{10348}_\""sv;
+    Lexer lexer(unicode);
+    ASSERT_FALSE(lexer.empty());
+    std::string escaped{"_$_\xC2\xA3_\xE2\x82\xAC_\xF0\x90\x8D\x88_"};
+    Token expected{unicode, StringTok{{escaped}}};
+    EXPECT_EQ(*lexer, expected);
+  }
+  {
+    // _$_£_€_𐍈_
+    auto unicode = "\"_$_\xC2\xA3_\xE2\x82\xAC_\xF0\x90\x8D\x88_\""sv;
+    Lexer lexer(unicode);
+    ASSERT_FALSE(lexer.empty());
+    Token expected{unicode, StringTok{{}}};
+    EXPECT_EQ(*lexer, expected);
+  }
+  {
+    Lexer lexer("\"unterminated"sv);
+    ASSERT_TRUE(lexer.empty());
+  }
+  {
+    Lexer lexer("\"unescaped nul\0\"");
+    ASSERT_TRUE(lexer.empty());
+  }
+  {
+    Lexer lexer("\"unescaped U+19\x19\"");
+    ASSERT_TRUE(lexer.empty());
+  }
+  {
+    Lexer lexer("\"unescaped U+7f\x7f\"");
+    ASSERT_TRUE(lexer.empty());
+  }
+  {
+    Lexer lexer("\"\\ stray backslash\"");
+    ASSERT_TRUE(lexer.empty());
+  }
+  {
+    Lexer lexer("\"short \\f hex escape\"");
+    ASSERT_TRUE(lexer.empty());
+  }
+  {
+    Lexer lexer("\"bad hex \\gg\"");
+    ASSERT_TRUE(lexer.empty());
+  }
+  {
+    Lexer lexer("\"empty unicode \\u{}\"");
+    ASSERT_TRUE(lexer.empty());
+  }
+  {
+    Lexer lexer("\"not unicode \\u{abcdefg}\"");
+    ASSERT_TRUE(lexer.empty());
+  }
+  {
+    Lexer lexer("\"extra chars \\u{123(}\"");
+    ASSERT_TRUE(lexer.empty());
+  }
+  {
+    Lexer lexer("\"unpaired surrogate unicode crimes \\u{d800}\"");
+    ASSERT_TRUE(lexer.empty());
+  }
+  {
+    Lexer lexer("\"more surrogate unicode crimes \\u{dfff}\"");
+    ASSERT_TRUE(lexer.empty());
+  }
+  {
+    Lexer lexer("\"too big \\u{110000}\"");
+    ASSERT_TRUE(lexer.empty());
+  }
+}
+
+TEST(LexerTest, LexKeywords) {
+  Token module{"module"sv, KeywordTok{}};
+  Token type{"type"sv, KeywordTok{}};
+  Token func{"func"sv, KeywordTok{}};
+  Token import{"import"sv, KeywordTok{}};
+  Token reserved{"rEsErVeD"sv, KeywordTok{}};
+
+  Lexer lexer("module type func import rEsErVeD");
+
+  auto it = lexer.begin();
+  ASSERT_NE(it, lexer.end());
+  Token t1 = *it++;
+  ASSERT_NE(it, lexer.end());
+  Token t2 = *it++;
+  ASSERT_NE(it, lexer.end());
+  Token t3 = *it++;
+  ASSERT_NE(it, lexer.end());
+  Token t4 = *it++;
+  ASSERT_NE(it, lexer.end());
+  Token t5 = *it++;
+  EXPECT_EQ(it, lexer.end());
+
+  EXPECT_EQ(t1, module);
+  EXPECT_EQ(t2, type);
+  EXPECT_EQ(t3, func);
+  EXPECT_EQ(t4, import);
+  EXPECT_EQ(t5, reserved);
+
+  EXPECT_TRUE(t1.getKeyword());
+  EXPECT_EQ(*t1.getKeyword(), "module"sv);
+}
