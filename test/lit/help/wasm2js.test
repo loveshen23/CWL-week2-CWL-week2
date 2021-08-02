@@ -1,0 +1,164 @@
+;; RUN: wasm2js --help | filecheck %s
+;; CHECK: ================================================================================
+;; CHECK-NEXT: wasm2js INFILE
+;; CHECK-NEXT:
+;; CHECK-NEXT: Transform .wasm/.wat files to asm.js
+;; CHECK-NEXT: ================================================================================
+;; CHECK-NEXT:
+;; CHECK-NEXT:
+;; CHECK-NEXT: wasm2js options:
+;; CHECK-NEXT: ----------------
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --output,-o                                   Output file (stdout if not
+;; CHECK-NEXT:                                                 specified)
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --allow-asserts                               Allow compilation of .wast
+;; CHECK-NEXT:                                                 testing asserts
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --pedantic                                    Emulate WebAssembly trapping
+;; CHECK-NEXT:                                                 behavior
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --emscripten                                  Emulate the glue in
+;; CHECK-NEXT:                                                 emscripten-compatible form (and
+;; CHECK-NEXT:                                                 not ES6 module form)
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --deterministic                               Replace WebAssembly trapping
+;; CHECK-NEXT:                                                 behavior deterministically (the
+;; CHECK-NEXT:                                                 default is to not care about
+;; CHECK-NEXT:                                                 what would trap in wasm, like a
+;; CHECK-NEXT:                                                 load out of bounds or integer
+;; CHECK-NEXT:                                                 divide by zero; with this flag,
+;; CHECK-NEXT:                                                 we try to be deterministic at
+;; CHECK-NEXT:                                                 least in what happens, which
+;; CHECK-NEXT:                                                 might or might not be to trap
+;; CHECK-NEXT:                                                 like wasm, but at least should
+;; CHECK-NEXT:                                                 not vary)
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --symbols-file                                Emit a symbols file that maps
+;; CHECK-NEXT:                                                 function indexes to their
+;; CHECK-NEXT:                                                 original names
+;; CHECK-NEXT:
+;; CHECK-NEXT:
+;; CHECK-NEXT: Optimization passes:
+;; CHECK-NEXT: --------------------
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --abstract-type-refining                      refine and merge abstract
+;; CHECK-NEXT:                                                 (never-created) types
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --alignment-lowering                          lower unaligned loads and stores
+;; CHECK-NEXT:                                                 to smaller aligned ones
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --asyncify                                    async/await style transform,
+;; CHECK-NEXT:                                                 allowing pausing and resuming
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --avoid-reinterprets                          Tries to avoid reinterpret
+;; CHECK-NEXT:                                                 operations via more loads
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --cfp                                         propagate constant struct field
+;; CHECK-NEXT:                                                 values
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --coalesce-locals                             reduce # of locals by coalescing
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --coalesce-locals-learning                    reduce # of locals by coalescing
+;; CHECK-NEXT:                                                 and learning
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --code-folding                                fold code, merging duplicates
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --code-pushing                                push code forward, potentially
+;; CHECK-NEXT:                                                 making it not always execute
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --const-hoisting                              hoist repeated constants to a
+;; CHECK-NEXT:                                                 local
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --dae                                         removes arguments to calls in an
+;; CHECK-NEXT:                                                 lto-like manner
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --dae-optimizing                              removes arguments to calls in an
+;; CHECK-NEXT:                                                 lto-like manner, and optimizes
+;; CHECK-NEXT:                                                 where we removed
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --dce                                         removes unreachable code
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --dealign                                     forces all loads and stores to
+;; CHECK-NEXT:                                                 have alignment 1
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --denan                                       instrument the wasm to convert
+;; CHECK-NEXT:                                                 NaNs into 0 at runtime
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --dfo                                         optimizes using the DataFlow SSA
+;; CHECK-NEXT:                                                 IR
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --directize                                   turns indirect calls into direct
+;; CHECK-NEXT:                                                 ones
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --discard-global-effects                      discards global effect info
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --duplicate-function-elimination              removes duplicate functions
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --duplicate-import-elimination                removes duplicate imports
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --dwarfdump                                   dump DWARF debug info sections
+;; CHECK-NEXT:                                                 from the read binary
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --emit-target-features                        emit the target features section
+;; CHECK-NEXT:                                                 in the output
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --extract-function                            leaves just one function (useful
+;; CHECK-NEXT:                                                 for debugging)
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --extract-function-index                      leaves just one function
+;; CHECK-NEXT:                                                 selected by index
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --flatten                                     flattens out code, removing
+;; CHECK-NEXT:                                                 nesting
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --fpcast-emu                                  emulates function pointer casts,
+;; CHECK-NEXT:                                                 allowing incorrect indirect
+;; CHECK-NEXT:                                                 calls to (sometimes) work
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --func-metrics                                reports function metrics
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --generate-dyncalls                           generate dynCall fuctions used
+;; CHECK-NEXT:                                                 by emscripten ABI
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --generate-global-effects                     generate global effect info
+;; CHECK-NEXT:                                                 (helps later passes)
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --generate-i64-dyncalls                       generate dynCall functions used
+;; CHECK-NEXT:                                                 by emscripten ABI, but only for
+;; CHECK-NEXT:                                                 functions with i64 in their
+;; CHECK-NEXT:                                                 signature (which cannot be
+;; CHECK-NEXT:                                                 invoked via the wasm table
+;; CHECK-NEXT:                                                 without JavaScript BigInt
+;; CHECK-NEXT:                                                 support).
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --generate-stack-ir                           generate Stack IR
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --global-refining                             refine the types of globals
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --gsi                                         globally optimize struct values
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --gto                                         globally optimize GC types
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --gufa                                        Grand Unified Flow Analysis:
+;; CHECK-NEXT:                                                 optimize the entire program
+;; CHECK-NEXT:                                                 using information about what
+;; CHECK-NEXT:                                                 content can actually appear in
+;; CHECK-NEXT:                                                 each location
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --gufa-optimizing                             GUFA plus local optimizations in
+;; CHECK-NEXT:                                                 functions we modified
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --heap2local                                  replace GC allocations with
+;; CHECK-NEXT:                                                 locals
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --i64-to-i32-lowering                         lower all uses of i64s to use
+;; CHECK-NEXT:                                                 i32s instead
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --inline-main                                 inline __original_main into main
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --inlining                                    inline functions (you probably
+;; CHECK-NEXT:                                                 want inlining-optimizing)
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --inlining-optimizing                         inline functions and optimizes
+;; CHECK-NEXT:                                                 where we in
