@@ -524,4 +524,142 @@
 ;; CHECK-NEXT:
 ;; CHECK-NEXT:   --fast-math,-ffm                              Optimize floats without handling
 ;; CHECK-NEXT:                                                 corner cases of NaNs and
-;; CHECK-NEXT:                                              
+;; CHECK-NEXT:                                                 rounding
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --zero-filled-memory,-uim                     Assume that an imported memory
+;; CHECK-NEXT:                                                 will be zero-initialized
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --skip-pass,-sp                               Skip a pass (do not run it)
+;; CHECK-NEXT:
+;; CHECK-NEXT:
+;; CHECK-NEXT: Tool options:
+;; CHECK-NEXT: -------------
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --mvp-features,-mvp                           Disable all non-MVP features
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --all-features,-all                           Enable all features
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --detect-features                             (deprecated - this flag does
+;; CHECK-NEXT:                                                 nothing)
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --quiet,-q                                    Emit less verbose output and
+;; CHECK-NEXT:                                                 hide trivial warnings.
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --experimental-poppy                          Parse wast files as Poppy IR for
+;; CHECK-NEXT:                                                 testing purposes.
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --enable-sign-ext                             Enable sign extension operations
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --disable-sign-ext                            Disable sign extension
+;; CHECK-NEXT:                                                 operations
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --enable-threads                              Enable atomic operations
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --disable-threads                             Disable atomic operations
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --enable-mutable-globals                      Enable mutable globals
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --disable-mutable-globals                     Disable mutable globals
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --enable-nontrapping-float-to-int             Enable nontrapping float-to-int
+;; CHECK-NEXT:                                                 operations
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --disable-nontrapping-float-to-int            Disable nontrapping float-to-int
+;; CHECK-NEXT:                                                 operations
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --enable-simd                                 Enable SIMD operations and types
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --disable-simd                                Disable SIMD operations and
+;; CHECK-NEXT:                                                 types
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --enable-bulk-memory                          Enable bulk memory operations
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --disable-bulk-memory                         Disable bulk memory operations
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --enable-exception-handling                   Enable exception handling
+;; CHECK-NEXT:                                                 operations
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --disable-exception-handling                  Disable exception handling
+;; CHECK-NEXT:                                                 operations
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --enable-tail-call                            Enable tail call operations
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --disable-tail-call                           Disable tail call operations
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --enable-reference-types                      Enable reference types
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --disable-reference-types                     Disable reference types
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --enable-multivalue                           Enable multivalue functions
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --disable-multivalue                          Disable multivalue functions
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --enable-gc                                   Enable garbage collection
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --disable-gc                                  Disable garbage collection
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --enable-memory64                             Enable memory64
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --disable-memory64                            Disable memory64
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --enable-gc-nn-locals                         Enable GC non-null locals
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --disable-gc-nn-locals                        Disable GC non-null locals
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --enable-relaxed-simd                         Enable relaxed SIMD
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --disable-relaxed-simd                        Disable relaxed SIMD
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --enable-extended-const                       Enable extended const
+;; CHECK-NEXT:                                                 expressions
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --disable-extended-const                      Disable extended const
+;; CHECK-NEXT:                                                 expressions
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --enable-strings                              Enable strings
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --disable-strings                             Disable strings
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --enable-multi-memories                       Enable multi-memories
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --disable-multi-memories                      Disable multi-memories
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --enable-typed-function-references            Deprecated compatibility flag
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --disable-typed-function-references           Deprecated compatibility flag
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --no-validation,-n                            Disables validation, assumes
+;; CHECK-NEXT:                                                 inputs are correct
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --pass-arg,-pa                                An argument passed along to
+;; CHECK-NEXT:                                                 optimization passes being run.
+;; CHECK-NEXT:                                                 Must be in the form KEY@VALUE
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --nominal                                     Force all GC type definitions to
+;; CHECK-NEXT:                                                 be parsed as nominal.
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --hybrid                                      Force all GC type definitions to
+;; CHECK-NEXT:                                                 be parsed using the isorecursive
+;; CHECK-NEXT:                                                 hybrid type system.
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --closed-world,-cw                            Assume code outside of the
+;; CHECK-NEXT:                                                 module does not inspect or
+;; CHECK-NEXT:                                                 interact with GC and function
+;; CHECK-NEXT:                                                 references, even if they are
+;; CHECK-NEXT:                                                 passed out. The outside may hold
+;; CHECK-NEXT:                                                 on to them and pass them back
+;; CHECK-NEXT:                                                 in, but not inspect their
+;; CHECK-NEXT:                                                 contents or call them.
+;; CHECK-NEXT:
+;; CHECK-NEXT:
+;; CHECK-NEXT: General options:
+;; CHECK-NEXT: ----------------
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --version                                     Output version information and
+;; CHECK-NEXT:                                                 exit
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --help,-h                                     Show this help message and exit
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --debug,-d                                    Print debug information to
+;; CHECK-NEXT:                                                 stderr
+;; CHECK-NEXT:
