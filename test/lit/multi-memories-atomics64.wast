@@ -11,4 +11,477 @@
  (memory $dataMemory (shared i64 23 256))
  ;; CHECK:      (memory $instrumentMemory (shared i64 23 256))
  (memory $instrumentMemory (shared i64 23 256))
- ;; CHECK:      (func $atomic-lo
+ ;; CHECK:      (func $atomic-loadstore
+ ;; CHECK-NEXT:  (local $0 i64)
+ ;; CHECK-NEXT:  (local $1 i64)
+ ;; CHECK-NEXT:  (local $2 i32)
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (i32.atomic.load8_u $appMemory offset=4
+ ;; CHECK-NEXT:    (local.get $0)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (i32.atomic.load8_u $appMemory offset=4
+ ;; CHECK-NEXT:    (local.get $0)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (i32.atomic.load16_u $dataMemory offset=4
+ ;; CHECK-NEXT:    (local.get $0)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (i32.atomic.load16_u $instrumentMemory offset=4
+ ;; CHECK-NEXT:    (local.get $0)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (i32.atomic.load $dataMemory offset=4
+ ;; CHECK-NEXT:    (local.get $0)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (i32.atomic.load $appMemory offset=4
+ ;; CHECK-NEXT:    (local.get $0)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (i64.atomic.load8_u $appMemory
+ ;; CHECK-NEXT:    (local.get $0)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (i64.atomic.load8_u $dataMemory
+ ;; CHECK-NEXT:    (local.get $0)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (i64.atomic.load16_u $appMemory
+ ;; CHECK-NEXT:    (local.get $0)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (i64.atomic.load16_u $appMemory
+ ;; CHECK-NEXT:    (local.get $0)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (i64.atomic.load32_u $instrumentMemory
+ ;; CHECK-NEXT:    (local.get $0)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (i64.atomic.load32_u $appMemory
+ ;; CHECK-NEXT:    (local.get $0)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (i64.atomic.load $appMemory
+ ;; CHECK-NEXT:    (local.get $0)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (i64.atomic.load $instrumentMemory
+ ;; CHECK-NEXT:    (local.get $0)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (i32.atomic.store $appMemory offset=4
+ ;; CHECK-NEXT:   (local.get $0)
+ ;; CHECK-NEXT:   (local.get $2)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (i32.atomic.store $appMemory offset=4
+ ;; CHECK-NEXT:   (local.get $0)
+ ;; CHECK-NEXT:   (local.get $2)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (i32.atomic.store8 $instrumentMemory offset=4
+ ;; CHECK-NEXT:   (local.get $0)
+ ;; CHECK-NEXT:   (local.get $2)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (i32.atomic.store8 $dataMemory offset=4
+ ;; CHECK-NEXT:   (local.get $0)
+ ;; CHECK-NEXT:   (local.get $2)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (i32.atomic.store16 $appMemory offset=4
+ ;; CHECK-NEXT:   (local.get $0)
+ ;; CHECK-NEXT:   (local.get $2)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (i32.atomic.store16 $dataMemory offset=4
+ ;; CHECK-NEXT:   (local.get $0)
+ ;; CHECK-NEXT:   (local.get $2)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (i64.atomic.store $appMemory offset=4
+ ;; CHECK-NEXT:   (local.get $0)
+ ;; CHECK-NEXT:   (local.get $1)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (i64.atomic.store $appMemory offset=4
+ ;; CHECK-NEXT:   (local.get $0)
+ ;; CHECK-NEXT:   (local.get $1)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (i64.atomic.store8 $dataMemory offset=4
+ ;; CHECK-NEXT:   (local.get $0)
+ ;; CHECK-NEXT:   (local.get $1)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (i64.atomic.store8 $instrumentMemory offset=4
+ ;; CHECK-NEXT:   (local.get $0)
+ ;; CHECK-NEXT:   (local.get $1)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (i64.atomic.store16 $appMemory offset=4
+ ;; CHECK-NEXT:   (local.get $0)
+ ;; CHECK-NEXT:   (local.get $1)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (i64.atomic.store16 $appMemory offset=4
+ ;; CHECK-NEXT:   (local.get $0)
+ ;; CHECK-NEXT:   (local.get $1)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (i64.atomic.store32 $instrumentMemory offset=4
+ ;; CHECK-NEXT:   (local.get $0)
+ ;; CHECK-NEXT:   (local.get $1)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (i64.atomic.store32 $dataMemory offset=4
+ ;; CHECK-NEXT:   (local.get $0)
+ ;; CHECK-NEXT:   (local.get $1)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT: )
+ (func $atomic-loadstore (type $0)
+  (local $0 i64)
+  (local $1 i64)
+  (local $2 i32)
+  (drop
+   (i32.atomic.load8_u 0 offset=4
+    (local.get $0)
+   )
+  )
+  (drop
+   (i32.atomic.load8_u $appMemory offset=4
+    (local.get $0)
+   )
+  )
+  (drop
+   (i32.atomic.load16_u 1 offset=4
+    (local.get $0)
+   )
+  )
+  (drop
+   (i32.atomic.load16_u $instrumentMemory offset=4
+    (local.get $0)
+   )
+  )
+  (drop
+   (i32.atomic.load 1 offset=4
+    (local.get $0)
+   )
+  )
+  (drop
+   (i32.atomic.load $appMemory offset=4
+    (local.get $0)
+   )
+  )
+  (drop
+   (i64.atomic.load8_u
+    (local.get $0)
+   )
+  )
+  (drop
+   (i64.atomic.load8_u $dataMemory
+    (local.get $0)
+   )
+  )
+  (drop
+   (i64.atomic.load16_u
+    (local.get $0)
+   )
+  )
+  (drop
+   (i64.atomic.load16_u $appMemory
+    (local.get $0)
+   )
+  )
+  (drop
+   (i64.atomic.load32_u 2
+    (local.get $0)
+   )
+  )
+  (drop
+   (i64.atomic.load32_u $appMemory
+    (local.get $0)
+   )
+  )
+  (drop
+   (i64.atomic.load
+    (local.get $0)
+   )
+  )
+  (drop
+   (i64.atomic.load $instrumentMemory
+    (local.get $0)
+   )
+  )
+  (i32.atomic.store 0 offset=4 align=4
+   (local.get $0)
+   (local.get $2)
+  )
+  (i32.atomic.store $appMemory offset=4 align=4
+   (local.get $0)
+   (local.get $2)
+  )
+  (i32.atomic.store8 2 offset=4 align=1
+   (local.get $0)
+   (local.get $2)
+  )
+  (i32.atomic.store8 $dataMemory offset=4 align=1
+   (local.get $0)
+   (local.get $2)
+  )
+  (i32.atomic.store16 0 offset=4
+   (local.get $0)
+   (local.get $2)
+  )
+  (i32.atomic.store16 $dataMemory offset=4
+   (local.get $0)
+   (local.get $2)
+  )
+  (i64.atomic.store offset=4
+   (local.get $0)
+   (local.get $1)
+  )
+  (i64.atomic.store $appMemory offset=4
+   (local.get $0)
+   (local.get $1)
+  )
+  (i64.atomic.store8 1 offset=4
+   (local.get $0)
+   (local.get $1)
+  )
+  (i64.atomic.store8 $instrumentMemory offset=4
+   (local.get $0)
+   (local.get $1)
+  )
+  (i64.atomic.store16 offset=4
+   (local.get $0)
+   (local.get $1)
+  )
+  (i64.atomic.store16 $appMemory offset=4
+   (local.get $0)
+   (local.get $1)
+  )
+  (i64.atomic.store32 2 offset=4
+   (local.get $0)
+   (local.get $1)
+  )
+  (i64.atomic.store32 $dataMemory offset=4
+   (local.get $0)
+   (local.get $1)
+  )
+ )
+ ;; CHECK:      (func $atomic-rmw
+ ;; CHECK-NEXT:  (local $0 i64)
+ ;; CHECK-NEXT:  (local $1 i64)
+ ;; CHECK-NEXT:  (local $2 i32)
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (i32.atomic.rmw.add $dataMemory offset=4
+ ;; CHECK-NEXT:    (local.get $0)
+ ;; CHECK-NEXT:    (local.get $2)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (i32.atomic.rmw.add $instrumentMemory offset=4
+ ;; CHECK-NEXT:    (local.get $0)
+ ;; CHECK-NEXT:    (local.get $2)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (i32.atomic.rmw8.add_u $appMemory offset=4
+ ;; CHECK-NEXT:    (local.get $0)
+ ;; CHECK-NEXT:    (local.get $2)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (i32.atomic.rmw8.add_u $appMemory offset=4
+ ;; CHECK-NEXT:    (local.get $0)
+ ;; CHECK-NEXT:    (local.get $2)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (i32.atomic.rmw16.and_u $dataMemory
+ ;; CHECK-NEXT:    (local.get $0)
+ ;; CHECK-NEXT:    (local.get $2)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (i32.atomic.rmw16.and_u $instrumentMemory
+ ;; CHECK-NEXT:    (local.get $0)
+ ;; CHECK-NEXT:    (local.get $2)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (i64.atomic.rmw32.or_u $appMemory
+ ;; CHECK-NEXT:    (local.get $0)
+ ;; CHECK-NEXT:    (local.get $1)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (i64.atomic.rmw32.or_u $appMemory
+ ;; CHECK-NEXT:    (local.get $0)
+ ;; CHECK-NEXT:    (local.get $1)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (i32.atomic.rmw8.xchg_u $appMemory
+ ;; CHECK-NEXT:    (local.get $0)
+ ;; CHECK-NEXT:    (local.get $2)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (i32.atomic.rmw8.xchg_u $dataMemory
+ ;; CHECK-NEXT:    (local.get $0)
+ ;; CHECK-NEXT:    (local.get $2)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT: )
+ (func $atomic-rmw (type $0)
+  (local $0 i64)
+  (local $1 i64)
+  (local $2 i32)
+  (drop
+   (i32.atomic.rmw.add $dataMemory offset=4
+    (local.get $0)
+    (local.get $2)
+   )
+  )
+  (drop
+   (i32.atomic.rmw.add 2 offset=4
+    (local.get $0)
+    (local.get $2)
+   )
+  )
+  (drop
+   (i32.atomic.rmw8.add_u 0 offset=4
+    (local.get $0)
+    (local.get $2)
+   )
+  )
+  (drop
+   (i32.atomic.rmw8.add_u $appMemory offset=4
+    (local.get $0)
+    (local.get $2)
+   )
+  )
+  (drop
+   (i32.atomic.rmw16.and_u 1 align=2
+    (local.get $0)
+    (local.get $2)
+   )
+  )
+  (drop
+   (i32.atomic.rmw16.and_u $instrumentMemory align=2
+    (local.get $0)
+    (local.get $2)
+   )
+  )
+  (drop
+   (i64.atomic.rmw32.or_u 0
+    (local.get $0)
+    (local.get $1)
+   )
+  )
+  (drop
+   (i64.atomic.rmw32.or_u $appMemory
+    (local.get $0)
+    (local.get $1)
+   )
+  )
+  (drop
+   (i32.atomic.rmw8.xchg_u 0 align=1
+    (local.get $0)
+    (local.get $2)
+   )
+  )
+  (drop
+   (i32.atomic.rmw8.xchg_u $dataMemory align=1
+    (local.get $0)
+    (local.get $2)
+   )
+  )
+ )
+ ;; CHECK:      (func $atomic-cmpxchg
+ ;; CHECK-NEXT:  (local $0 i64)
+ ;; CHECK-NEXT:  (local $1 i64)
+ ;; CHECK-NEXT:  (local $2 i32)
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (i32.atomic.rmw.cmpxchg $appMemory offset=4
+ ;; CHECK-NEXT:    (local.get $0)
+ ;; CHECK-NEXT:    (local.get $2)
+ ;; CHECK-NEXT:    (local.get $2)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (i32.atomic.rmw.cmpxchg $instrumentMemory offset=4
+ ;; CHECK-NEXT:    (local.get $0)
+ ;; CHECK-NEXT:    (local.get $2)
+ ;; CHECK-NEXT:    (local.get $2)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (i32.atomic.rmw8.cmpxchg_u $appMemory
+ ;; CHECK-NEXT:    (local.get $0)
+ ;; CHECK-NEXT:    (local.get $2)
+ ;; CHECK-NEXT:    (local.get $2)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (i32.atomic.rmw8.cmpxchg_u $appMemory
+ ;; CHECK-NEXT:    (local.get $0)
+ ;; CHECK-NEXT:    (local.get $2)
+ ;; CHECK-NEXT:    (local.get $2)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (i64.atomic.rmw.cmpxchg $appMemory offset=4
+ ;; CHECK-NEXT:    (local.get $0)
+ ;; CHECK-NEXT:    (local.get $1)
+ ;; CHECK-NEXT:    (local.get $1)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (i64.atomic.rmw.cmpxchg $dataMemory offset=4
+ ;; CHECK-NEXT:    (local.get $0)
+ ;; CHECK-NEXT:    (local.get $1)
+ ;; CHECK-NEXT:    (local.get $1)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (i64.atomic.rmw32.cmpxchg_u $instrumentMemory
+ ;; CHECK-NEXT:    (local.get $0)
+ ;; CHECK-NEXT:    (local.get $1)
+ ;; CHECK-NEXT:    (local.get $1)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (i64.atomic.rmw32.cmpxchg_u $dataMemory
+ ;; CHECK-NEXT:    (local.get $0)
+ ;; CHECK-NEXT:    (local.get $1)
+ ;; CHECK-NEXT:    (local.get $1)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT: )
+ (func $atomic-cmpxchg (type $0)
+  (local $0 i64)
+  (local $1 i64)
+  (local $2 i32)
+  (drop
+   (i32.atomic.rmw.cmpxchg 0 offset=4
+    (local.get $0)
+    (local.get $2)
+    (local.get $2)
+   )
+  )
+  (drop
+   (i32.atomic.rmw.cmpxchg $instrumentMemory offset=4
+    (local.get $0)
+    (local.get $2)
+    (local.get $2)
+   )
+  )
+  (drop
+   (i32.atomic.rmw8.cmpxchg_u
+    (local.get 
