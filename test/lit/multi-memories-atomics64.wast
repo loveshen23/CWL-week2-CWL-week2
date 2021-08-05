@@ -484,4 +484,221 @@
   )
   (drop
    (i32.atomic.rmw8.cmpxchg_u
-    (local.get 
+    (local.get $0)
+    (local.get $2)
+    (local.get $2)
+   )
+  )
+  (drop
+   (i32.atomic.rmw8.cmpxchg_u $appMemory
+    (local.get $0)
+    (local.get $2)
+    (local.get $2)
+   )
+  )
+  (drop
+   (i64.atomic.rmw.cmpxchg offset=4
+    (local.get $0)
+    (local.get $1)
+    (local.get $1)
+   )
+  )
+  (drop
+   (i64.atomic.rmw.cmpxchg $dataMemory offset=4
+    (local.get $0)
+    (local.get $1)
+    (local.get $1)
+   )
+  )
+  (drop
+   (i64.atomic.rmw32.cmpxchg_u 2 align=4
+    (local.get $0)
+    (local.get $1)
+    (local.get $1)
+   )
+  )
+  (drop
+   (i64.atomic.rmw32.cmpxchg_u $dataMemory align=4
+    (local.get $0)
+    (local.get $1)
+    (local.get $1)
+   )
+  )
+ )
+ ;; CHECK:      (func $atomic-wait-notify
+ ;; CHECK-NEXT:  (local $0 i64)
+ ;; CHECK-NEXT:  (local $1 i64)
+ ;; CHECK-NEXT:  (local $2 i32)
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (memory.atomic.wait32 $dataMemory
+ ;; CHECK-NEXT:    (local.get $0)
+ ;; CHECK-NEXT:    (local.get $2)
+ ;; CHECK-NEXT:    (local.get $1)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (memory.atomic.wait32 $instrumentMemory
+ ;; CHECK-NEXT:    (local.get $0)
+ ;; CHECK-NEXT:    (local.get $2)
+ ;; CHECK-NEXT:    (local.get $1)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (memory.atomic.wait32 $appMemory offset=4
+ ;; CHECK-NEXT:    (local.get $0)
+ ;; CHECK-NEXT:    (local.get $2)
+ ;; CHECK-NEXT:    (local.get $1)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (memory.atomic.wait32 $instrumentMemory offset=4
+ ;; CHECK-NEXT:    (local.get $0)
+ ;; CHECK-NEXT:    (local.get $2)
+ ;; CHECK-NEXT:    (local.get $1)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (memory.atomic.notify $dataMemory
+ ;; CHECK-NEXT:    (local.get $0)
+ ;; CHECK-NEXT:    (local.get $2)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (memory.atomic.notify $dataMemory
+ ;; CHECK-NEXT:    (local.get $0)
+ ;; CHECK-NEXT:    (local.get $2)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (memory.atomic.notify $appMemory offset=24
+ ;; CHECK-NEXT:    (local.get $0)
+ ;; CHECK-NEXT:    (local.get $2)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (memory.atomic.notify $dataMemory offset=24
+ ;; CHECK-NEXT:    (local.get $0)
+ ;; CHECK-NEXT:    (local.get $2)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (memory.atomic.wait64 $instrumentMemory
+ ;; CHECK-NEXT:    (local.get $0)
+ ;; CHECK-NEXT:    (local.get $1)
+ ;; CHECK-NEXT:    (local.get $1)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (memory.atomic.wait64 $instrumentMemory
+ ;; CHECK-NEXT:    (local.get $0)
+ ;; CHECK-NEXT:    (local.get $1)
+ ;; CHECK-NEXT:    (local.get $1)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (memory.atomic.wait64 $appMemory offset=16
+ ;; CHECK-NEXT:    (local.get $0)
+ ;; CHECK-NEXT:    (local.get $1)
+ ;; CHECK-NEXT:    (local.get $1)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (memory.atomic.wait64 $appMemory offset=16
+ ;; CHECK-NEXT:    (local.get $0)
+ ;; CHECK-NEXT:    (local.get $1)
+ ;; CHECK-NEXT:    (local.get $1)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT: )
+ (func $atomic-wait-notify (type $0)
+  (local $0 i64)
+  (local $1 i64)
+  (local $2 i32)
+  (drop
+   (memory.atomic.wait32 $dataMemory
+    (local.get $0)
+    (local.get $2)
+    (local.get $1)
+   )
+  )
+  (drop
+   (memory.atomic.wait32 2
+    (local.get $0)
+    (local.get $2)
+    (local.get $1)
+   )
+  )
+  (drop
+   (memory.atomic.wait32 $appMemory offset=4 align=4
+    (local.get $0)
+    (local.get $2)
+    (local.get $1)
+   )
+  )
+  (drop
+   (memory.atomic.wait32 2 offset=4 align=4
+    (local.get $0)
+    (local.get $2)
+    (local.get $1)
+   )
+  )
+  (drop
+   (memory.atomic.notify 1
+    (local.get $0)
+    (local.get $2)
+   )
+  )
+  (drop
+   (memory.atomic.notify $dataMemory
+    (local.get $0)
+    (local.get $2)
+   )
+  )
+  (drop
+   (memory.atomic.notify $appMemory offset=24 align=4
+    (local.get $0)
+    (local.get $2)
+   )
+  )
+  (drop
+   (memory.atomic.notify 1 offset=24 align=4
+    (local.get $0)
+    (local.get $2)
+   )
+  )
+  (drop
+   (memory.atomic.wait64 $instrumentMemory
+    (local.get $0)
+    (local.get $1)
+    (local.get $1)
+   )
+  )
+  (drop
+   (memory.atomic.wait64 2
+    (local.get $0)
+    (local.get $1)
+    (local.get $1)
+   )
+  )
+  (drop
+   (memory.atomic.wait64 $appMemory align=8 offset=16
+    (local.get $0)
+    (local.get $1)
+    (local.get $1)
+   )
+  )
+  (drop
+   (memory.atomic.wait64 0 align=8 offset=16
+    (local.get $0)
+    (local.get $1)
+    (local.get $1)
+   )
+  )
+ )
+ ;; CHECK:      (func $atomic-fence
+ ;; CHECK-NEXT:  (atomic.fence)
+ ;; CHECK-NEXT: )
+ (func $atomic-fence (type $0)
+  (atomic.fence)
+ )
+)
