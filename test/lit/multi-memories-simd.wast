@@ -625,4 +625,11 @@
  ;; CHECK-NEXT:  (v128.load64_zero $memoryc
  ;; CHECK-NEXT:   (local.get $0)
  ;; CHECK-NEXT:  )
- ;;
+ ;; CHECK-NEXT: )
+ (func $v128.load64_zero2 (param $0 i32) (result v128)
+  (v128.load64_zero $memoryc
+   (local.get $0)
+  )
+ )
+)
+
