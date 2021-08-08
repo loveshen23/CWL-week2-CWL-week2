@@ -578,4 +578,466 @@
   ;; NO_TNH:      (func $ref.cast (type $anyref_=>_none) (param $x anyref)
   ;; NO_TNH-NEXT:  (drop
   ;; NO_TNH-NEXT:   (ref.cast none
-  ;; NO_TNH-NEXT:    (local.get
+  ;; NO_TNH-NEXT:    (local.get $x)
+  ;; NO_TNH-NEXT:   )
+  ;; NO_TNH-NEXT:  )
+  ;; NO_TNH-NEXT:  (drop
+  ;; NO_TNH-NEXT:   (ref.cast none
+  ;; NO_TNH-NEXT:    (local.get $x)
+  ;; NO_TNH-NEXT:   )
+  ;; NO_TNH-NEXT:  )
+  ;; NO_TNH-NEXT:  (drop
+  ;; NO_TNH-NEXT:   (ref.cast none
+  ;; NO_TNH-NEXT:    (local.get $x)
+  ;; NO_TNH-NEXT:   )
+  ;; NO_TNH-NEXT:  )
+  ;; NO_TNH-NEXT:  (drop
+  ;; NO_TNH-NEXT:   (ref.cast none
+  ;; NO_TNH-NEXT:    (local.get $x)
+  ;; NO_TNH-NEXT:   )
+  ;; NO_TNH-NEXT:  )
+  ;; NO_TNH-NEXT: )
+  (func $ref.cast (param $x anyref)
+    ;; All these will trap.
+    (drop
+      (ref.cast $A
+        (local.get $x)
+      )
+    )
+    (drop
+      (ref.cast $B
+        (local.get $x)
+      )
+    )
+    (drop
+      (ref.cast $C1
+        (local.get $x)
+      )
+    )
+    (drop
+      (ref.cast $C2
+        (local.get $x)
+      )
+    )
+  )
+
+  ;; YESTNH:      (func $ref.cast.null (type $anyref_=>_none) (param $x anyref)
+  ;; YESTNH-NEXT:  (drop
+  ;; YESTNH-NEXT:   (ref.cast null none
+  ;; YESTNH-NEXT:    (local.get $x)
+  ;; YESTNH-NEXT:   )
+  ;; YESTNH-NEXT:  )
+  ;; YESTNH-NEXT:  (drop
+  ;; YESTNH-NEXT:   (ref.cast null none
+  ;; YESTNH-NEXT:    (local.get $x)
+  ;; YESTNH-NEXT:   )
+  ;; YESTNH-NEXT:  )
+  ;; YESTNH-NEXT:  (drop
+  ;; YESTNH-NEXT:   (ref.cast null none
+  ;; YESTNH-NEXT:    (local.get $x)
+  ;; YESTNH-NEXT:   )
+  ;; YESTNH-NEXT:  )
+  ;; YESTNH-NEXT:  (drop
+  ;; YESTNH-NEXT:   (ref.cast null none
+  ;; YESTNH-NEXT:    (local.get $x)
+  ;; YESTNH-NEXT:   )
+  ;; YESTNH-NEXT:  )
+  ;; YESTNH-NEXT: )
+  ;; NO_TNH:      (func $ref.cast.null (type $anyref_=>_none) (param $x anyref)
+  ;; NO_TNH-NEXT:  (drop
+  ;; NO_TNH-NEXT:   (ref.cast null none
+  ;; NO_TNH-NEXT:    (local.get $x)
+  ;; NO_TNH-NEXT:   )
+  ;; NO_TNH-NEXT:  )
+  ;; NO_TNH-NEXT:  (drop
+  ;; NO_TNH-NEXT:   (ref.cast null none
+  ;; NO_TNH-NEXT:    (local.get $x)
+  ;; NO_TNH-NEXT:   )
+  ;; NO_TNH-NEXT:  )
+  ;; NO_TNH-NEXT:  (drop
+  ;; NO_TNH-NEXT:   (ref.cast null none
+  ;; NO_TNH-NEXT:    (local.get $x)
+  ;; NO_TNH-NEXT:   )
+  ;; NO_TNH-NEXT:  )
+  ;; NO_TNH-NEXT:  (drop
+  ;; NO_TNH-NEXT:   (ref.cast null none
+  ;; NO_TNH-NEXT:    (local.get $x)
+  ;; NO_TNH-NEXT:   )
+  ;; NO_TNH-NEXT:  )
+  ;; NO_TNH-NEXT: )
+  (func $ref.cast.null (param $x anyref)
+    ;; These can only pass through a null.
+    (drop
+      (ref.cast null $A
+        (local.get $x)
+      )
+    )
+    (drop
+      (ref.cast null $B
+        (local.get $x)
+      )
+    )
+    (drop
+      (ref.cast null $C1
+        (local.get $x)
+      )
+    )
+    (drop
+      (ref.cast null $C2
+        (local.get $x)
+      )
+    )
+  )
+
+  ;; YESTNH:      (func $ref.test (type $anyref_=>_none) (param $x anyref)
+  ;; YESTNH-NEXT:  (drop
+  ;; YESTNH-NEXT:   (ref.test none
+  ;; YESTNH-NEXT:    (local.get $x)
+  ;; YESTNH-NEXT:   )
+  ;; YESTNH-NEXT:  )
+  ;; YESTNH-NEXT:  (drop
+  ;; YESTNH-NEXT:   (ref.test null none
+  ;; YESTNH-NEXT:    (local.get $x)
+  ;; YESTNH-NEXT:   )
+  ;; YESTNH-NEXT:  )
+  ;; YESTNH-NEXT: )
+  ;; NO_TNH:      (func $ref.test (type $anyref_=>_none) (param $x anyref)
+  ;; NO_TNH-NEXT:  (drop
+  ;; NO_TNH-NEXT:   (ref.test none
+  ;; NO_TNH-NEXT:    (local.get $x)
+  ;; NO_TNH-NEXT:   )
+  ;; NO_TNH-NEXT:  )
+  ;; NO_TNH-NEXT:  (drop
+  ;; NO_TNH-NEXT:   (ref.test null none
+  ;; NO_TNH-NEXT:    (local.get $x)
+  ;; NO_TNH-NEXT:   )
+  ;; NO_TNH-NEXT:  )
+  ;; NO_TNH-NEXT: )
+  (func $ref.test (param $x anyref)
+    ;; This will return 0.
+    (drop
+      (ref.test $A
+        (local.get $x)
+      )
+    )
+    ;; This can test for a null.
+    (drop
+      (ref.test null $A
+        (local.get $x)
+      )
+    )
+  )
+
+  ;; YESTNH:      (func $br_on (type $anyref_=>_none) (param $x anyref)
+  ;; YESTNH-NEXT:  (drop
+  ;; YESTNH-NEXT:   (block $block (result (ref none))
+  ;; YESTNH-NEXT:    (drop
+  ;; YESTNH-NEXT:     (br_on_cast $block none
+  ;; YESTNH-NEXT:      (local.get $x)
+  ;; YESTNH-NEXT:     )
+  ;; YESTNH-NEXT:    )
+  ;; YESTNH-NEXT:    (unreachable)
+  ;; YESTNH-NEXT:   )
+  ;; YESTNH-NEXT:  )
+  ;; YESTNH-NEXT:  (drop
+  ;; YESTNH-NEXT:   (block $block0 (result (ref any))
+  ;; YESTNH-NEXT:    (br_on_non_null $block0
+  ;; YESTNH-NEXT:     (local.get $x)
+  ;; YESTNH-NEXT:    )
+  ;; YESTNH-NEXT:    (unreachable)
+  ;; YESTNH-NEXT:   )
+  ;; YESTNH-NEXT:  )
+  ;; YESTNH-NEXT: )
+  ;; NO_TNH:      (func $br_on (type $anyref_=>_none) (param $x anyref)
+  ;; NO_TNH-NEXT:  (drop
+  ;; NO_TNH-NEXT:   (block $block (result (ref none))
+  ;; NO_TNH-NEXT:    (drop
+  ;; NO_TNH-NEXT:     (br_on_cast $block none
+  ;; NO_TNH-NEXT:      (local.get $x)
+  ;; NO_TNH-NEXT:     )
+  ;; NO_TNH-NEXT:    )
+  ;; NO_TNH-NEXT:    (unreachable)
+  ;; NO_TNH-NEXT:   )
+  ;; NO_TNH-NEXT:  )
+  ;; NO_TNH-NEXT:  (drop
+  ;; NO_TNH-NEXT:   (block $block0 (result (ref any))
+  ;; NO_TNH-NEXT:    (br_on_non_null $block0
+  ;; NO_TNH-NEXT:     (local.get $x)
+  ;; NO_TNH-NEXT:    )
+  ;; NO_TNH-NEXT:    (unreachable)
+  ;; NO_TNH-NEXT:   )
+  ;; NO_TNH-NEXT:  )
+  ;; NO_TNH-NEXT: )
+  (func $br_on (param $x anyref)
+    ;; As above, this can be a cast to the bottom type.
+    (drop
+      (block $block (result anyref)
+        (drop
+          (br_on_cast $block $B
+            (local.get $x)
+          )
+        )
+        (unreachable)
+      )
+    )
+    ;; Non-cast br_on* can be ignored.
+    (drop
+      (block $block (result anyref)
+        (br_on_non_null $block
+          (local.get $x)
+        )
+        (unreachable)
+      )
+    )
+  )
+
+  ;; YESTNH:      (func $locals (type $none_=>_none)
+  ;; YESTNH-NEXT:  (local $A (ref none))
+  ;; YESTNH-NEXT:  (local $B (ref none))
+  ;; YESTNH-NEXT:  (local $C1 (ref none))
+  ;; YESTNH-NEXT:  (local $C2 nullref)
+  ;; YESTNH-NEXT:  (nop)
+  ;; YESTNH-NEXT: )
+  ;; NO_TNH:      (func $locals (type $none_=>_none)
+  ;; NO_TNH-NEXT:  (local $A (ref none))
+  ;; NO_TNH-NEXT:  (local $B (ref none))
+  ;; NO_TNH-NEXT:  (local $C1 (ref none))
+  ;; NO_TNH-NEXT:  (local $C2 nullref)
+  ;; NO_TNH-NEXT:  (nop)
+  ;; NO_TNH-NEXT: )
+  (func $locals
+    ;; All these locals can become nullable or even non-nullable null types.
+    ;; This checks no problem happens due to that.
+    (local $A (ref $A))
+    (local $B (ref $B))
+    (local $C1 (ref $C1))
+    (local $C2 (ref null $C2))
+  )
+)
+
+;; As above, but now $C1 is created.
+(module
+  ;; NO_TNH:      (type $A (struct ))
+  (type $A (struct))
+
+  ;; NO_TNH:      (type $B (struct_subtype  $A))
+  (type $B (struct_subtype $A))
+
+  ;; YESTNH:      (type $C1 (struct ))
+  ;; NO_TNH:      (type $C1 (struct_subtype  $B))
+  (type $C1 (struct_subtype $B))
+
+  (type $C2 (struct_subtype $B))
+
+  ;; YESTNH:      (type $anyref_=>_none (func (param anyref)))
+
+  ;; YESTNH:      (global $global anyref (struct.new_default $C1))
+  ;; NO_TNH:      (type $anyref_=>_none (func (param anyref)))
+
+  ;; NO_TNH:      (global $global anyref (struct.new_default $C1))
+  (global $global anyref (struct.new $C1))
+
+  ;; YESTNH:      (func $ref.cast (type $anyref_=>_none) (param $x anyref)
+  ;; YESTNH-NEXT:  (drop
+  ;; YESTNH-NEXT:   (ref.cast $C1
+  ;; YESTNH-NEXT:    (local.get $x)
+  ;; YESTNH-NEXT:   )
+  ;; YESTNH-NEXT:  )
+  ;; YESTNH-NEXT:  (drop
+  ;; YESTNH-NEXT:   (ref.cast $C1
+  ;; YESTNH-NEXT:    (local.get $x)
+  ;; YESTNH-NEXT:   )
+  ;; YESTNH-NEXT:  )
+  ;; YESTNH-NEXT:  (drop
+  ;; YESTNH-NEXT:   (ref.cast $C1
+  ;; YESTNH-NEXT:    (local.get $x)
+  ;; YESTNH-NEXT:   )
+  ;; YESTNH-NEXT:  )
+  ;; YESTNH-NEXT:  (drop
+  ;; YESTNH-NEXT:   (ref.cast none
+  ;; YESTNH-NEXT:    (local.get $x)
+  ;; YESTNH-NEXT:   )
+  ;; YESTNH-NEXT:  )
+  ;; YESTNH-NEXT: )
+  ;; NO_TNH:      (func $ref.cast (type $anyref_=>_none) (param $x anyref)
+  ;; NO_TNH-NEXT:  (drop
+  ;; NO_TNH-NEXT:   (ref.cast $A
+  ;; NO_TNH-NEXT:    (local.get $x)
+  ;; NO_TNH-NEXT:   )
+  ;; NO_TNH-NEXT:  )
+  ;; NO_TNH-NEXT:  (drop
+  ;; NO_TNH-NEXT:   (ref.cast $B
+  ;; NO_TNH-NEXT:    (local.get $x)
+  ;; NO_TNH-NEXT:   )
+  ;; NO_TNH-NEXT:  )
+  ;; NO_TNH-NEXT:  (drop
+  ;; NO_TNH-NEXT:   (ref.cast $C1
+  ;; NO_TNH-NEXT:    (local.get $x)
+  ;; NO_TNH-NEXT:   )
+  ;; NO_TNH-NEXT:  )
+  ;; NO_TNH-NEXT:  (drop
+  ;; NO_TNH-NEXT:   (ref.cast none
+  ;; NO_TNH-NEXT:    (local.get $x)
+  ;; NO_TNH-NEXT:   )
+  ;; NO_TNH-NEXT:  )
+  ;; NO_TNH-NEXT: )
+  (func $ref.cast (param $x anyref)
+    ;; These three can be cast to $C1 in TNH.
+    (drop
+      (ref.cast $A
+        (local.get $x)
+      )
+    )
+    (drop
+      (ref.cast $B
+        (local.get $x)
+      )
+    )
+    (drop
+      (ref.cast $C1
+        (local.get $x)
+      )
+    )
+    ;; This will trap.
+    (drop
+      (ref.cast $C2
+        (local.get $x)
+      )
+    )
+  )
+
+  ;; YESTNH:      (func $ref.cast.null (type $anyref_=>_none) (param $x anyref)
+  ;; YESTNH-NEXT:  (drop
+  ;; YESTNH-NEXT:   (ref.cast null $C1
+  ;; YESTNH-NEXT:    (local.get $x)
+  ;; YESTNH-NEXT:   )
+  ;; YESTNH-NEXT:  )
+  ;; YESTNH-NEXT:  (drop
+  ;; YESTNH-NEXT:   (ref.cast null $C1
+  ;; YESTNH-NEXT:    (local.get $x)
+  ;; YESTNH-NEXT:   )
+  ;; YESTNH-NEXT:  )
+  ;; YESTNH-NEXT:  (drop
+  ;; YESTNH-NEXT:   (ref.cast null $C1
+  ;; YESTNH-NEXT:    (local.get $x)
+  ;; YESTNH-NEXT:   )
+  ;; YESTNH-NEXT:  )
+  ;; YESTNH-NEXT:  (drop
+  ;; YESTNH-NEXT:   (ref.cast null none
+  ;; YESTNH-NEXT:    (local.get $x)
+  ;; YESTNH-NEXT:   )
+  ;; YESTNH-NEXT:  )
+  ;; YESTNH-NEXT: )
+  ;; NO_TNH:      (func $ref.cast.null (type $anyref_=>_none) (param $x anyref)
+  ;; NO_TNH-NEXT:  (drop
+  ;; NO_TNH-NEXT:   (ref.cast null $A
+  ;; NO_TNH-NEXT:    (local.get $x)
+  ;; NO_TNH-NEXT:   )
+  ;; NO_TNH-NEXT:  )
+  ;; NO_TNH-NEXT:  (drop
+  ;; NO_TNH-NEXT:   (ref.cast null $B
+  ;; NO_TNH-NEXT:    (local.get $x)
+  ;; NO_TNH-NEXT:   )
+  ;; NO_TNH-NEXT:  )
+  ;; NO_TNH-NEXT:  (drop
+  ;; NO_TNH-NEXT:   (ref.cast null $C1
+  ;; NO_TNH-NEXT:    (local.get $x)
+  ;; NO_TNH-NEXT:   )
+  ;; NO_TNH-NEXT:  )
+  ;; NO_TNH-NEXT:  (drop
+  ;; NO_TNH-NEXT:   (ref.cast null none
+  ;; NO_TNH-NEXT:    (local.get $x)
+  ;; NO_TNH-NEXT:   )
+  ;; NO_TNH-NEXT:  )
+  ;; NO_TNH-NEXT: )
+  (func $ref.cast.null (param $x anyref)
+    ;; These three can be cast to $C1 in TNH.
+    (drop
+      (ref.cast null $A
+        (local.get $x)
+      )
+    )
+    (drop
+      (ref.cast null $B
+        (local.get $x)
+      )
+    )
+    (drop
+      (ref.cast null $C1
+        (local.get $x)
+      )
+    )
+    ;; This returns null.
+    (drop
+      (ref.cast null $C2
+        (local.get $x)
+      )
+    )
+  )
+)
+
+;; Function subtyping, which is a TODO - for now we do nothing.
+(module
+  ;; YESTNH:      (type $A (func))
+  ;; NO_TNH:      (type $A (func))
+  (type $A (func))
+
+  ;; YESTNH:      (type $funcref_=>_none (func (param funcref)))
+
+  ;; YESTNH:      (type $B (func_subtype $A))
+  ;; NO_TNH:      (type $funcref_=>_none (func (param funcref)))
+
+  ;; NO_TNH:      (type $B (func_subtype $A))
+  (type $B (func_subtype $A))
+
+  ;; YESTNH:      (type $C (func_subtype $B))
+  ;; NO_TNH:      (type $C (func_subtype $B))
+  (type $C (func_subtype $B))
+
+  ;; YESTNH:      (func $A (type $A)
+  ;; YESTNH-NEXT:  (nop)
+  ;; YESTNH-NEXT: )
+  ;; NO_TNH:      (func $A (type $A)
+  ;; NO_TNH-NEXT:  (nop)
+  ;; NO_TNH-NEXT: )
+  (func $A (type $A)
+  )
+
+  ;; YESTNH:      (func $C (type $A)
+  ;; YESTNH-NEXT:  (nop)
+  ;; YESTNH-NEXT: )
+  ;; NO_TNH:      (func $C (type $A)
+  ;; NO_TNH-NEXT:  (nop)
+  ;; NO_TNH-NEXT: )
+  (func $C (type $A)
+  )
+
+  ;; YESTNH:      (func $casts (type $funcref_=>_none) (param $x funcref)
+  ;; YESTNH-NEXT:  (drop
+  ;; YESTNH-NEXT:   (ref.cast $A
+  ;; YESTNH-NEXT:    (local.get $x)
+  ;; YESTNH-NEXT:   )
+  ;; YESTNH-NEXT:  )
+  ;; YESTNH-NEXT:  (drop
+  ;; YESTNH-NEXT:   (ref.cast $B
+  ;; YESTNH-NEXT:    (local.get $x)
+  ;; YESTNH-NEXT:   )
+  ;; YESTNH-NEXT:  )
+  ;; YESTNH-NEXT:  (drop
+  ;; YESTNH-NEXT:   (ref.cast $C
+  ;; YESTNH-NEXT:    (local.get $x)
+  ;; YESTNH-NEXT:   )
+  ;; YESTNH-NEXT:  )
+  ;; YESTNH-NEXT: )
+  ;; NO_TNH:      (func $casts (type $funcref_=>_none) (param $x funcref)
+  ;; NO_TNH-NEXT:  (drop
+  ;; NO_TNH-NEXT:   (ref.cast $A
+  ;; NO_TNH-NEXT:    (local.get $x)
+  ;; NO_TNH-NEXT:   )
+  ;; NO_TNH-NEXT:  )
+  ;; NO_TNH-NEXT:  (drop
+  ;; NO_TNH-NEXT:   (ref.cast $B
+  ;; NO_TNH-NEXT:    (local.get $x)
+  ;; NO_TNH-NEXT:   )
+  ;; NO_TNH-NEXT:  )
+  ;;
