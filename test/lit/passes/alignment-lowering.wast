@@ -178,4 +178,396 @@
  ;; CHECK-NEXT:    )
  ;; CHECK-NEXT:   )
  ;; CHECK-NEXT:   (i32.store8 offset=3
- ;; CHECK-NEXT:    (local.get
+ ;; CHECK-NEXT:    (local.get $4)
+ ;; CHECK-NEXT:    (i32.shr_u
+ ;; CHECK-NEXT:     (local.get $5)
+ ;; CHECK-NEXT:     (i32.const 24)
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (block
+ ;; CHECK-NEXT:   (local.set $6
+ ;; CHECK-NEXT:    (i32.const 4)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:   (local.set $7
+ ;; CHECK-NEXT:    (i32.const 8)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:   (i32.store16
+ ;; CHECK-NEXT:    (local.get $6)
+ ;; CHECK-NEXT:    (local.get $7)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:   (i32.store16 offset=2
+ ;; CHECK-NEXT:    (local.get $6)
+ ;; CHECK-NEXT:    (i32.shr_u
+ ;; CHECK-NEXT:     (local.get $7)
+ ;; CHECK-NEXT:     (i32.const 16)
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (i32.store
+ ;; CHECK-NEXT:   (i32.const 4)
+ ;; CHECK-NEXT:   (i32.const 8)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (i32.store offset=100
+ ;; CHECK-NEXT:   (i32.const 4)
+ ;; CHECK-NEXT:   (i32.const 8)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (block
+ ;; CHECK-NEXT:   (local.set $8
+ ;; CHECK-NEXT:    (i32.const 4)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:   (local.set $9
+ ;; CHECK-NEXT:    (i32.const 8)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:   (i32.store8 offset=100
+ ;; CHECK-NEXT:    (local.get $8)
+ ;; CHECK-NEXT:    (local.get $9)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:   (i32.store8 offset=101
+ ;; CHECK-NEXT:    (local.get $8)
+ ;; CHECK-NEXT:    (i32.shr_u
+ ;; CHECK-NEXT:     (local.get $9)
+ ;; CHECK-NEXT:     (i32.const 8)
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:   (i32.store8 offset=102
+ ;; CHECK-NEXT:    (local.get $8)
+ ;; CHECK-NEXT:    (i32.shr_u
+ ;; CHECK-NEXT:     (local.get $9)
+ ;; CHECK-NEXT:     (i32.const 16)
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:   (i32.store8 offset=103
+ ;; CHECK-NEXT:    (local.get $8)
+ ;; CHECK-NEXT:    (i32.shr_u
+ ;; CHECK-NEXT:     (local.get $9)
+ ;; CHECK-NEXT:     (i32.const 24)
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (block
+ ;; CHECK-NEXT:   (local.set $10
+ ;; CHECK-NEXT:    (i32.const 4)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:   (local.set $11
+ ;; CHECK-NEXT:    (i32.const 8)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:   (i32.store16 offset=100
+ ;; CHECK-NEXT:    (local.get $10)
+ ;; CHECK-NEXT:    (local.get $11)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:   (i32.store16 offset=102
+ ;; CHECK-NEXT:    (local.get $10)
+ ;; CHECK-NEXT:    (i32.shr_u
+ ;; CHECK-NEXT:     (local.get $11)
+ ;; CHECK-NEXT:     (i32.const 16)
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (i32.store offset=100
+ ;; CHECK-NEXT:   (i32.const 4)
+ ;; CHECK-NEXT:   (i32.const 8)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (block
+ ;; CHECK-NEXT:   (drop
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:   (drop
+ ;; CHECK-NEXT:    (i32.const 8)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (block
+ ;; CHECK-NEXT:   (drop
+ ;; CHECK-NEXT:    (i32.const 4)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:   (drop
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT: )
+ (func $func_4
+  (drop (i32.load (i32.const 4)))
+  (drop (i32.load align=1 (i32.const 4)))
+  (drop (i32.load align=2 (i32.const 4)))
+  (drop (i32.load align=4 (i32.const 4)))
+  (drop (i32.load offset=100 (i32.const 4)))
+  (drop (i32.load offset=100 align=1 (i32.const 4)))
+  (drop (i32.load offset=100 align=2 (i32.const 4)))
+  (drop (i32.load offset=100 align=4 (i32.const 4)))
+  (drop (i32.load offset=100 align=1 (unreachable)))
+  (i32.store (i32.const 4) (i32.const 8))
+  (i32.store align=1 (i32.const 4) (i32.const 8))
+  (i32.store align=2 (i32.const 4) (i32.const 8))
+  (i32.store align=4 (i32.const 4) (i32.const 8))
+  (i32.store offset=100 (i32.const 4) (i32.const 8))
+  (i32.store offset=100 align=1 (i32.const 4) (i32.const 8))
+  (i32.store offset=100 align=2 (i32.const 4) (i32.const 8))
+  (i32.store offset=100 align=4 (i32.const 4) (i32.const 8))
+  (i32.store offset=100 align=1 (unreachable) (i32.const 8))
+  (i32.store offset=100 align=1 (i32.const 4) (unreachable))
+ )
+ ;; CHECK:      (func $func_2
+ ;; CHECK-NEXT:  (local $0 i32)
+ ;; CHECK-NEXT:  (local $1 i32)
+ ;; CHECK-NEXT:  (local $2 i32)
+ ;; CHECK-NEXT:  (local $3 i32)
+ ;; CHECK-NEXT:  (local $4 i32)
+ ;; CHECK-NEXT:  (local $5 i32)
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (i32.load16_u
+ ;; CHECK-NEXT:    (i32.const 4)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (block (result i32)
+ ;; CHECK-NEXT:    (local.set $0
+ ;; CHECK-NEXT:     (i32.const 4)
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:    (i32.or
+ ;; CHECK-NEXT:     (i32.load8_u
+ ;; CHECK-NEXT:      (local.get $0)
+ ;; CHECK-NEXT:     )
+ ;; CHECK-NEXT:     (i32.shl
+ ;; CHECK-NEXT:      (i32.load8_u offset=1
+ ;; CHECK-NEXT:       (local.get $0)
+ ;; CHECK-NEXT:      )
+ ;; CHECK-NEXT:      (i32.const 8)
+ ;; CHECK-NEXT:     )
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (i32.load16_u
+ ;; CHECK-NEXT:    (i32.const 4)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (i32.load16_u offset=100
+ ;; CHECK-NEXT:    (i32.const 4)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (block (result i32)
+ ;; CHECK-NEXT:    (local.set $1
+ ;; CHECK-NEXT:     (i32.const 4)
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:    (i32.or
+ ;; CHECK-NEXT:     (i32.load8_u offset=100
+ ;; CHECK-NEXT:      (local.get $1)
+ ;; CHECK-NEXT:     )
+ ;; CHECK-NEXT:     (i32.shl
+ ;; CHECK-NEXT:      (i32.load8_u offset=101
+ ;; CHECK-NEXT:       (local.get $1)
+ ;; CHECK-NEXT:      )
+ ;; CHECK-NEXT:      (i32.const 8)
+ ;; CHECK-NEXT:     )
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (i32.load16_u offset=100
+ ;; CHECK-NEXT:    (i32.const 4)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (unreachable)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (i32.store16
+ ;; CHECK-NEXT:   (i32.const 4)
+ ;; CHECK-NEXT:   (i32.const 8)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (block
+ ;; CHECK-NEXT:   (local.set $2
+ ;; CHECK-NEXT:    (i32.const 4)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:   (local.set $3
+ ;; CHECK-NEXT:    (i32.const 8)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:   (i32.store8
+ ;; CHECK-NEXT:    (local.get $2)
+ ;; CHECK-NEXT:    (local.get $3)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:   (i32.store8 offset=1
+ ;; CHECK-NEXT:    (local.get $2)
+ ;; CHECK-NEXT:    (i32.shr_u
+ ;; CHECK-NEXT:     (local.get $3)
+ ;; CHECK-NEXT:     (i32.const 8)
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (i32.store16
+ ;; CHECK-NEXT:   (i32.const 4)
+ ;; CHECK-NEXT:   (i32.const 8)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (i32.store16 offset=100
+ ;; CHECK-NEXT:   (i32.const 4)
+ ;; CHECK-NEXT:   (i32.const 8)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (block
+ ;; CHECK-NEXT:   (local.set $4
+ ;; CHECK-NEXT:    (i32.const 4)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:   (local.set $5
+ ;; CHECK-NEXT:    (i32.const 8)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:   (i32.store8 offset=100
+ ;; CHECK-NEXT:    (local.get $4)
+ ;; CHECK-NEXT:    (local.get $5)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:   (i32.store8 offset=101
+ ;; CHECK-NEXT:    (local.get $4)
+ ;; CHECK-NEXT:    (i32.shr_u
+ ;; CHECK-NEXT:     (local.get $5)
+ ;; CHECK-NEXT:     (i32.const 8)
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (i32.store16 offset=100
+ ;; CHECK-NEXT:   (i32.const 4)
+ ;; CHECK-NEXT:   (i32.const 8)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (block
+ ;; CHECK-NEXT:   (drop
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:   (drop
+ ;; CHECK-NEXT:    (i32.const 8)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (block
+ ;; CHECK-NEXT:   (drop
+ ;; CHECK-NEXT:    (i32.const 4)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:   (drop
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT: )
+ (func $func_2
+  (drop (i32.load16_u (i32.const 4)))
+  (drop (i32.load16_u align=1 (i32.const 4)))
+  (drop (i32.load16_u align=2 (i32.const 4)))
+  (drop (i32.load16_u offset=100 (i32.const 4)))
+  (drop (i32.load16_u offset=100 align=1 (i32.const 4)))
+  (drop (i32.load16_u offset=100 align=2 (i32.const 4)))
+  (drop (i32.load16_u offset=100 align=1 (unreachable)))
+  (i32.store16 (i32.const 4) (i32.const 8))
+  (i32.store16 align=1 (i32.const 4) (i32.const 8))
+  (i32.store16 align=2 (i32.const 4) (i32.const 8))
+  (i32.store16 offset=100 (i32.const 4) (i32.const 8))
+  (i32.store16 offset=100 align=1 (i32.const 4) (i32.const 8))
+  (i32.store16 offset=100 align=2 (i32.const 4) (i32.const 8))
+  (i32.store16 offset=100 align=1 (unreachable) (i32.const 8))
+  (i32.store16 offset=100 align=1 (i32.const 4) (unreachable))
+ )
+ ;; CHECK:      (func $func_1
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (i32.load8_u
+ ;; CHECK-NEXT:    (i32.const 4)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (i32.load8_u
+ ;; CHECK-NEXT:    (i32.const 4)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (i32.load8_u offset=100
+ ;; CHECK-NEXT:    (i32.const 4)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (i32.load8_u offset=100
+ ;; CHECK-NEXT:    (i32.const 4)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (unreachable)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (i32.store8
+ ;; CHECK-NEXT:   (i32.const 4)
+ ;; CHECK-NEXT:   (i32.const 8)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (i32.store8
+ ;; CHECK-NEXT:   (i32.const 4)
+ ;; CHECK-NEXT:   (i32.const 8)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (i32.store8 offset=100
+ ;; CHECK-NEXT:   (i32.const 4)
+ ;; CHECK-NEXT:   (i32.const 8)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (i32.store8 offset=100
+ ;; CHECK-NEXT:   (i32.const 4)
+ ;; CHECK-NEXT:   (i32.const 8)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (block
+ ;; CHECK-NEXT:   (drop
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:   (drop
+ ;; CHECK-NEXT:    (i32.const 8)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (block
+ ;; CHECK-NEXT:   (drop
+ ;; CHECK-NEXT:    (i32.const 4)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:   (drop
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT: )
+ (func $func_1
+  (drop (i32.load8_u (i32.const 4)))
+  (drop (i32.load8_u align=1 (i32.const 4)))
+  (drop (i32.load8_u offset=100 (i32.const 4)))
+  (drop (i32.load8_u offset=100 align=1 (i32.const 4)))
+  (drop (i32.load8_u offset=100 align=1 (unreachable)))
+  (i32.store8 (i32.const 4) (i32.const 8))
+  (i32.store8 align=1 (i32.const 4) (i32.const 8))
+  (i32.store8 offset=100 (i32.const 4) (i32.const 8))
+  (i32.store8 offset=100 align=1 (i32.const 4) (i32.const 8))
+  (i32.store8 offset=100 align=1 (unreachable) (i32.const 8))
+  (i32.store8 offset=100 align=1 (i32.const 4) (unreachable))
+ )
+ ;; CHECK:      (func $func_signed
+ ;; CHECK-NEXT:  (local $0 i32)
+ ;; CHECK-NEXT:  (local $1 i32)
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (i32.load16_s
+ ;; CHECK-NEXT:    (i32.const 4)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (block (result i32)
+ ;; CHECK-NEXT:    (local.set $0
+ ;; CHECK-NEXT:     (i32.const 4)
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:    (i32.shr_s
+ ;; CHECK-NEXT:     (i32.shl
+ ;; CHECK-NEXT:      (i32.or
+ ;; CHECK-NEXT:       (i32.load8_u
+ ;; CHECK-NEXT:        (local.get $0)
+ ;; CHECK-NEXT:       )
+ ;; CHECK-NEXT:       (i32.shl
+ ;; CHECK-NEXT:        (i32.load8_u offset=1
+ ;; CHECK-NEXT:         (local.get $0)
+ ;; CHECK-NEXT:        )
+ ;; CHECK-NEXT:        (i32.const 8)
+ ;; CHECK-NEXT:       )
+ ;; CHECK-NEXT:      )
+ ;; CHECK-NEXT:      (i32.const 16)
+ ;; CHECK-NEXT:     )
+ ;; CHECK-NEXT:     (i32.const 16)
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (i32.load16_s
+ ;; CHECK-NEXT:    (i32.const 4)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (i32.load16_s offset=100
+ ;; CHECK-NEXT:    (i32.const 4)
+ ;; CHECK-NEXT:   )
