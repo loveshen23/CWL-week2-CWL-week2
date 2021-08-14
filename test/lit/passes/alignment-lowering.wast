@@ -943,4 +943,367 @@
  ;; CHECK-NEXT:  )
  ;; CHECK-NEXT:  (drop
  ;; CHECK-NEXT:   (i64.extend_i32_u
- ;; 
+ ;; CHECK-NEXT:    (block (result i32)
+ ;; CHECK-NEXT:     (local.set $13
+ ;; CHECK-NEXT:      (i32.const 44)
+ ;; CHECK-NEXT:     )
+ ;; CHECK-NEXT:     (i32.or
+ ;; CHECK-NEXT:      (i32.or
+ ;; CHECK-NEXT:       (i32.load8_u
+ ;; CHECK-NEXT:        (local.get $13)
+ ;; CHECK-NEXT:       )
+ ;; CHECK-NEXT:       (i32.shl
+ ;; CHECK-NEXT:        (i32.load8_u offset=1
+ ;; CHECK-NEXT:         (local.get $13)
+ ;; CHECK-NEXT:        )
+ ;; CHECK-NEXT:        (i32.const 8)
+ ;; CHECK-NEXT:       )
+ ;; CHECK-NEXT:      )
+ ;; CHECK-NEXT:      (i32.or
+ ;; CHECK-NEXT:       (i32.shl
+ ;; CHECK-NEXT:        (i32.load8_u offset=2
+ ;; CHECK-NEXT:         (local.get $13)
+ ;; CHECK-NEXT:        )
+ ;; CHECK-NEXT:        (i32.const 16)
+ ;; CHECK-NEXT:       )
+ ;; CHECK-NEXT:       (i32.shl
+ ;; CHECK-NEXT:        (i32.load8_u offset=3
+ ;; CHECK-NEXT:         (local.get $13)
+ ;; CHECK-NEXT:        )
+ ;; CHECK-NEXT:        (i32.const 24)
+ ;; CHECK-NEXT:       )
+ ;; CHECK-NEXT:      )
+ ;; CHECK-NEXT:     )
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT: )
+ (func $i64-load
+  (drop (i64.load align=1 (i32.const 12)))
+  (drop (i64.load align=2 (i32.const 16)))
+  (drop (i64.load align=4 (i32.const 20)))
+  (drop (i64.load align=1 offset=3 (i32.const 20)))
+  (drop (i64.load16_s align=1 (i32.const 28)))
+  (drop (i64.load32_s align=1 (i32.const 32)))
+  (drop (i64.load16_u align=1 (i32.const 40)))
+  (drop (i64.load32_u align=1 (i32.const 44)))
+ )
+ ;; CHECK:      (func $f32-load
+ ;; CHECK-NEXT:  (local $0 i32)
+ ;; CHECK-NEXT:  (local $1 i32)
+ ;; CHECK-NEXT:  (local $2 i32)
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (f32.reinterpret_i32
+ ;; CHECK-NEXT:    (block (result i32)
+ ;; CHECK-NEXT:     (local.set $0
+ ;; CHECK-NEXT:      (i32.const 12)
+ ;; CHECK-NEXT:     )
+ ;; CHECK-NEXT:     (i32.or
+ ;; CHECK-NEXT:      (i32.or
+ ;; CHECK-NEXT:       (i32.load8_u
+ ;; CHECK-NEXT:        (local.get $0)
+ ;; CHECK-NEXT:       )
+ ;; CHECK-NEXT:       (i32.shl
+ ;; CHECK-NEXT:        (i32.load8_u offset=1
+ ;; CHECK-NEXT:         (local.get $0)
+ ;; CHECK-NEXT:        )
+ ;; CHECK-NEXT:        (i32.const 8)
+ ;; CHECK-NEXT:       )
+ ;; CHECK-NEXT:      )
+ ;; CHECK-NEXT:      (i32.or
+ ;; CHECK-NEXT:       (i32.shl
+ ;; CHECK-NEXT:        (i32.load8_u offset=2
+ ;; CHECK-NEXT:         (local.get $0)
+ ;; CHECK-NEXT:        )
+ ;; CHECK-NEXT:        (i32.const 16)
+ ;; CHECK-NEXT:       )
+ ;; CHECK-NEXT:       (i32.shl
+ ;; CHECK-NEXT:        (i32.load8_u offset=3
+ ;; CHECK-NEXT:         (local.get $0)
+ ;; CHECK-NEXT:        )
+ ;; CHECK-NEXT:        (i32.const 24)
+ ;; CHECK-NEXT:       )
+ ;; CHECK-NEXT:      )
+ ;; CHECK-NEXT:     )
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (f32.reinterpret_i32
+ ;; CHECK-NEXT:    (block (result i32)
+ ;; CHECK-NEXT:     (local.set $1
+ ;; CHECK-NEXT:      (i32.const 16)
+ ;; CHECK-NEXT:     )
+ ;; CHECK-NEXT:     (i32.or
+ ;; CHECK-NEXT:      (i32.load16_u
+ ;; CHECK-NEXT:       (local.get $1)
+ ;; CHECK-NEXT:      )
+ ;; CHECK-NEXT:      (i32.shl
+ ;; CHECK-NEXT:       (i32.load16_u offset=2
+ ;; CHECK-NEXT:        (local.get $1)
+ ;; CHECK-NEXT:       )
+ ;; CHECK-NEXT:       (i32.const 16)
+ ;; CHECK-NEXT:      )
+ ;; CHECK-NEXT:     )
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (f32.reinterpret_i32
+ ;; CHECK-NEXT:    (block (result i32)
+ ;; CHECK-NEXT:     (local.set $2
+ ;; CHECK-NEXT:      (i32.const 20)
+ ;; CHECK-NEXT:     )
+ ;; CHECK-NEXT:     (i32.or
+ ;; CHECK-NEXT:      (i32.or
+ ;; CHECK-NEXT:       (i32.load8_u offset=3
+ ;; CHECK-NEXT:        (local.get $2)
+ ;; CHECK-NEXT:       )
+ ;; CHECK-NEXT:       (i32.shl
+ ;; CHECK-NEXT:        (i32.load8_u offset=4
+ ;; CHECK-NEXT:         (local.get $2)
+ ;; CHECK-NEXT:        )
+ ;; CHECK-NEXT:        (i32.const 8)
+ ;; CHECK-NEXT:       )
+ ;; CHECK-NEXT:      )
+ ;; CHECK-NEXT:      (i32.or
+ ;; CHECK-NEXT:       (i32.shl
+ ;; CHECK-NEXT:        (i32.load8_u offset=5
+ ;; CHECK-NEXT:         (local.get $2)
+ ;; CHECK-NEXT:        )
+ ;; CHECK-NEXT:        (i32.const 16)
+ ;; CHECK-NEXT:       )
+ ;; CHECK-NEXT:       (i32.shl
+ ;; CHECK-NEXT:        (i32.load8_u offset=6
+ ;; CHECK-NEXT:         (local.get $2)
+ ;; CHECK-NEXT:        )
+ ;; CHECK-NEXT:        (i32.const 24)
+ ;; CHECK-NEXT:       )
+ ;; CHECK-NEXT:      )
+ ;; CHECK-NEXT:     )
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT: )
+ (func $f32-load
+  (drop (f32.load align=1 (i32.const 12)))
+  (drop (f32.load align=2 (i32.const 16)))
+  (drop (f32.load align=1 offset=3 (i32.const 20)))
+ )
+ ;; CHECK:      (func $f64-load
+ ;; CHECK-NEXT:  (local $0 i32)
+ ;; CHECK-NEXT:  (local $1 i32)
+ ;; CHECK-NEXT:  (local $2 i32)
+ ;; CHECK-NEXT:  (local $3 i32)
+ ;; CHECK-NEXT:  (local $4 i32)
+ ;; CHECK-NEXT:  (local $5 i32)
+ ;; CHECK-NEXT:  (local $6 i32)
+ ;; CHECK-NEXT:  (local $7 i32)
+ ;; CHECK-NEXT:  (local $8 i32)
+ ;; CHECK-NEXT:  (local $9 i32)
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (f64.reinterpret_i64
+ ;; CHECK-NEXT:    (block (result i64)
+ ;; CHECK-NEXT:     (local.set $0
+ ;; CHECK-NEXT:      (i32.const 12)
+ ;; CHECK-NEXT:     )
+ ;; CHECK-NEXT:     (i64.or
+ ;; CHECK-NEXT:      (i64.extend_i32_u
+ ;; CHECK-NEXT:       (block (result i32)
+ ;; CHECK-NEXT:        (local.set $1
+ ;; CHECK-NEXT:         (local.get $0)
+ ;; CHECK-NEXT:        )
+ ;; CHECK-NEXT:        (i32.or
+ ;; CHECK-NEXT:         (i32.or
+ ;; CHECK-NEXT:          (i32.load8_u
+ ;; CHECK-NEXT:           (local.get $1)
+ ;; CHECK-NEXT:          )
+ ;; CHECK-NEXT:          (i32.shl
+ ;; CHECK-NEXT:           (i32.load8_u offset=1
+ ;; CHECK-NEXT:            (local.get $1)
+ ;; CHECK-NEXT:           )
+ ;; CHECK-NEXT:           (i32.const 8)
+ ;; CHECK-NEXT:          )
+ ;; CHECK-NEXT:         )
+ ;; CHECK-NEXT:         (i32.or
+ ;; CHECK-NEXT:          (i32.shl
+ ;; CHECK-NEXT:           (i32.load8_u offset=2
+ ;; CHECK-NEXT:            (local.get $1)
+ ;; CHECK-NEXT:           )
+ ;; CHECK-NEXT:           (i32.const 16)
+ ;; CHECK-NEXT:          )
+ ;; CHECK-NEXT:          (i32.shl
+ ;; CHECK-NEXT:           (i32.load8_u offset=3
+ ;; CHECK-NEXT:            (local.get $1)
+ ;; CHECK-NEXT:           )
+ ;; CHECK-NEXT:           (i32.const 24)
+ ;; CHECK-NEXT:          )
+ ;; CHECK-NEXT:         )
+ ;; CHECK-NEXT:        )
+ ;; CHECK-NEXT:       )
+ ;; CHECK-NEXT:      )
+ ;; CHECK-NEXT:      (i64.shl
+ ;; CHECK-NEXT:       (i64.extend_i32_u
+ ;; CHECK-NEXT:        (block (result i32)
+ ;; CHECK-NEXT:         (local.set $2
+ ;; CHECK-NEXT:          (local.get $0)
+ ;; CHECK-NEXT:         )
+ ;; CHECK-NEXT:         (i32.or
+ ;; CHECK-NEXT:          (i32.or
+ ;; CHECK-NEXT:           (i32.load8_u offset=4
+ ;; CHECK-NEXT:            (local.get $2)
+ ;; CHECK-NEXT:           )
+ ;; CHECK-NEXT:           (i32.shl
+ ;; CHECK-NEXT:            (i32.load8_u offset=5
+ ;; CHECK-NEXT:             (local.get $2)
+ ;; CHECK-NEXT:            )
+ ;; CHECK-NEXT:            (i32.const 8)
+ ;; CHECK-NEXT:           )
+ ;; CHECK-NEXT:          )
+ ;; CHECK-NEXT:          (i32.or
+ ;; CHECK-NEXT:           (i32.shl
+ ;; CHECK-NEXT:            (i32.load8_u offset=6
+ ;; CHECK-NEXT:             (local.get $2)
+ ;; CHECK-NEXT:            )
+ ;; CHECK-NEXT:            (i32.const 16)
+ ;; CHECK-NEXT:           )
+ ;; CHECK-NEXT:           (i32.shl
+ ;; CHECK-NEXT:            (i32.load8_u offset=7
+ ;; CHECK-NEXT:             (local.get $2)
+ ;; CHECK-NEXT:            )
+ ;; CHECK-NEXT:            (i32.const 24)
+ ;; CHECK-NEXT:           )
+ ;; CHECK-NEXT:          )
+ ;; CHECK-NEXT:         )
+ ;; CHECK-NEXT:        )
+ ;; CHECK-NEXT:       )
+ ;; CHECK-NEXT:       (i64.const 32)
+ ;; CHECK-NEXT:      )
+ ;; CHECK-NEXT:     )
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (f64.reinterpret_i64
+ ;; CHECK-NEXT:    (block (result i64)
+ ;; CHECK-NEXT:     (local.set $3
+ ;; CHECK-NEXT:      (i32.const 16)
+ ;; CHECK-NEXT:     )
+ ;; CHECK-NEXT:     (i64.or
+ ;; CHECK-NEXT:      (i64.extend_i32_u
+ ;; CHECK-NEXT:       (block (result i32)
+ ;; CHECK-NEXT:        (local.set $4
+ ;; CHECK-NEXT:         (local.get $3)
+ ;; CHECK-NEXT:        )
+ ;; CHECK-NEXT:        (i32.or
+ ;; CHECK-NEXT:         (i32.load16_u
+ ;; CHECK-NEXT:          (local.get $4)
+ ;; CHECK-NEXT:         )
+ ;; CHECK-NEXT:         (i32.shl
+ ;; CHECK-NEXT:          (i32.load16_u offset=2
+ ;; CHECK-NEXT:           (local.get $4)
+ ;; CHECK-NEXT:          )
+ ;; CHECK-NEXT:          (i32.const 16)
+ ;; CHECK-NEXT:         )
+ ;; CHECK-NEXT:        )
+ ;; CHECK-NEXT:       )
+ ;; CHECK-NEXT:      )
+ ;; CHECK-NEXT:      (i64.shl
+ ;; CHECK-NEXT:       (i64.extend_i32_u
+ ;; CHECK-NEXT:        (block (result i32)
+ ;; CHECK-NEXT:         (local.set $5
+ ;; CHECK-NEXT:          (local.get $3)
+ ;; CHECK-NEXT:         )
+ ;; CHECK-NEXT:         (i32.or
+ ;; CHECK-NEXT:          (i32.load16_u offset=4
+ ;; CHECK-NEXT:           (local.get $5)
+ ;; CHECK-NEXT:          )
+ ;; CHECK-NEXT:          (i32.shl
+ ;; CHECK-NEXT:           (i32.load16_u offset=6
+ ;; CHECK-NEXT:            (local.get $5)
+ ;; CHECK-NEXT:           )
+ ;; CHECK-NEXT:           (i32.const 16)
+ ;; CHECK-NEXT:          )
+ ;; CHECK-NEXT:         )
+ ;; CHECK-NEXT:        )
+ ;; CHECK-NEXT:       )
+ ;; CHECK-NEXT:       (i64.const 32)
+ ;; CHECK-NEXT:      )
+ ;; CHECK-NEXT:     )
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (f64.reinterpret_i64
+ ;; CHECK-NEXT:    (block (result i64)
+ ;; CHECK-NEXT:     (local.set $6
+ ;; CHECK-NEXT:      (i32.const 20)
+ ;; CHECK-NEXT:     )
+ ;; CHECK-NEXT:     (i64.or
+ ;; CHECK-NEXT:      (i64.extend_i32_u
+ ;; CHECK-NEXT:       (i32.load
+ ;; CHECK-NEXT:        (local.get $6)
+ ;; CHECK-NEXT:       )
+ ;; CHECK-NEXT:      )
+ ;; CHECK-NEXT:      (i64.shl
+ ;; CHECK-NEXT:       (i64.extend_i32_u
+ ;; CHECK-NEXT:        (i32.load offset=4
+ ;; CHECK-NEXT:         (local.get $6)
+ ;; CHECK-NEXT:        )
+ ;; CHECK-NEXT:       )
+ ;; CHECK-NEXT:       (i64.const 32)
+ ;; CHECK-NEXT:      )
+ ;; CHECK-NEXT:     )
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (f64.reinterpret_i64
+ ;; CHECK-NEXT:    (block (result i64)
+ ;; CHECK-NEXT:     (local.set $7
+ ;; CHECK-NEXT:      (i32.const 20)
+ ;; CHECK-NEXT:     )
+ ;; CHECK-NEXT:     (i64.or
+ ;; CHECK-NEXT:      (i64.extend_i32_u
+ ;; CHECK-NEXT:       (block (result i32)
+ ;; CHECK-NEXT:        (local.set $8
+ ;; CHECK-NEXT:         (local.get $7)
+ ;; CHECK-NEXT:        )
+ ;; CHECK-NEXT:        (i32.or
+ ;; CHECK-NEXT:         (i32.or
+ ;; CHECK-NEXT:          (i32.load8_u offset=3
+ ;; CHECK-NEXT:           (local.get $8)
+ ;; CHECK-NEXT:          )
+ ;; CHECK-NEXT:          (i32.shl
+ ;; CHECK-NEXT:           (i32.load8_u offset=4
+ ;; CHECK-NEXT:            (local.get $8)
+ ;; CHECK-NEXT:           )
+ ;; CHECK-NEXT:           (i32.const 8)
+ ;; CHECK-NEXT:          )
+ ;; CHECK-NEXT:         )
+ ;; CHECK-NEXT:         (i32.or
+ ;; CHECK-NEXT:          (i32.shl
+ ;; CHECK-NEXT:           (i32.load8_u offset=5
+ ;; CHECK-NEXT:            (local.get $8)
+ ;; CHECK-NEXT:           )
+ ;; CHECK-NEXT:           (i32.const 16)
+ ;; CHECK-NEXT:          )
+ ;; CHECK-NEXT:          (i32.shl
+ ;; CHECK-NEXT:           (i32.load8_u offset=6
+ ;; CHECK-NEXT:            (local.get $8)
+ ;; CHECK-NEXT:           )
+ ;; CHECK-NEXT:           (i32.const 24)
+ ;; CHECK-NEXT:          )
+ ;; CHECK-NEXT:         )
+ ;; CHECK-NEXT:        )
+ ;; CHECK-NEXT:       )
+ ;; CHECK-NEXT:      )
+ ;; CHECK-NEXT:      (i64.shl
+ ;; CHECK-NEXT:       (i64.extend_i32_u
+ ;; CHECK-NEXT:        (block (result i32)
+ ;; CHECK-NEXT:         (local.set $9
+ ;; CHECK-NEXT:          (local.get $7)
+ ;; CHECK-NEXT:         )
+ ;; CHECK-NEXT:         (i32.or
+ ;; CHECK-NEXT:          (i32.or
+ ;; CHE
