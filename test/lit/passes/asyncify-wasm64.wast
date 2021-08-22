@@ -671,4 +671,367 @@
   ;; CHECK-NEXT:      (global.get $__asyncify_data)
   ;; CHECK-NEXT:     )
   ;; CHECK-NEXT:    )
-  ;; CHECK-NE
+  ;; CHECK-NEXT:    (local.set $live0
+  ;; CHECK-NEXT:     (i32.load
+  ;; CHECK-NEXT:      (local.get $5)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (local.set $3
+  ;; CHECK-NEXT:   (block $__asyncify_unwind (result i32)
+  ;; CHECK-NEXT:    (block
+  ;; CHECK-NEXT:     (block
+  ;; CHECK-NEXT:      (if
+  ;; CHECK-NEXT:       (i32.eq
+  ;; CHECK-NEXT:        (global.get $__asyncify_state)
+  ;; CHECK-NEXT:        (i32.const 2)
+  ;; CHECK-NEXT:       )
+  ;; CHECK-NEXT:       (block
+  ;; CHECK-NEXT:        (i64.store
+  ;; CHECK-NEXT:         (global.get $__asyncify_data)
+  ;; CHECK-NEXT:         (i64.add
+  ;; CHECK-NEXT:          (i64.load
+  ;; CHECK-NEXT:           (global.get $__asyncify_data)
+  ;; CHECK-NEXT:          )
+  ;; CHECK-NEXT:          (i64.const -4)
+  ;; CHECK-NEXT:         )
+  ;; CHECK-NEXT:        )
+  ;; CHECK-NEXT:        (local.set $4
+  ;; CHECK-NEXT:         (i32.load
+  ;; CHECK-NEXT:          (i64.load
+  ;; CHECK-NEXT:           (global.get $__asyncify_data)
+  ;; CHECK-NEXT:          )
+  ;; CHECK-NEXT:         )
+  ;; CHECK-NEXT:        )
+  ;; CHECK-NEXT:       )
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:      (block
+  ;; CHECK-NEXT:       (if
+  ;; CHECK-NEXT:        (i32.or
+  ;; CHECK-NEXT:         (i32.const 0)
+  ;; CHECK-NEXT:         (i32.eq
+  ;; CHECK-NEXT:          (global.get $__asyncify_state)
+  ;; CHECK-NEXT:          (i32.const 2)
+  ;; CHECK-NEXT:         )
+  ;; CHECK-NEXT:        )
+  ;; CHECK-NEXT:        (if
+  ;; CHECK-NEXT:         (if (result i32)
+  ;; CHECK-NEXT:          (i32.eq
+  ;; CHECK-NEXT:           (global.get $__asyncify_state)
+  ;; CHECK-NEXT:           (i32.const 0)
+  ;; CHECK-NEXT:          )
+  ;; CHECK-NEXT:          (i32.const 1)
+  ;; CHECK-NEXT:          (i32.eq
+  ;; CHECK-NEXT:           (local.get $4)
+  ;; CHECK-NEXT:           (i32.const 0)
+  ;; CHECK-NEXT:          )
+  ;; CHECK-NEXT:         )
+  ;; CHECK-NEXT:         (block
+  ;; CHECK-NEXT:          (call $import)
+  ;; CHECK-NEXT:          (if
+  ;; CHECK-NEXT:           (i32.eq
+  ;; CHECK-NEXT:            (global.get $__asyncify_state)
+  ;; CHECK-NEXT:            (i32.const 1)
+  ;; CHECK-NEXT:           )
+  ;; CHECK-NEXT:           (br $__asyncify_unwind
+  ;; CHECK-NEXT:            (i32.const 0)
+  ;; CHECK-NEXT:           )
+  ;; CHECK-NEXT:          )
+  ;; CHECK-NEXT:         )
+  ;; CHECK-NEXT:        )
+  ;; CHECK-NEXT:       )
+  ;; CHECK-NEXT:       (if
+  ;; CHECK-NEXT:        (i32.eq
+  ;; CHECK-NEXT:         (global.get $__asyncify_state)
+  ;; CHECK-NEXT:         (i32.const 0)
+  ;; CHECK-NEXT:        )
+  ;; CHECK-NEXT:        (block
+  ;; CHECK-NEXT:         (local.set $2
+  ;; CHECK-NEXT:          (local.get $live0)
+  ;; CHECK-NEXT:         )
+  ;; CHECK-NEXT:         (drop
+  ;; CHECK-NEXT:          (local.get $2)
+  ;; CHECK-NEXT:         )
+  ;; CHECK-NEXT:        )
+  ;; CHECK-NEXT:       )
+  ;; CHECK-NEXT:       (nop)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (return)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (block
+  ;; CHECK-NEXT:   (i32.store
+  ;; CHECK-NEXT:    (i64.load
+  ;; CHECK-NEXT:     (global.get $__asyncify_data)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (local.get $3)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (i64.store
+  ;; CHECK-NEXT:    (global.get $__asyncify_data)
+  ;; CHECK-NEXT:    (i64.add
+  ;; CHECK-NEXT:     (i64.load
+  ;; CHECK-NEXT:      (global.get $__asyncify_data)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (i64.const 4)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (block
+  ;; CHECK-NEXT:   (local.set $6
+  ;; CHECK-NEXT:    (i64.load
+  ;; CHECK-NEXT:     (global.get $__asyncify_data)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (i32.store
+  ;; CHECK-NEXT:    (local.get $6)
+  ;; CHECK-NEXT:    (local.get $live0)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (i64.store
+  ;; CHECK-NEXT:    (global.get $__asyncify_data)
+  ;; CHECK-NEXT:    (i64.add
+  ;; CHECK-NEXT:     (i64.load
+  ;; CHECK-NEXT:      (global.get $__asyncify_data)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (i64.const 4)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $liveness4 (param $live0 i32) (param $dead0 i32)
+    (if (i32.const 0)
+      (call $import)
+    )
+    (drop (local.get $live0))
+  )
+  ;; CHECK:      (func $liveness5 (param $dead0 i32)
+  ;; CHECK-NEXT:  (local $1 i32)
+  ;; CHECK-NEXT:  (local $2 i32)
+  ;; CHECK-NEXT:  (local $3 i32)
+  ;; CHECK-NEXT:  (local $4 i32)
+  ;; CHECK-NEXT:  (if
+  ;; CHECK-NEXT:   (i32.eq
+  ;; CHECK-NEXT:    (global.get $__asyncify_state)
+  ;; CHECK-NEXT:    (i32.const 2)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (nop)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (local.set $3
+  ;; CHECK-NEXT:   (block $__asyncify_unwind (result i32)
+  ;; CHECK-NEXT:    (block
+  ;; CHECK-NEXT:     (block
+  ;; CHECK-NEXT:      (if
+  ;; CHECK-NEXT:       (i32.eq
+  ;; CHECK-NEXT:        (global.get $__asyncify_state)
+  ;; CHECK-NEXT:        (i32.const 2)
+  ;; CHECK-NEXT:       )
+  ;; CHECK-NEXT:       (block
+  ;; CHECK-NEXT:        (i64.store
+  ;; CHECK-NEXT:         (global.get $__asyncify_data)
+  ;; CHECK-NEXT:         (i64.add
+  ;; CHECK-NEXT:          (i64.load
+  ;; CHECK-NEXT:           (global.get $__asyncify_data)
+  ;; CHECK-NEXT:          )
+  ;; CHECK-NEXT:          (i64.const -4)
+  ;; CHECK-NEXT:         )
+  ;; CHECK-NEXT:        )
+  ;; CHECK-NEXT:        (local.set $4
+  ;; CHECK-NEXT:         (i32.load
+  ;; CHECK-NEXT:          (i64.load
+  ;; CHECK-NEXT:           (global.get $__asyncify_data)
+  ;; CHECK-NEXT:          )
+  ;; CHECK-NEXT:         )
+  ;; CHECK-NEXT:        )
+  ;; CHECK-NEXT:       )
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:      (block
+  ;; CHECK-NEXT:       (if
+  ;; CHECK-NEXT:        (i32.eq
+  ;; CHECK-NEXT:         (global.get $__asyncify_state)
+  ;; CHECK-NEXT:         (i32.const 0)
+  ;; CHECK-NEXT:        )
+  ;; CHECK-NEXT:        (block
+  ;; CHECK-NEXT:         (local.set $1
+  ;; CHECK-NEXT:          (local.get $dead0)
+  ;; CHECK-NEXT:         )
+  ;; CHECK-NEXT:         (drop
+  ;; CHECK-NEXT:          (local.get $1)
+  ;; CHECK-NEXT:         )
+  ;; CHECK-NEXT:        )
+  ;; CHECK-NEXT:       )
+  ;; CHECK-NEXT:       (nop)
+  ;; CHECK-NEXT:       (if
+  ;; CHECK-NEXT:        (i32.or
+  ;; CHECK-NEXT:         (i32.const 0)
+  ;; CHECK-NEXT:         (i32.eq
+  ;; CHECK-NEXT:          (global.get $__asyncify_state)
+  ;; CHECK-NEXT:          (i32.const 2)
+  ;; CHECK-NEXT:         )
+  ;; CHECK-NEXT:        )
+  ;; CHECK-NEXT:        (if
+  ;; CHECK-NEXT:         (if (result i32)
+  ;; CHECK-NEXT:          (i32.eq
+  ;; CHECK-NEXT:           (global.get $__asyncify_state)
+  ;; CHECK-NEXT:           (i32.const 0)
+  ;; CHECK-NEXT:          )
+  ;; CHECK-NEXT:          (i32.const 1)
+  ;; CHECK-NEXT:          (i32.eq
+  ;; CHECK-NEXT:           (local.get $4)
+  ;; CHECK-NEXT:           (i32.const 0)
+  ;; CHECK-NEXT:          )
+  ;; CHECK-NEXT:         )
+  ;; CHECK-NEXT:         (block
+  ;; CHECK-NEXT:          (call $import)
+  ;; CHECK-NEXT:          (if
+  ;; CHECK-NEXT:           (i32.eq
+  ;; CHECK-NEXT:            (global.get $__asyncify_state)
+  ;; CHECK-NEXT:            (i32.const 1)
+  ;; CHECK-NEXT:           )
+  ;; CHECK-NEXT:           (br $__asyncify_unwind
+  ;; CHECK-NEXT:            (i32.const 0)
+  ;; CHECK-NEXT:           )
+  ;; CHECK-NEXT:          )
+  ;; CHECK-NEXT:         )
+  ;; CHECK-NEXT:        )
+  ;; CHECK-NEXT:       )
+  ;; CHECK-NEXT:       (if
+  ;; CHECK-NEXT:        (i32.eq
+  ;; CHECK-NEXT:         (global.get $__asyncify_state)
+  ;; CHECK-NEXT:         (i32.const 0)
+  ;; CHECK-NEXT:        )
+  ;; CHECK-NEXT:        (block
+  ;; CHECK-NEXT:         (local.set $dead0
+  ;; CHECK-NEXT:          (i32.const 1)
+  ;; CHECK-NEXT:         )
+  ;; CHECK-NEXT:         (local.set $2
+  ;; CHECK-NEXT:          (local.get $dead0)
+  ;; CHECK-NEXT:         )
+  ;; CHECK-NEXT:         (drop
+  ;; CHECK-NEXT:          (local.get $2)
+  ;; CHECK-NEXT:         )
+  ;; CHECK-NEXT:        )
+  ;; CHECK-NEXT:       )
+  ;; CHECK-NEXT:       (nop)
+  ;; CHECK-NEXT:       (nop)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (return)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (block
+  ;; CHECK-NEXT:   (i32.store
+  ;; CHECK-NEXT:    (i64.load
+  ;; CHECK-NEXT:     (global.get $__asyncify_data)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (local.get $3)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (i64.store
+  ;; CHECK-NEXT:    (global.get $__asyncify_data)
+  ;; CHECK-NEXT:    (i64.add
+  ;; CHECK-NEXT:     (i64.load
+  ;; CHECK-NEXT:      (global.get $__asyncify_data)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (i64.const 4)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (nop)
+  ;; CHECK-NEXT: )
+  (func $liveness5 (param $dead0 i32)
+    (drop (local.get $dead0))
+    (if (i32.const 0)
+      (call $import) ;; live before and after call, but not during
+    )
+    (local.set $dead0 (i32.const 1))
+    (drop (local.get $dead0))
+  )
+  ;; CHECK:      (func $liveness-call-kills (param $live i32)
+  ;; CHECK-NEXT:  (local $1 i32)
+  ;; CHECK-NEXT:  (local $2 i32)
+  ;; CHECK-NEXT:  (local $3 i32)
+  ;; CHECK-NEXT:  (local $4 i64)
+  ;; CHECK-NEXT:  (local $5 i64)
+  ;; CHECK-NEXT:  (if
+  ;; CHECK-NEXT:   (i32.eq
+  ;; CHECK-NEXT:    (global.get $__asyncify_state)
+  ;; CHECK-NEXT:    (i32.const 2)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (block
+  ;; CHECK-NEXT:    (i64.store
+  ;; CHECK-NEXT:     (global.get $__asyncify_data)
+  ;; CHECK-NEXT:     (i64.add
+  ;; CHECK-NEXT:      (i64.load
+  ;; CHECK-NEXT:       (global.get $__asyncify_data)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:      (i64.const -4)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (local.set $4
+  ;; CHECK-NEXT:     (i64.load
+  ;; CHECK-NEXT:      (global.get $__asyncify_data)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (local.set $1
+  ;; CHECK-NEXT:     (i32.load
+  ;; CHECK-NEXT:      (local.get $4)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (local.set $2
+  ;; CHECK-NEXT:   (block $__asyncify_unwind (result i32)
+  ;; CHECK-NEXT:    (block
+  ;; CHECK-NEXT:     (block
+  ;; CHECK-NEXT:      (if
+  ;; CHECK-NEXT:       (i32.eq
+  ;; CHECK-NEXT:        (global.get $__asyncify_state)
+  ;; CHECK-NEXT:        (i32.const 2)
+  ;; CHECK-NEXT:       )
+  ;; CHECK-NEXT:       (block
+  ;; CHECK-NEXT:        (i64.store
+  ;; CHECK-NEXT:         (global.get $__asyncify_data)
+  ;; CHECK-NEXT:         (i64.add
+  ;; CHECK-NEXT:          (i64.load
+  ;; CHECK-NEXT:           (global.get $__asyncify_data)
+  ;; CHECK-NEXT:          )
+  ;; CHECK-NEXT:          (i64.const -4)
+  ;; CHECK-NEXT:         )
+  ;; CHECK-NEXT:        )
+  ;; CHECK-NEXT:        (local.set $3
+  ;; CHECK-NEXT:         (i32.load
+  ;; CHECK-NEXT:          (i64.load
+  ;; CHECK-NEXT:           (global.get $__asyncify_data)
+  ;; CHECK-NEXT:          )
+  ;; CHECK-NEXT:         )
+  ;; CHECK-NEXT:        )
+  ;; CHECK-NEXT:       )
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:      (block
+  ;; CHECK-NEXT:       (if
+  ;; CHECK-NEXT:        (i32.eq
+  ;; CHECK-NEXT:         (global.get $__asyncify_state)
+  ;; CHECK-NEXT:         (i32.const 0)
+  ;; CHECK-NEXT:        )
+  ;; CHECK-NEXT:        (local.set $1
+  ;; CHECK-NEXT:         (local.get $live)
+  ;; CHECK-NEXT:        )
+  ;; CHECK-NEXT:       )
+  ;; CHECK-NEXT:       (if
+  ;; CHECK-NEXT:        (if (result i32)
+  ;; CHECK-NEXT:         (i32.eq
+  ;; CHECK-NEXT:          (global.get $__asyncify_state)
+  ;; CHECK-NEXT:          (i32.const 0)
+  ;; CHECK-NEXT:         )
+  ;; CHECK-NEXT:         (i32.const 1)
+  ;; CHECK-NEXT:         (i32.eq
+  ;; CHECK-NEXT:          (local.get $3)
+  ;; CHECK-NEXT:          (i32.const 0)
+  ;; CHECK-NEXT:         )
+  ;; CHECK-NEXT:        )
+  ;; CHECK-NEXT:        (block
+  ;; CHECK-NEXT:         (call $import2
+  ;; CHECK-NEXT:          (local.get $1)
+  ;; CHECK
