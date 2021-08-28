@@ -7,4 +7,380 @@
 (module
   (memory 1 2)
   (import "asyncify" "start_unwind" (func $asyncify_start_unwind (param i32)))
-  (import "asyncify" "s
+  (import "asyncify" "start_rewind" (func $asyncify_start_rewind (param i32)))
+  (import "asyncify" "stop_rewind" (func $asyncify_stop_rewind))
+  ;; CHECK:      (type $none_=>_none (func))
+
+  ;; CHECK:      (type $i32_=>_none (func (param i32)))
+
+  ;; CHECK:      (type $none_=>_i32 (func (result i32)))
+
+  ;; CHECK:      (global $sleeping (mut i32) (i32.const 0))
+  (global $sleeping (mut i32) (i32.const 0))
+  ;; do a sleep operation: start a sleep if running, or resume after a sleep
+  ;; if we just rewound.
+  ;; CHECK:      (global $__asyncify_state (mut i32) (i32.const 0))
+
+  ;; CHECK:      (global $__asyncify_data (mut i32) (i32.const 0))
+
+  ;; CHECK:      (memory $0 1 2)
+
+  ;; CHECK:      (export "asyncify_start_unwind" (func $asyncify_start_unwind))
+
+  ;; CHECK:      (export "asyncify_stop_unwind" (func $asyncify_stop_unwind))
+
+  ;; CHECK:      (export "asyncify_start_rewind" (func $asyncify_start_rewind))
+
+  ;; CHECK:      (export "asyncify_stop_rewind" (func $asyncify_stop_rewind))
+
+  ;; CHECK:      (export "asyncify_get_state" (func $asyncify_get_state))
+
+  ;; CHECK:      (func $do_sleep
+  ;; CHECK-NEXT:  (if
+  ;; CHECK-NEXT:   (i32.eqz
+  ;; CHECK-NEXT:    (global.get $sleeping)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (block
+  ;; CHECK-NEXT:    (global.set $sleeping
+  ;; CHECK-NEXT:     (i32.const 1)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (call $asyncify_start_unwind
+  ;; CHECK-NEXT:     (i32.const 4)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (block
+  ;; CHECK-NEXT:    (global.set $sleeping
+  ;; CHECK-NEXT:     (i32.const 0)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (call $asyncify_stop_rewind)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $do_sleep
+    (if
+      (i32.eqz (global.get $sleeping))
+      (block
+        (global.set $sleeping (i32.const 1))
+        ;; we should set up the data at address 4 around here
+        (call $asyncify_start_unwind (i32.const 4))
+      )
+      (block
+        (global.set $sleeping (i32.const 0))
+        (call $asyncify_stop_rewind)
+      )
+    )
+  )
+  ;; a function that does some work and has a sleep (async pause/resume) in the middle
+  ;; CHECK:      (func $work
+  ;; CHECK-NEXT:  (local $0 i32)
+  ;; CHECK-NEXT:  (local $1 i32)
+  ;; CHECK-NEXT:  (if
+  ;; CHECK-NEXT:   (i32.eq
+  ;; CHECK-NEXT:    (global.get $__asyncify_state)
+  ;; CHECK-NEXT:    (i32.const 2)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (nop)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (local.set $0
+  ;; CHECK-NEXT:   (block $__asyncify_unwind (result i32)
+  ;; CHECK-NEXT:    (block
+  ;; CHECK-NEXT:     (block
+  ;; CHECK-NEXT:      (if
+  ;; CHECK-NEXT:       (i32.eq
+  ;; CHECK-NEXT:        (global.get $__asyncify_state)
+  ;; CHECK-NEXT:        (i32.const 2)
+  ;; CHECK-NEXT:       )
+  ;; CHECK-NEXT:       (block
+  ;; CHECK-NEXT:        (i32.store
+  ;; CHECK-NEXT:         (global.get $__asyncify_data)
+  ;; CHECK-NEXT:         (i32.add
+  ;; CHECK-NEXT:          (i32.load
+  ;; CHECK-NEXT:           (global.get $__asyncify_data)
+  ;; CHECK-NEXT:          )
+  ;; CHECK-NEXT:          (i32.const -4)
+  ;; CHECK-NEXT:         )
+  ;; CHECK-NEXT:        )
+  ;; CHECK-NEXT:        (local.set $1
+  ;; CHECK-NEXT:         (i32.load
+  ;; CHECK-NEXT:          (i32.load
+  ;; CHECK-NEXT:           (global.get $__asyncify_data)
+  ;; CHECK-NEXT:          )
+  ;; CHECK-NEXT:         )
+  ;; CHECK-NEXT:        )
+  ;; CHECK-NEXT:       )
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:      (block
+  ;; CHECK-NEXT:       (if
+  ;; CHECK-NEXT:        (i32.eq
+  ;; CHECK-NEXT:         (global.get $__asyncify_state)
+  ;; CHECK-NEXT:         (i32.const 0)
+  ;; CHECK-NEXT:        )
+  ;; CHECK-NEXT:        (call $stuff)
+  ;; CHECK-NEXT:       )
+  ;; CHECK-NEXT:       (if
+  ;; CHECK-NEXT:        (if (result i32)
+  ;; CHECK-NEXT:         (i32.eq
+  ;; CHECK-NEXT:          (global.get $__asyncify_state)
+  ;; CHECK-NEXT:          (i32.const 0)
+  ;; CHECK-NEXT:         )
+  ;; CHECK-NEXT:         (i32.const 1)
+  ;; CHECK-NEXT:         (i32.eq
+  ;; CHECK-NEXT:          (local.get $1)
+  ;; CHECK-NEXT:          (i32.const 0)
+  ;; CHECK-NEXT:         )
+  ;; CHECK-NEXT:        )
+  ;; CHECK-NEXT:        (block
+  ;; CHECK-NEXT:         (call $do_sleep)
+  ;; CHECK-NEXT:         (if
+  ;; CHECK-NEXT:          (i32.eq
+  ;; CHECK-NEXT:           (global.get $__asyncify_state)
+  ;; CHECK-NEXT:           (i32.const 1)
+  ;; CHECK-NEXT:          )
+  ;; CHECK-NEXT:          (br $__asyncify_unwind
+  ;; CHECK-NEXT:           (i32.const 0)
+  ;; CHECK-NEXT:          )
+  ;; CHECK-NEXT:         )
+  ;; CHECK-NEXT:        )
+  ;; CHECK-NEXT:       )
+  ;; CHECK-NEXT:       (if
+  ;; CHECK-NEXT:        (i32.eq
+  ;; CHECK-NEXT:         (global.get $__asyncify_state)
+  ;; CHECK-NEXT:         (i32.const 0)
+  ;; CHECK-NEXT:        )
+  ;; CHECK-NEXT:        (call $stuff)
+  ;; CHECK-NEXT:       )
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (return)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (block
+  ;; CHECK-NEXT:   (i32.store
+  ;; CHECK-NEXT:    (i32.load
+  ;; CHECK-NEXT:     (global.get $__asyncify_data)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (local.get $0)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (i32.store
+  ;; CHECK-NEXT:    (global.get $__asyncify_data)
+  ;; CHECK-NEXT:    (i32.add
+  ;; CHECK-NEXT:     (i32.load
+  ;; CHECK-NEXT:      (global.get $__asyncify_data)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (i32.const 4)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (nop)
+  ;; CHECK-NEXT: )
+  (func $work
+    (call $stuff) ;; do some work
+    (call $do_sleep) ;; take a break
+    (call $stuff) ;; do some more work
+  )
+  ;; CHECK:      (func $stuff
+  ;; CHECK-NEXT:  (nop)
+  ;; CHECK-NEXT: )
+  (func  $stuff)
+  ;; the first event called from the main event loop: just call into $work
+  ;; CHECK:      (func $first_event
+  ;; CHECK-NEXT:  (local $0 i32)
+  ;; CHECK-NEXT:  (local $1 i32)
+  ;; CHECK-NEXT:  (if
+  ;; CHECK-NEXT:   (i32.eq
+  ;; CHECK-NEXT:    (global.get $__asyncify_state)
+  ;; CHECK-NEXT:    (i32.const 2)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (nop)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (local.set $0
+  ;; CHECK-NEXT:   (block $__asyncify_unwind (result i32)
+  ;; CHECK-NEXT:    (block
+  ;; CHECK-NEXT:     (block
+  ;; CHECK-NEXT:      (if
+  ;; CHECK-NEXT:       (i32.eq
+  ;; CHECK-NEXT:        (global.get $__asyncify_state)
+  ;; CHECK-NEXT:        (i32.const 2)
+  ;; CHECK-NEXT:       )
+  ;; CHECK-NEXT:       (block
+  ;; CHECK-NEXT:        (i32.store
+  ;; CHECK-NEXT:         (global.get $__asyncify_data)
+  ;; CHECK-NEXT:         (i32.add
+  ;; CHECK-NEXT:          (i32.load
+  ;; CHECK-NEXT:           (global.get $__asyncify_data)
+  ;; CHECK-NEXT:          )
+  ;; CHECK-NEXT:          (i32.const -4)
+  ;; CHECK-NEXT:         )
+  ;; CHECK-NEXT:        )
+  ;; CHECK-NEXT:        (local.set $1
+  ;; CHECK-NEXT:         (i32.load
+  ;; CHECK-NEXT:          (i32.load
+  ;; CHECK-NEXT:           (global.get $__asyncify_data)
+  ;; CHECK-NEXT:          )
+  ;; CHECK-NEXT:         )
+  ;; CHECK-NEXT:        )
+  ;; CHECK-NEXT:       )
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:      (if
+  ;; CHECK-NEXT:       (if (result i32)
+  ;; CHECK-NEXT:        (i32.eq
+  ;; CHECK-NEXT:         (global.get $__asyncify_state)
+  ;; CHECK-NEXT:         (i32.const 0)
+  ;; CHECK-NEXT:        )
+  ;; CHECK-NEXT:        (i32.const 1)
+  ;; CHECK-NEXT:        (i32.eq
+  ;; CHECK-NEXT:         (local.get $1)
+  ;; CHECK-NEXT:         (i32.const 0)
+  ;; CHECK-NEXT:        )
+  ;; CHECK-NEXT:       )
+  ;; CHECK-NEXT:       (block
+  ;; CHECK-NEXT:        (call $work)
+  ;; CHECK-NEXT:        (if
+  ;; CHECK-NEXT:         (i32.eq
+  ;; CHECK-NEXT:          (global.get $__asyncify_state)
+  ;; CHECK-NEXT:          (i32.const 1)
+  ;; CHECK-NEXT:         )
+  ;; CHECK-NEXT:         (br $__asyncify_unwind
+  ;; CHECK-NEXT:          (i32.const 0)
+  ;; CHECK-NEXT:         )
+  ;; CHECK-NEXT:        )
+  ;; CHECK-NEXT:       )
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (return)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (block
+  ;; CHECK-NEXT:   (i32.store
+  ;; CHECK-NEXT:    (i32.load
+  ;; CHECK-NEXT:     (global.get $__asyncify_data)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (local.get $0)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (i32.store
+  ;; CHECK-NEXT:    (global.get $__asyncify_data)
+  ;; CHECK-NEXT:    (i32.add
+  ;; CHECK-NEXT:     (i32.load
+  ;; CHECK-NEXT:      (global.get $__asyncify_data)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (i32.const 4)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (nop)
+  ;; CHECK-NEXT: )
+  (func $first_event
+    (call $work)
+    ;; work will sleep, so we exit through here while it is paused
+  )
+  ;; the second event called from the main event loop: to resume $work,
+  ;; initiate a rewind, and then do the call to start things back up
+  ;; CHECK:      (func $second_event
+  ;; CHECK-NEXT:  (call $asyncify_start_rewind
+  ;; CHECK-NEXT:   (i32.const 4)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (call $work)
+  ;; CHECK-NEXT: )
+  (func $second_event
+    (call $asyncify_start_rewind (i32.const 4))
+    (call $work)
+  )
+  ;; a function that can't do a sleep
+  ;; CHECK:      (func $never_sleep
+  ;; CHECK-NEXT:  (call $stuff)
+  ;; CHECK-NEXT:  (call $stuff)
+  ;; CHECK-NEXT:  (call $stuff)
+  ;; CHECK-NEXT: )
+  (func $never_sleep
+    (call $stuff)
+    (call $stuff)
+    (call $stuff)
+  )
+)
+;; Calls to imports that will call into asyncify themselves.
+;; CHECK:      (func $asyncify_start_unwind (param $0 i32)
+;; CHECK-NEXT:  (global.set $__asyncify_state
+;; CHECK-NEXT:   (i32.const 1)
+;; CHECK-NEXT:  )
+;; CHECK-NEXT:  (global.set $__asyncify_data
+;; CHECK-NEXT:   (local.get $0)
+;; CHECK-NEXT:  )
+;; CHECK-NEXT:  (if
+;; CHECK-NEXT:   (i32.gt_u
+;; CHECK-NEXT:    (i32.load
+;; CHECK-NEXT:     (global.get $__asyncify_data)
+;; CHECK-NEXT:    )
+;; CHECK-NEXT:    (i32.load offset=4
+;; CHECK-NEXT:     (global.get $__asyncify_data)
+;; CHECK-NEXT:    )
+;; CHECK-NEXT:   )
+;; CHECK-NEXT:   (unreachable)
+;; CHECK-NEXT:  )
+;; CHECK-NEXT: )
+
+;; CHECK:      (func $asyncify_stop_unwind
+;; CHECK-NEXT:  (global.set $__asyncify_state
+;; CHECK-NEXT:   (i32.const 0)
+;; CHECK-NEXT:  )
+;; CHECK-NEXT:  (if
+;; CHECK-NEXT:   (i32.gt_u
+;; CHECK-NEXT:    (i32.load
+;; CHECK-NEXT:     (global.get $__asyncify_data)
+;; CHECK-NEXT:    )
+;; CHECK-NEXT:    (i32.load offset=4
+;; CHECK-NEXT:     (global.get $__asyncify_data)
+;; CHECK-NEXT:    )
+;; CHECK-NEXT:   )
+;; CHECK-NEXT:   (unreachable)
+;; CHECK-NEXT:  )
+;; CHECK-NEXT: )
+
+;; CHECK:      (func $asyncify_start_rewind (param $0 i32)
+;; CHECK-NEXT:  (global.set $__asyncify_state
+;; CHECK-NEXT:   (i32.const 2)
+;; CHECK-NEXT:  )
+;; CHECK-NEXT:  (global.set $__asyncify_data
+;; CHECK-NEXT:   (local.get $0)
+;; CHECK-NEXT:  )
+;; CHECK-NEXT:  (if
+;; CHECK-NEXT:   (i32.gt_u
+;; CHECK-NEXT:    (i32.load
+;; CHECK-NEXT:     (global.get $__asyncify_data)
+;; CHECK-NEXT:    )
+;; CHECK-NEXT:    (i32.load offset=4
+;; CHECK-NEXT:     (global.get $__asyncify_data)
+;; CHECK-NEXT:    )
+;; CHECK-NEXT:   )
+;; CHECK-NEXT:   (unreachable)
+;; CHECK-NEXT:  )
+;; CHECK-NEXT: )
+
+;; CHECK:      (func $asyncify_stop_rewind
+;; CHECK-NEXT:  (global.set $__asyncify_state
+;; CHECK-NEXT:   (i32.const 0)
+;; CHECK-NEXT:  )
+;; CHECK-NEXT:  (if
+;; CHECK-NEXT:   (i32.gt_u
+;; CHECK-NEXT:    (i32.load
+;; CHECK-NEXT:     (global.get $__asyncify_data)
+;; CHECK-NEXT:    )
+;; CHECK-NEXT:    (i32.load offset=4
+;; CHECK-NEXT:     (global.get $__asyncify_data)
+;; CHECK-NEXT:    )
+;; CHECK-NEXT:   )
+;; CHECK-NEXT:   (unreachable)
+;; CHECK-NEXT:  )
+;; CHECK-NEXT: )
+
+;; CHECK:      (func $asyncify_get_state (result i32)
+;; CHECK-NEXT:  (global.get $__asyncify_state)
+;; CHECK-NEXT: )
+(module
+  (memory 1 2)
+  ;; CHECK:      (type $none_=>_none (func))
+
+  ;; CHECK:      (type $i32_=>_none (func (param i32)))
+
+  ;; CHECK:      (type $none_=>_i32 (func (
