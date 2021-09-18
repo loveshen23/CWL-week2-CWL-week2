@@ -1013,4 +1013,474 @@
       (block $switch-case$1
         (block $switch-case$2
           (br_table $switch-case$1 $switch-case$2 $switch-case$1 $switch-case$1 $switch$def
-            (i32.const 
+            (i32.const 100)
+          )
+          (drop
+            (local.get $x)
+          )
+        )
+        (drop
+          (local.get $y)
+        )
+      )
+      (drop
+        (local.get $z)
+      )
+    )
+    (drop
+      (local.get $w)
+    )
+  )
+  ;; CHECK:      (func $greedy-can-be-happy
+  ;; CHECK-NEXT:  (local $0 i32)
+  ;; CHECK-NEXT:  (local $1 i32)
+  ;; CHECK-NEXT:  (if
+  ;; CHECK-NEXT:   (i32.const 0)
+  ;; CHECK-NEXT:   (if
+  ;; CHECK-NEXT:    (i32.const 1)
+  ;; CHECK-NEXT:    (if
+  ;; CHECK-NEXT:     (i32.const 2)
+  ;; CHECK-NEXT:     (block $block3
+  ;; CHECK-NEXT:      (local.set $0
+  ;; CHECK-NEXT:       (i32.const 100)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:      (local.set $1
+  ;; CHECK-NEXT:       (i32.const 101)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:      (drop
+  ;; CHECK-NEXT:       (local.get $0)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:      (drop
+  ;; CHECK-NEXT:       (local.get $1)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (block $block5
+  ;; CHECK-NEXT:      (local.set $0
+  ;; CHECK-NEXT:       (i32.const 102)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:      (local.set $1
+  ;; CHECK-NEXT:       (i32.const 103)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:      (drop
+  ;; CHECK-NEXT:       (local.get $0)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:      (drop
+  ;; CHECK-NEXT:       (local.get $1)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (if
+  ;; CHECK-NEXT:     (i32.const 3)
+  ;; CHECK-NEXT:     (block $block8
+  ;; CHECK-NEXT:      (local.set $0
+  ;; CHECK-NEXT:       (i32.const 104)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:      (local.set $1
+  ;; CHECK-NEXT:       (i32.const 105)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:      (drop
+  ;; CHECK-NEXT:       (local.get $0)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:      (drop
+  ;; CHECK-NEXT:       (local.get $1)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (block $block10
+  ;; CHECK-NEXT:      (local.set $0
+  ;; CHECK-NEXT:       (i32.const 106)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:      (local.set $1
+  ;; CHECK-NEXT:       (i32.const 107)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:      (drop
+  ;; CHECK-NEXT:       (local.get $0)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:      (drop
+  ;; CHECK-NEXT:       (local.get $1)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (if
+  ;; CHECK-NEXT:    (i32.const 4)
+  ;; CHECK-NEXT:    (block $block13
+  ;; CHECK-NEXT:     (local.set $0
+  ;; CHECK-NEXT:      (i32.const 108)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (local.set $1
+  ;; CHECK-NEXT:      (i32.const 109)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (drop
+  ;; CHECK-NEXT:      (local.get $0)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (drop
+  ;; CHECK-NEXT:      (local.get $1)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (block $block15
+  ;; CHECK-NEXT:     (local.set $0
+  ;; CHECK-NEXT:      (i32.const 110)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (local.set $1
+  ;; CHECK-NEXT:      (i32.const 111)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (drop
+  ;; CHECK-NEXT:      (local.get $0)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (drop
+  ;; CHECK-NEXT:      (local.get $1)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $greedy-can-be-happy (type $2)
+    (local $x1 i32)
+    (local $x2 i32)
+    (local $x3 i32)
+    (local $y1 i32)
+    (local $y2 i32)
+    (local $y3 i32)
+    (if
+      (i32.const 0)
+      (if
+        (i32.const 1)
+        (if
+          (i32.const 2)
+          (block $block3
+            (local.set $x1
+              (i32.const 100)
+            )
+            (local.set $y2
+              (i32.const 101)
+            )
+            (drop
+              (local.get $x1)
+            )
+            (drop
+              (local.get $y2)
+            )
+          )
+          (block $block5
+            (local.set $x1
+              (i32.const 102)
+            )
+            (local.set $y3
+              (i32.const 103)
+            )
+            (drop
+              (local.get $x1)
+            )
+            (drop
+              (local.get $y3)
+            )
+          )
+        )
+        (if
+          (i32.const 3)
+          (block $block8
+            (local.set $x2
+              (i32.const 104)
+            )
+            (local.set $y1
+              (i32.const 105)
+            )
+            (drop
+              (local.get $x2)
+            )
+            (drop
+              (local.get $y1)
+            )
+          )
+          (block $block10
+            (local.set $x2
+              (i32.const 106)
+            )
+            (local.set $y3
+              (i32.const 107)
+            )
+            (drop
+              (local.get $x2)
+            )
+            (drop
+              (local.get $y3)
+            )
+          )
+        )
+      )
+      (if
+        (i32.const 4)
+        (block $block13
+          (local.set $x3
+            (i32.const 108)
+          )
+          (local.set $y1
+            (i32.const 109)
+          )
+          (drop
+            (local.get $x3)
+          )
+          (drop
+            (local.get $y1)
+          )
+        )
+        (block $block15
+          (local.set $x3
+            (i32.const 110)
+          )
+          (local.set $y2
+            (i32.const 111)
+          )
+          (drop
+            (local.get $x3)
+          )
+          (drop
+            (local.get $y2)
+          )
+        )
+      )
+    )
+  )
+  ;; CHECK:      (func $greedy-can-be-sad
+  ;; CHECK-NEXT:  (local $0 i32)
+  ;; CHECK-NEXT:  (local $1 i32)
+  ;; CHECK-NEXT:  (local $2 i32)
+  ;; CHECK-NEXT:  (if
+  ;; CHECK-NEXT:   (i32.const 0)
+  ;; CHECK-NEXT:   (if
+  ;; CHECK-NEXT:    (i32.const 1)
+  ;; CHECK-NEXT:    (if
+  ;; CHECK-NEXT:     (i32.const 2)
+  ;; CHECK-NEXT:     (block $block3
+  ;; CHECK-NEXT:      (local.set $0
+  ;; CHECK-NEXT:       (i32.const 100)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:      (local.set $1
+  ;; CHECK-NEXT:       (i32.const 101)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:      (drop
+  ;; CHECK-NEXT:       (local.get $0)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:      (drop
+  ;; CHECK-NEXT:       (local.get $1)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (block $block5
+  ;; CHECK-NEXT:      (local.set $0
+  ;; CHECK-NEXT:       (i32.const 102)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:      (local.set $2
+  ;; CHECK-NEXT:       (i32.const 103)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:      (drop
+  ;; CHECK-NEXT:       (local.get $0)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:      (drop
+  ;; CHECK-NEXT:       (local.get $2)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (if
+  ;; CHECK-NEXT:     (i32.const 3)
+  ;; CHECK-NEXT:     (block $block8
+  ;; CHECK-NEXT:      (local.set $1
+  ;; CHECK-NEXT:       (i32.const 104)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:      (local.set $0
+  ;; CHECK-NEXT:       (i32.const 105)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:      (drop
+  ;; CHECK-NEXT:       (local.get $1)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:      (drop
+  ;; CHECK-NEXT:       (local.get $0)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (block $block10
+  ;; CHECK-NEXT:      (local.set $1
+  ;; CHECK-NEXT:       (i32.const 106)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:      (local.set $2
+  ;; CHECK-NEXT:       (i32.const 107)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:      (drop
+  ;; CHECK-NEXT:       (local.get $1)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:      (drop
+  ;; CHECK-NEXT:       (local.get $2)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (if
+  ;; CHECK-NEXT:    (i32.const 4)
+  ;; CHECK-NEXT:    (block $block13
+  ;; CHECK-NEXT:     (local.set $2
+  ;; CHECK-NEXT:      (i32.const 108)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (local.set $0
+  ;; CHECK-NEXT:      (i32.const 109)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (drop
+  ;; CHECK-NEXT:      (local.get $2)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (drop
+  ;; CHECK-NEXT:      (local.get $0)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (block $block15
+  ;; CHECK-NEXT:     (local.set $2
+  ;; CHECK-NEXT:      (i32.const 110)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (local.set $1
+  ;; CHECK-NEXT:      (i32.const 111)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (drop
+  ;; CHECK-NEXT:      (local.get $2)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (drop
+  ;; CHECK-NEXT:      (local.get $1)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $greedy-can-be-sad (type $2)
+    (local $x1 i32)
+    (local $y1 i32)
+    (local $x2 i32)
+    (local $y2 i32)
+    (local $x3 i32)
+    (local $y3 i32)
+    (if
+      (i32.const 0)
+      (if
+        (i32.const 1)
+        (if
+          (i32.const 2)
+          (block $block3
+            (local.set $x1
+              (i32.const 100)
+            )
+            (local.set $y2
+              (i32.const 101)
+            )
+            (drop
+              (local.get $x1)
+            )
+            (drop
+              (local.get $y2)
+            )
+          )
+          (block $block5
+            (local.set $x1
+              (i32.const 102)
+            )
+            (local.set $y3
+              (i32.const 103)
+            )
+            (drop
+              (local.get $x1)
+            )
+            (drop
+              (local.get $y3)
+            )
+          )
+        )
+        (if
+          (i32.const 3)
+          (block $block8
+            (local.set $x2
+              (i32.const 104)
+            )
+            (local.set $y1
+              (i32.const 105)
+            )
+            (drop
+              (local.get $x2)
+            )
+            (drop
+              (local.get $y1)
+            )
+          )
+          (block $block10
+            (local.set $x2
+              (i32.const 106)
+            )
+            (local.set $y3
+              (i32.const 107)
+            )
+            (drop
+              (local.get $x2)
+            )
+            (drop
+              (local.get $y3)
+            )
+          )
+        )
+      )
+      (if
+        (i32.const 4)
+        (block $block13
+          (local.set $x3
+            (i32.const 108)
+          )
+          (local.set $y1
+            (i32.const 109)
+          )
+          (drop
+            (local.get $x3)
+          )
+          (drop
+            (local.get $y1)
+          )
+        )
+        (block $block15
+          (local.set $x3
+            (i32.const 110)
+          )
+          (local.set $y2
+            (i32.const 111)
+          )
+          (drop
+            (local.get $x3)
+          )
+          (drop
+            (local.get $y2)
+          )
+        )
+      )
+    )
+  )
+  ;; CHECK:      (func $_memcpy (param $0 i32) (param $1 i32) (param $2 i32) (result i32)
+  ;; CHECK-NEXT:  (local $3 i32)
+  ;; CHECK-NEXT:  (if
+  ;; CHECK-NEXT:   (i32.ge_s
+  ;; CHECK-NEXT:    (local.get $2)
+  ;; CHECK-NEXT:    (i32.const 4096)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (drop
+  ;; CHECK-NEXT:    (local.get $0)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (local.set $3
+  ;; CHECK-NEXT:   (local.get $0)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (if
+  ;; CHECK-NEXT:   (i32.eq
+  ;; CHECK-NEXT:    (i32.and
+  ;; CHECK-NEXT:     (local.get $0)
+  ;; CHECK-NEXT:     (i32.const 3)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (i32.and
+  ;; CHECK-NEXT:     (local.get $1)
+  ;; CHECK-NEXT:     (i32.const 3)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (block $block2
+  ;; CHECK-NEXT:    (block $while-out$0
+  ;; CHECK-NEXT:     (loop $while-in$1
+  ;; CHECK-NEXT:      (if
+  ;; CHECK-NEXT:       (i32.eqz
+  ;; CHECK-NEXT:        (i32.and
+  ;; CHECK-NEXT:         (local.get $0
