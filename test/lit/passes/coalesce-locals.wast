@@ -2435,4 +2435,466 @@
    (local.set $w (local.get $z))
    (local.set $z (i32.const 2))
    (local.set $x (local.get $z))
-   (if (
+   (if (i32.const 1)
+    (local.set $y (i32.const 1))
+   )
+   (local.set $y (local.get $x))
+   (local.set $z (local.get $y))
+   (local.set $w (local.get $z))
+   (local.set $z (i32.const 2))
+   (local.set $x (local.get $w))
+  )
+  ;; CHECK:      (func $loop-copies (param $0 i32) (param $1 i32)
+  ;; CHECK-NEXT:  (loop $loop
+  ;; CHECK-NEXT:   (local.set $0
+  ;; CHECK-NEXT:    (local.get $1)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (local.set $1
+  ;; CHECK-NEXT:    (local.get $0)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (br_if $loop
+  ;; CHECK-NEXT:    (local.get $0)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $loop-copies (param $x i32) (param $y i32)
+   (loop $loop
+    (local.set $x (local.get $y))
+    (local.set $y (local.get $x))
+    (br_if $loop (local.get $x))
+   )
+  )
+  ;; CHECK:      (func $proper-type (result f64)
+  ;; CHECK-NEXT:  (local $0 f64)
+  ;; CHECK-NEXT:  (local $1 i32)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (select
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 1)
+  ;; CHECK-NEXT:    (local.get $1)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (local.get $0)
+  ;; CHECK-NEXT: )
+  (func $proper-type (result f64)
+   (local $var$0 i32)
+   (local $var$2 f64)
+   (local.set $var$0
+    (select
+     (i32.const 0)
+     (i32.const 1)
+     (local.get $var$0)
+    )
+   )
+   (local.tee $var$2 ;; the locals will be reordered, this should be the f64
+    (local.get $var$2)
+   )
+  )
+  ;; CHECK:      (func $reuse-param (param $0 i32) (param $1 i32) (result i32)
+  ;; CHECK-NEXT:  (i32.add
+  ;; CHECK-NEXT:   (local.tee $0
+  ;; CHECK-NEXT:    (i32.xor
+  ;; CHECK-NEXT:     (i32.shr_s
+  ;; CHECK-NEXT:      (i32.shl
+  ;; CHECK-NEXT:       (local.get $0)
+  ;; CHECK-NEXT:       (i32.const 16)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:      (i32.const 16)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (i32.shr_s
+  ;; CHECK-NEXT:      (i32.shl
+  ;; CHECK-NEXT:       (local.get $1)
+  ;; CHECK-NEXT:       (i32.const 16)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:      (i32.const 16)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (local.get $0)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $reuse-param (param $x i32) (param $y i32) (result i32)
+   (local $temp i32)
+   (i32.add
+    (local.tee $temp
+     (i32.xor
+      (i32.shr_s
+       (i32.shl
+        (local.get $x) ;; $x and $temp do not interfere
+        (i32.const 16)
+       )
+      (i32.const 16)
+     )
+     (i32.shr_s
+      (i32.shl
+        (local.get $y)
+        (i32.const 16)
+       )
+       (i32.const 16)
+      )
+     )
+    )
+    (local.get $temp)
+   )
+  )
+
+  ;; CHECK:      (func $copies-do-not-interfere (result i32)
+  ;; CHECK-NEXT:  (local $0 i32)
+  ;; CHECK-NEXT:  (local.set $0
+  ;; CHECK-NEXT:   (i32.const 100)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (nop)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (local.get $0)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (local.get $0)
+  ;; CHECK-NEXT: )
+  (func $copies-do-not-interfere (result i32)
+   (local $0 i32)
+   (local $1 i32)
+   (local.set $0
+    (i32.const 100)
+   )
+   ;; The two locals are copies, and so they do not interfere, even though
+   ;; their live ranges overlap and there is a set of one of them in that
+   ;; overlap. We can coalesce them together to a single local.
+   (local.set $1
+    (local.get $0)
+   )
+   (drop
+    (local.get $0)
+   )
+   (local.get $1)
+  )
+
+  ;; CHECK:      (func $tee-copies-do-not-interfere (result i32)
+  ;; CHECK-NEXT:  (local $0 i32)
+  ;; CHECK-NEXT:  (local.set $0
+  ;; CHECK-NEXT:   (i32.const 100)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (local.get $0)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (local.get $0)
+  ;; CHECK-NEXT: )
+  (func $tee-copies-do-not-interfere (result i32)
+   (local $0 i32)
+   (local $1 i32)
+   ;; Similar to the above, but now the copying is done using a tee.
+   (local.set $1
+    (local.tee $0
+     (i32.const 100)
+    )
+   )
+   (drop
+    (local.get $0)
+   )
+   (local.get $1)
+  )
+
+  ;; CHECK:      (func $multiple-tee-copies-do-not-interfere (result i32)
+  ;; CHECK-NEXT:  (local $0 i32)
+  ;; CHECK-NEXT:  (local.set $0
+  ;; CHECK-NEXT:   (i32.const 100)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (local.get $0)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (local.get $0)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (local.get $0)
+  ;; CHECK-NEXT: )
+  (func $multiple-tee-copies-do-not-interfere (result i32)
+   (local $0 i32)
+   (local $1 i32)
+   (local $2 i32)
+   ;; Similar to the above, but a chain of 3 items.
+   (local.set $2
+    (local.tee $1
+     (local.tee $0
+      (i32.const 100)
+     )
+    )
+   )
+   (drop
+    (local.get $0)
+   )
+   (drop
+    (local.get $1)
+   )
+   (local.get $2)
+  )
+
+  ;; CHECK:      (func $copies-and-then-interfere (result i32)
+  ;; CHECK-NEXT:  (local $0 i32)
+  ;; CHECK-NEXT:  (local $1 i32)
+  ;; CHECK-NEXT:  (local.set $1
+  ;; CHECK-NEXT:   (i32.const 100)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (local.set $0
+  ;; CHECK-NEXT:   (local.get $1)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (local.get $1)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (local.get $0)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (local.set $0
+  ;; CHECK-NEXT:   (i32.const 123)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (local.get $1)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (local.get $0)
+  ;; CHECK-NEXT: )
+  (func $copies-and-then-interfere (result i32)
+   (local $0 i32)
+   (local $1 i32)
+   (local.set $0
+    (i32.const 100)
+   )
+   (local.set $1
+    (local.get $0)
+   )
+   (drop
+    (local.get $0)
+   )
+   (drop
+    (local.get $1)
+   )
+   ;; The copy before this set should not confuse us - this set causes a
+   ;; divergence on the overlapping live ranges, and we cannot coalesce these
+   ;; two locals.
+   (local.set $1
+    (i32.const 123)
+   )
+   (drop
+    (local.get $0)
+   )
+   (local.get $1)
+  )
+
+  ;; CHECK:      (func $copies-and-then-set-without-interfering (result i32)
+  ;; CHECK-NEXT:  (local $0 i32)
+  ;; CHECK-NEXT:  (local.set $0
+  ;; CHECK-NEXT:   (i32.const 100)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (nop)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (local.get $0)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (local.get $0)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (local.set $0
+  ;; CHECK-NEXT:   (i32.const 123)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (local.get $0)
+  ;; CHECK-NEXT: )
+  (func $copies-and-then-set-without-interfering (result i32)
+   (local $0 i32)
+   (local $1 i32)
+   (local.set $0
+    (i32.const 100)
+   )
+   (local.set $1
+    (local.get $0)
+   )
+   (drop
+    (local.get $0)
+   )
+   (drop
+    (local.get $1)
+   )
+   ;; Similar to the above, but now $0's live range has ended (there is no get
+   ;; of it at the point of this set), and so there is no interference, and
+   ;; these locals can be coalesced.
+   (local.set $1
+    (i32.const 123)
+   )
+   (local.get $1)
+  )
+
+  ;; CHECK:      (func $copy-third-party (result i32)
+  ;; CHECK-NEXT:  (local $0 i32)
+  ;; CHECK-NEXT:  (local.set $0
+  ;; CHECK-NEXT:   (i32.const 100)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (nop)
+  ;; CHECK-NEXT:  (nop)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (local.get $0)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (local.get $0)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (local.get $0)
+  ;; CHECK-NEXT: )
+  (func $copy-third-party (result i32)
+   (local $0 i32)
+   (local $1 i32)
+   (local $2 i32)
+   ;; $2 begins with a value, which is copied to $0 and $1. None of these
+   ;; interfere and they can all be coalesced.
+   (local.set $2
+    (i32.const 100)
+   )
+   (local.set $1
+    (local.get $2)
+   )
+   (local.set $0
+    (local.get $2)
+   )
+   (drop
+    (local.get $0)
+   )
+   (drop
+    (local.get $1)
+   )
+   (local.get $2)
+  )
+
+  ;; CHECK:      (func $ineffective-set (result i32)
+  ;; CHECK-NEXT:  (local $0 i32)
+  ;; CHECK-NEXT:  (local $1 i32)
+  ;; CHECK-NEXT:  (local.set $0
+  ;; CHECK-NEXT:   (i32.const 100)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (local.get $0)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (local.get $1)
+  ;; CHECK-NEXT: )
+  (func $ineffective-set (result i32)
+   (local $0 i32)
+   (local $1 i32)
+   (local $2 i32)
+   (local.set $0
+    ;; This set of $2 is ineffective in that there are no gets of $2, but the
+    ;; value does flow through to the outer set, and we must notice that. In
+    ;; particular, we must see that $0 and $1 conflict, and cannot be coalesced
+    ;; together ($1 is alive from the zero init to the very end, and so $0's
+    ;; set means it diverges).
+    (local.tee $2
+     (i32.const 100)
+    )
+   )
+   (drop
+    (local.get $0)
+   )
+   (local.get $1)
+  )
+
+  ;; CHECK:      (func $inter-block-copy (result i32)
+  ;; CHECK-NEXT:  (local $0 i32)
+  ;; CHECK-NEXT:  (local $1 i32)
+  ;; CHECK-NEXT:  (local.set $0
+  ;; CHECK-NEXT:   (i32.const 100)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (nop)
+  ;; CHECK-NEXT:  (nop)
+  ;; CHECK-NEXT:  (if
+  ;; CHECK-NEXT:   (local.get $0)
+  ;; CHECK-NEXT:   (local.set $1
+  ;; CHECK-NEXT:    (local.get $0)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (local.set $1
+  ;; CHECK-NEXT:    (local.get $0)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (local.get $0)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (local.get $0)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (local.get $0)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (local.get $1)
+  ;; CHECK-NEXT: )
+  (func $inter-block-copy (result i32)
+   (local $0 i32)
+   (local $1 i32)
+   (local $2 i32)
+   (local $3 i32)
+   (local.set $0
+    (i32.const 100)
+   )
+   (local.set $1
+    (local.get $0)
+   )
+   (local.set $2
+    (local.get $0)
+   )
+   ;; At this point $1 is equal to $2, as they are both copies of $0. Then the
+   ;; if assigns one of them to $3, which means that $3 is also equal to them
+   ;; all. However, we only analyze copied values *inside* blocks, which means
+   ;; that in each of the if arms we see that $3 is assigned either the value
+   ;; of $1 or $2, but we don't know that those values are both equal to $0. As
+   ;; a result, we will infer that $3 interfers with $0, as their live ranges
+   ;; overlap and $3 is assigned a value that looks different than $0. This
+   ;; will prevent $3 being coalesced with all the others. (However, see the
+   ;; next testcase for more on this.)
+   (if
+    (local.get $0)
+    (local.set $3
+     (local.get $1)
+    )
+    (local.set $3
+     (local.get $2)
+    )
+   )
+   (drop
+    (local.get $0)
+   )
+   (drop
+    (local.get $1)
+   )
+   (drop
+    (local.get $2)
+   )
+   (local.get $3)
+  )
+
+  ;; CHECK:      (func $inter-block-copy-second-pass (result i32)
+  ;; CHECK-NEXT:  (local $0 i32)
+  ;; CHECK-NEXT:  (local.set $0
+  ;; CHECK-NEXT:   (i32.const 100)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (nop)
+  ;; CHECK-NEXT:  (nop)
+  ;; CHECK-NEXT:  (if
+  ;; CHECK-NEXT:   (local.get $0)
+  ;; CHECK-NEXT:   (nop)
+  ;; CHECK-NEXT:   (nop)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (local.get $0)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (local.get $0)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (local.get $0)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (local.get $0)
+  ;; CHECK-NEXT: )
+  (func $inter-block-copy-second-pass (result i32)
+   (local $0 i32)
+   (local $1 i32)
+   ;; This function contains the output of the previous testcase
+   ;; $inter-block-copy, and shows what running a second pass results in. After
+   ;; the first pass we have coalesced the original $0, $1, and $2 into a single
+   ;; local ($0), and renamed the original $3 into $1. At this point the
+   ;; algorithm can see that $0 and $1 do not interfere: there are no copies in
+   ;; the middle, and in both if arms when we assign a value to $1 it is the
+   ;; value already in $0, and there is no other assignment of either one that
+   ;; appears in their overlapping live ranges, so they will be coalesced into
+   ;; a single local.
+   (local.set $0
+    (i32.const 100)
+   )
+   
