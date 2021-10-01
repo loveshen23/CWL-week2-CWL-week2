@@ -434,4 +434,223 @@
  ;; CHECK-NEXT:   (call $get_null_{i32_f32})
  ;; CHECK-NEXT:  )
  ;; CHECK-NEXT: )
- ;; NOMNL:      (func $call-various-params
+ ;; NOMNL:      (func $call-various-params-middle (type $none_=>_none)
+ ;; NOMNL-NEXT:  (call $various-params-middle
+ ;; NOMNL-NEXT:   (call $get_null_{i32_i64})
+ ;; NOMNL-NEXT:  )
+ ;; NOMNL-NEXT:  (call $various-params-middle
+ ;; NOMNL-NEXT:   (call $get_null_{i32_f32})
+ ;; NOMNL-NEXT:  )
+ ;; NOMNL-NEXT: )
+ (func $call-various-params-middle
+  ;; The argument gets {i32_i64} and {i32_f32}. This allows us to refine from
+  ;; {} to {i32}, a type "in the middle".
+  (call $various-params-middle
+   (call $get_null_{i32_i64})
+  )
+  (call $various-params-middle
+   (call $get_null_{i32_f32})
+  )
+ )
+ ;; CHECK:      (func $various-params-middle (type $ref?|${i32}|_=>_none) (param $x (ref null ${i32}))
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (local.get $x)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT: )
+ ;; NOMNL:      (func $various-params-middle (type $ref?|${i32}|_=>_none) (param $x (ref null ${i32}))
+ ;; NOMNL-NEXT:  (drop
+ ;; NOMNL-NEXT:   (local.get $x)
+ ;; NOMNL-NEXT:  )
+ ;; NOMNL-NEXT: )
+ (func $various-params-middle (param $x (ref null ${}))
+  ;; "Use" the local to avoid other optimizations kicking in.
+  (drop (local.get $x))
+ )
+
+ ;; CHECK:      (func $unused-and-refinable (type $none_=>_none)
+ ;; CHECK-NEXT:  (local $0 structref)
+ ;; CHECK-NEXT:  (nop)
+ ;; CHECK-NEXT: )
+ ;; NOMNL:      (func $unused-and-refinable (type $none_=>_none)
+ ;; NOMNL-NEXT:  (local $0 structref)
+ ;; NOMNL-NEXT:  (nop)
+ ;; NOMNL-NEXT: )
+ (func $unused-and-refinable (param $0 structref)
+  ;; This function does not use $0. It is called with ${}, so it is also
+  ;; a parameter whose type we can refine. Do not do both operations: instead,
+  ;; just remove it because it is ignored, without altering the type (handling
+  ;; both operations would introduce some corner cases, and it just isn't worth
+  ;; handling them if the param is completely unused anyhow). We should see in
+  ;; the test output that the local $0 (the unused param) becomes a local
+  ;; because it is unused, and that local does *not* have its type refined to
+  ;; ${} (it will however be changed to be nullable, which it must be as a
+  ;; local).
+ )
+
+ ;; CHECK:      (func $call-unused-and-refinable (type $none_=>_none)
+ ;; CHECK-NEXT:  (call $unused-and-refinable)
+ ;; CHECK-NEXT: )
+ ;; NOMNL:      (func $call-unused-and-refinable (type $none_=>_none)
+ ;; NOMNL-NEXT:  (call $unused-and-refinable)
+ ;; NOMNL-NEXT: )
+ (func $call-unused-and-refinable
+  (call $unused-and-refinable
+   (struct.new_default ${})
+  )
+ )
+
+ ;; CHECK:      (func $non-nullable-fixup (type $ref|${}|_=>_none) (param $0 (ref ${}))
+ ;; CHECK-NEXT:  (local $1 structref)
+ ;; CHECK-NEXT:  (local.set $1
+ ;; CHECK-NEXT:   (local.get $0)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (local.set $1
+ ;; CHECK-NEXT:   (local.get $1)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT: )
+ ;; NOMNL:      (func $non-nullable-fixup (type $ref|${}|_=>_none) (param $0 (ref ${}))
+ ;; NOMNL-NEXT:  (local $1 structref)
+ ;; NOMNL-NEXT:  (local.set $1
+ ;; NOMNL-NEXT:   (local.get $0)
+ ;; NOMNL-NEXT:  )
+ ;; NOMNL-NEXT:  (local.set $1
+ ;; NOMNL-NEXT:   (local.get $1)
+ ;; NOMNL-NEXT:  )
+ ;; NOMNL-NEXT: )
+ (func $non-nullable-fixup (param $0 structref)
+  ;; Use the param to avoid other opts removing it, and to force us to do a
+  ;; fixup when we refine the param's type. When doing so, we must handle the
+  ;; fact that the new local's type is non-nullable.
+  (local.set $0
+   (local.get $0)
+  )
+ )
+
+ ;; CHECK:      (func $call-non-nullable-fixup (type $none_=>_none)
+ ;; CHECK-NEXT:  (call $non-nullable-fixup
+ ;; CHECK-NEXT:   (struct.new_default ${})
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT: )
+ ;; NOMNL:      (func $call-non-nullable-fixup (type $none_=>_none)
+ ;; NOMNL-NEXT:  (call $non-nullable-fixup
+ ;; NOMNL-NEXT:   (struct.new_default ${})
+ ;; NOMNL-NEXT:  )
+ ;; NOMNL-NEXT: )
+ (func $call-non-nullable-fixup
+  (call $non-nullable-fixup
+   (struct.new_default ${})
+  )
+ )
+
+ ;; CHECK:      (func $call-update-null (type $none_=>_none)
+ ;; CHECK-NEXT:  (call $update-null
+ ;; CHECK-NEXT:   (ref.null none)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (call $update-null
+ ;; CHECK-NEXT:   (struct.new_default ${})
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT: )
+ ;; NOMNL:      (func $call-update-null (type $none_=>_none)
+ ;; NOMNL-NEXT:  (call $update-null
+ ;; NOMNL-NEXT:   (ref.null none)
+ ;; NOMNL-NEXT:  )
+ ;; NOMNL-NEXT:  (call $update-null
+ ;; NOMNL-NEXT:   (struct.new_default ${})
+ ;; NOMNL-NEXT:  )
+ ;; NOMNL-NEXT: )
+ (func $call-update-null
+  ;; Call a function with one of the parameters a null of a type that we can
+  ;; update in order to get a better LUB.
+  (call $update-null
+   (ref.null any)
+  )
+  (call $update-null
+   (struct.new_default ${})
+  )
+ )
+
+ ;; CHECK:      (func $update-null (type $ref?|${}|_=>_none) (param $x (ref null ${}))
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (local.get $x)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT: )
+ ;; NOMNL:      (func $update-null (type $ref?|${}|_=>_none) (param $x (ref null ${}))
+ ;; NOMNL-NEXT:  (drop
+ ;; NOMNL-NEXT:   (local.get $x)
+ ;; NOMNL-NEXT:  )
+ ;; NOMNL-NEXT: )
+ (func $update-null (param $x (ref null any))
+  ;; "Use" the param to avoid other optimizations kicking in. We should only
+  ;; see the type of the param refined to a null ${} after updating the null
+  ;; in the caller.
+  (drop (local.get $x))
+ )
+
+ ;; CHECK:      (func $get_null_{i32} (type $none_=>_ref?|${i32}|) (result (ref null ${i32}))
+ ;; CHECK-NEXT:  (select (result (ref null ${i32}))
+ ;; CHECK-NEXT:   (ref.null none)
+ ;; CHECK-NEXT:   (struct.new_default ${i32})
+ ;; CHECK-NEXT:   (i32.const 0)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT: )
+ ;; NOMNL:      (func $get_null_{i32} (type $none_=>_ref?|${i32}|) (result (ref null ${i32}))
+ ;; NOMNL-NEXT:  (select (result (ref null ${i32}))
+ ;; NOMNL-NEXT:   (ref.null none)
+ ;; NOMNL-NEXT:   (struct.new_default ${i32})
+ ;; NOMNL-NEXT:   (i32.const 0)
+ ;; NOMNL-NEXT:  )
+ ;; NOMNL-NEXT: )
+ (func $get_null_{i32} (result (ref null ${i32}))
+  ;; Helper function that returns a null value of ${i32}. We use this instead of
+  ;; a direct ref.null because those can be rewritten by LUBFinder.
+  (select
+   (ref.null none)
+   (struct.new_default ${i32})
+   (i32.const 0)
+  )
+ )
+
+ ;; CHECK:      (func $get_null_{i32_i64} (type $none_=>_ref?|${i32_i64}|) (result (ref null ${i32_i64}))
+ ;; CHECK-NEXT:  (select (result (ref null ${i32_i64}))
+ ;; CHECK-NEXT:   (ref.null none)
+ ;; CHECK-NEXT:   (struct.new_default ${i32_i64})
+ ;; CHECK-NEXT:   (i32.const 0)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT: )
+ ;; NOMNL:      (func $get_null_{i32_i64} (type $none_=>_ref?|${i32_i64}|) (result (ref null ${i32_i64}))
+ ;; NOMNL-NEXT:  (select (result (ref null ${i32_i64}))
+ ;; NOMNL-NEXT:   (ref.null none)
+ ;; NOMNL-NEXT:   (struct.new_default ${i32_i64})
+ ;; NOMNL-NEXT:   (i32.const 0)
+ ;; NOMNL-NEXT:  )
+ ;; NOMNL-NEXT: )
+ (func $get_null_{i32_i64} (result (ref null ${i32_i64}))
+  (select
+   (ref.null none)
+   (struct.new_default ${i32_i64})
+   (i32.const 0)
+  )
+ )
+
+ ;; CHECK:      (func $get_null_{i32_f32} (type $none_=>_ref?|${i32_f32}|) (result (ref null ${i32_f32}))
+ ;; CHECK-NEXT:  (select (result (ref null ${i32_f32}))
+ ;; CHECK-NEXT:   (ref.null none)
+ ;; CHECK-NEXT:   (struct.new_default ${i32_f32})
+ ;; CHECK-NEXT:   (i32.const 0)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT: )
+ ;; NOMNL:      (func $get_null_{i32_f32} (type $none_=>_ref?|${i32_f32}|) (result (ref null ${i32_f32}))
+ ;; NOMNL-NEXT:  (select (result (ref null ${i32_f32}))
+ ;; NOMNL-NEXT:   (ref.null none)
+ ;; NOMNL-NEXT:   (struct.new_default ${i32_f32})
+ ;; NOMNL-NEXT:   (i32.const 0)
+ ;; NOMNL-NEXT:  )
+ ;; NOMNL-NEXT: )
+ (func $get_null_{i32_f32} (result (ref null ${i32_f32}))
+  (select
+   (ref.null none)
+   (struct.new_default ${i32_f32})
+   (i32.const 0)
+  )
+ )
+)
