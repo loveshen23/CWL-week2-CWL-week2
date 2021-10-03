@@ -507,4 +507,273 @@
  ;; CHECK-NEXT:  (return_call_indirect $0 (type $return_{})
  ;; CHECK-NEXT:   (i32.const 0)
  ;; CHECK-NEXT:  )
- ;; 
+ ;; CHECK-NEXT: )
+ ;; NOMNL:      (func $tail-caller-indirect-yes (type $return_{}) (result (ref ${}))
+ ;; NOMNL-NEXT:  (return_call_indirect $0 (type $return_{})
+ ;; NOMNL-NEXT:   (i32.const 0)
+ ;; NOMNL-NEXT:  )
+ ;; NOMNL-NEXT: )
+ (func $tail-caller-indirect-yes (result anyref)
+  (return_call_indirect (type $return_{}) (i32.const 0))
+ )
+ ;; CHECK:      (func $tail-caller-indirect-no (type $none_=>_anyref) (result anyref)
+ ;; CHECK-NEXT:  (local $any anyref)
+ ;; CHECK-NEXT:  (if
+ ;; CHECK-NEXT:   (i32.const 1)
+ ;; CHECK-NEXT:   (return
+ ;; CHECK-NEXT:    (local.get $any)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (return_call_indirect $0 (type $return_{})
+ ;; CHECK-NEXT:   (i32.const 0)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT: )
+ ;; NOMNL:      (func $tail-caller-indirect-no (type $none_=>_anyref) (result anyref)
+ ;; NOMNL-NEXT:  (local $any anyref)
+ ;; NOMNL-NEXT:  (if
+ ;; NOMNL-NEXT:   (i32.const 1)
+ ;; NOMNL-NEXT:   (return
+ ;; NOMNL-NEXT:    (local.get $any)
+ ;; NOMNL-NEXT:   )
+ ;; NOMNL-NEXT:  )
+ ;; NOMNL-NEXT:  (return_call_indirect $0 (type $return_{})
+ ;; NOMNL-NEXT:   (i32.const 0)
+ ;; NOMNL-NEXT:  )
+ ;; NOMNL-NEXT: )
+ (func $tail-caller-indirect-no (result anyref)
+  (local $any anyref)
+
+  (if (i32.const 1)
+   (return (local.get $any))
+  )
+  (return_call_indirect (type $return_{}) (i32.const 0))
+ )
+ ;; CHECK:      (func $tail-call-caller-indirect (type $none_=>_none)
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (call $tail-caller-indirect-yes)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (call $tail-caller-indirect-no)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT: )
+ ;; NOMNL:      (func $tail-call-caller-indirect (type $none_=>_none)
+ ;; NOMNL-NEXT:  (drop
+ ;; NOMNL-NEXT:   (call $tail-caller-indirect-yes)
+ ;; NOMNL-NEXT:  )
+ ;; NOMNL-NEXT:  (drop
+ ;; NOMNL-NEXT:   (call $tail-caller-indirect-no)
+ ;; NOMNL-NEXT:  )
+ ;; NOMNL-NEXT: )
+ (func $tail-call-caller-indirect
+  (drop
+   (call $tail-caller-indirect-yes)
+  )
+  (drop
+   (call $tail-caller-indirect-no)
+  )
+ )
+
+ ;; As above, but with a tail call by function reference.
+ ;; CHECK:      (func $tail-callee-call_ref (type $return_{}) (result (ref ${}))
+ ;; CHECK-NEXT:  (unreachable)
+ ;; CHECK-NEXT: )
+ ;; NOMNL:      (func $tail-callee-call_ref (type $return_{}) (result (ref ${}))
+ ;; NOMNL-NEXT:  (unreachable)
+ ;; NOMNL-NEXT: )
+ (func $tail-callee-call_ref (result (ref ${}))
+  (unreachable)
+ )
+ ;; CHECK:      (func $tail-caller-call_ref-yes (type $return_{}) (result (ref ${}))
+ ;; CHECK-NEXT:  (local $return_{} (ref null $return_{}))
+ ;; CHECK-NEXT:  (return_call_ref $return_{}
+ ;; CHECK-NEXT:   (local.get $return_{})
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT: )
+ ;; NOMNL:      (func $tail-caller-call_ref-yes (type $return_{}) (result (ref ${}))
+ ;; NOMNL-NEXT:  (local $return_{} (ref null $return_{}))
+ ;; NOMNL-NEXT:  (return_call_ref $return_{}
+ ;; NOMNL-NEXT:   (local.get $return_{})
+ ;; NOMNL-NEXT:  )
+ ;; NOMNL-NEXT: )
+ (func $tail-caller-call_ref-yes (result anyref)
+  (local $return_{} (ref null $return_{}))
+
+  (return_call_ref $return_{} (local.get $return_{}))
+ )
+ ;; CHECK:      (func $tail-caller-call_ref-no (type $none_=>_anyref) (result anyref)
+ ;; CHECK-NEXT:  (local $any anyref)
+ ;; CHECK-NEXT:  (local $return_{} (ref null $return_{}))
+ ;; CHECK-NEXT:  (if
+ ;; CHECK-NEXT:   (i32.const 1)
+ ;; CHECK-NEXT:   (return
+ ;; CHECK-NEXT:    (local.get $any)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (return_call_ref $return_{}
+ ;; CHECK-NEXT:   (local.get $return_{})
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT: )
+ ;; NOMNL:      (func $tail-caller-call_ref-no (type $none_=>_anyref) (result anyref)
+ ;; NOMNL-NEXT:  (local $any anyref)
+ ;; NOMNL-NEXT:  (local $return_{} (ref null $return_{}))
+ ;; NOMNL-NEXT:  (if
+ ;; NOMNL-NEXT:   (i32.const 1)
+ ;; NOMNL-NEXT:   (return
+ ;; NOMNL-NEXT:    (local.get $any)
+ ;; NOMNL-NEXT:   )
+ ;; NOMNL-NEXT:  )
+ ;; NOMNL-NEXT:  (return_call_ref $return_{}
+ ;; NOMNL-NEXT:   (local.get $return_{})
+ ;; NOMNL-NEXT:  )
+ ;; NOMNL-NEXT: )
+ (func $tail-caller-call_ref-no (result anyref)
+  (local $any anyref)
+  (local $return_{} (ref null $return_{}))
+
+  (if (i32.const 1)
+   (return (local.get $any))
+  )
+  (return_call_ref $return_{} (local.get $return_{}))
+ )
+ ;; CHECK:      (func $tail-caller-call_ref-unreachable (type $none_=>_anyref) (result anyref)
+ ;; CHECK-NEXT:  (block ;; (replaces something unreachable we can't emit)
+ ;; CHECK-NEXT:   (drop
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:   (unreachable)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT: )
+ ;; NOMNL:      (func $tail-caller-call_ref-unreachable (type $none_=>_anyref) (result anyref)
+ ;; NOMNL-NEXT:  (block ;; (replaces something unreachable we can't emit)
+ ;; NOMNL-NEXT:   (drop
+ ;; NOMNL-NEXT:    (unreachable)
+ ;; NOMNL-NEXT:   )
+ ;; NOMNL-NEXT:   (unreachable)
+ ;; NOMNL-NEXT:  )
+ ;; NOMNL-NEXT: )
+ (func $tail-caller-call_ref-unreachable (result anyref)
+  ;; An unreachable means there is no function signature to even look at. We
+  ;; should not hit an assertion on such things.
+  (return_call_ref $return_{} (unreachable))
+ )
+ ;; CHECK:      (func $tail-call-caller-call_ref (type $none_=>_none)
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (call $tail-caller-call_ref-yes)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (call $tail-caller-call_ref-no)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (call $tail-caller-call_ref-unreachable)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT: )
+ ;; NOMNL:      (func $tail-call-caller-call_ref (type $none_=>_none)
+ ;; NOMNL-NEXT:  (drop
+ ;; NOMNL-NEXT:   (call $tail-caller-call_ref-yes)
+ ;; NOMNL-NEXT:  )
+ ;; NOMNL-NEXT:  (drop
+ ;; NOMNL-NEXT:   (call $tail-caller-call_ref-no)
+ ;; NOMNL-NEXT:  )
+ ;; NOMNL-NEXT:  (drop
+ ;; NOMNL-NEXT:   (call $tail-caller-call_ref-unreachable)
+ ;; NOMNL-NEXT:  )
+ ;; NOMNL-NEXT: )
+ (func $tail-call-caller-call_ref
+  (drop
+   (call $tail-caller-call_ref-yes)
+  )
+  (drop
+   (call $tail-caller-call_ref-no)
+  )
+  (drop
+   (call $tail-caller-call_ref-unreachable)
+  )
+ )
+
+ ;; CHECK:      (func $update-null (type $i32_i32_=>_ref?|${i32}|) (param $x i32) (param $y i32) (result (ref null ${i32}))
+ ;; CHECK-NEXT:  (if
+ ;; CHECK-NEXT:   (local.get $x)
+ ;; CHECK-NEXT:   (if
+ ;; CHECK-NEXT:    (local.get $y)
+ ;; CHECK-NEXT:    (return
+ ;; CHECK-NEXT:     (struct.new_default ${i32_f32})
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:    (return
+ ;; CHECK-NEXT:     (ref.null none)
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:   (return
+ ;; CHECK-NEXT:    (struct.new_default ${i32_i64})
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT: )
+ ;; NOMNL:      (func $update-null (type $i32_i32_=>_ref?|${i32}|) (param $x i32) (param $y i32) (result (ref null ${i32}))
+ ;; NOMNL-NEXT:  (if
+ ;; NOMNL-NEXT:   (local.get $x)
+ ;; NOMNL-NEXT:   (if
+ ;; NOMNL-NEXT:    (local.get $y)
+ ;; NOMNL-NEXT:    (return
+ ;; NOMNL-NEXT:     (struct.new_default ${i32_f32})
+ ;; NOMNL-NEXT:    )
+ ;; NOMNL-NEXT:    (return
+ ;; NOMNL-NEXT:     (ref.null none)
+ ;; NOMNL-NEXT:    )
+ ;; NOMNL-NEXT:   )
+ ;; NOMNL-NEXT:   (return
+ ;; NOMNL-NEXT:    (struct.new_default ${i32_i64})
+ ;; NOMNL-NEXT:   )
+ ;; NOMNL-NEXT:  )
+ ;; NOMNL-NEXT: )
+ (func $update-null (param $x i32) (param $y i32) (result anyref)
+  ;; Of the three returns here, the null can be updated, and the LUB is
+  ;; determined by the other two, and is their shared parent ${}.
+  (if
+   (local.get $x)
+   (if
+    (local.get $y)
+    (return (struct.new ${i32_f32}))
+    (return (ref.null any))
+   )
+   (return (struct.new ${i32_i64}))
+  )
+ )
+
+ ;; CHECK:      (func $call-update-null (type $none_=>_anyref) (result anyref)
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (call $update-null
+ ;; CHECK-NEXT:    (i32.const 0)
+ ;; CHECK-NEXT:    (i32.const 1)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (call $update-null
+ ;; CHECK-NEXT:   (i32.const 1)
+ ;; CHECK-NEXT:   (i32.const 0)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT: )
+ ;; NOMNL:      (func $call-update-null (type $none_=>_anyref) (result anyref)
+ ;; NOMNL-NEXT:  (drop
+ ;; NOMNL-NEXT:   (call $update-null
+ ;; NOMNL-NEXT:    (i32.const 0)
+ ;; NOMNL-NEXT:    (i32.const 1)
+ ;; NOMNL-NEXT:   )
+ ;; NOMNL-NEXT:  )
+ ;; NOMNL-NEXT:  (call $update-null
+ ;; NOMNL-NEXT:   (i32.const 1)
+ ;; NOMNL-NEXT:   (i32.const 0)
+ ;; NOMNL-NEXT:  )
+ ;; NOMNL-NEXT: )
+ (func $call-update-null (result anyref)
+  ;; Call $update-null so it gets optimized. (Call it with various values so
+  ;; that other opts do not inline the constants.)
+  (drop
+   ($call $update-null
+    (i32.const 0)
+    (i32.const 1)
+   )
+  )
+  ($call $update-null
+   (i32.const 1)
+   (i32.const 0)
+  )
+ )
+)
