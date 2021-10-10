@@ -1025,4 +1025,423 @@
  ;; CHECK-NEXT:       (unreachable)
  ;; CHECK-NEXT:      )
  ;; CHECK-NEXT:      (block
- ;; CHECK-NE
+ ;; CHECK-NEXT:       (block $out9
+ ;; CHECK-NEXT:        (unreachable)
+ ;; CHECK-NEXT:        (unreachable)
+ ;; CHECK-NEXT:        (drop
+ ;; CHECK-NEXT:         (i32.const 0)
+ ;; CHECK-NEXT:        )
+ ;; CHECK-NEXT:       )
+ ;; CHECK-NEXT:       (unreachable)
+ ;; CHECK-NEXT:      )
+ ;; CHECK-NEXT:     )
+ ;; CHECK-NEXT:     (unreachable)
+ ;; CHECK-NEXT:     (drop
+ ;; CHECK-NEXT:      (i32.const 0)
+ ;; CHECK-NEXT:     )
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (if
+ ;; CHECK-NEXT:   (i32.const 0)
+ ;; CHECK-NEXT:   (block
+ ;; CHECK-NEXT:    (block $out11
+ ;; CHECK-NEXT:     (unreachable)
+ ;; CHECK-NEXT:     (unreachable)
+ ;; CHECK-NEXT:     (unreachable)
+ ;; CHECK-NEXT:     (drop
+ ;; CHECK-NEXT:      (i32.const 0)
+ ;; CHECK-NEXT:     )
+ ;; CHECK-NEXT:     (unreachable)
+ ;; CHECK-NEXT:     (unreachable)
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:    (local.set $2
+ ;; CHECK-NEXT:     (local.get $1)
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:    (drop
+ ;; CHECK-NEXT:     (local.get $2)
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (if
+ ;; CHECK-NEXT:   (i32.const 0)
+ ;; CHECK-NEXT:   (block
+ ;; CHECK-NEXT:    (block $out13
+ ;; CHECK-NEXT:     (unreachable)
+ ;; CHECK-NEXT:     (unreachable)
+ ;; CHECK-NEXT:     (unreachable)
+ ;; CHECK-NEXT:     (drop
+ ;; CHECK-NEXT:      (i32.const 0)
+ ;; CHECK-NEXT:     )
+ ;; CHECK-NEXT:     (unreachable)
+ ;; CHECK-NEXT:     (unreachable)
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:    (local.set $4
+ ;; CHECK-NEXT:     (local.get $3)
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:    (drop
+ ;; CHECK-NEXT:     (local.get $4)
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (if
+ ;; CHECK-NEXT:   (i32.const 0)
+ ;; CHECK-NEXT:   (block
+ ;; CHECK-NEXT:    (block $out15
+ ;; CHECK-NEXT:     (unreachable)
+ ;; CHECK-NEXT:     (unreachable)
+ ;; CHECK-NEXT:     (unreachable)
+ ;; CHECK-NEXT:     (unreachable)
+ ;; CHECK-NEXT:     (drop
+ ;; CHECK-NEXT:      (i32.const 0)
+ ;; CHECK-NEXT:     )
+ ;; CHECK-NEXT:     (unreachable)
+ ;; CHECK-NEXT:     (unreachable)
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:    (local.set $6
+ ;; CHECK-NEXT:     (local.get $5)
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:    (drop
+ ;; CHECK-NEXT:     (local.get $6)
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (block $out16
+ ;; CHECK-NEXT:   (block $in
+ ;; CHECK-NEXT:    (br_if $out16
+ ;; CHECK-NEXT:     (i32.const 1)
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:   (unreachable)
+ ;; CHECK-NEXT:   (unreachable)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (if
+ ;; CHECK-NEXT:   (i32.const 0)
+ ;; CHECK-NEXT:   (block
+ ;; CHECK-NEXT:    (block $block11
+ ;; CHECK-NEXT:     (block $out18
+ ;; CHECK-NEXT:      (block $in19
+ ;; CHECK-NEXT:       (br_if $in19
+ ;; CHECK-NEXT:        (i32.const 1)
+ ;; CHECK-NEXT:       )
+ ;; CHECK-NEXT:      )
+ ;; CHECK-NEXT:      (unreachable)
+ ;; CHECK-NEXT:      (unreachable)
+ ;; CHECK-NEXT:     )
+ ;; CHECK-NEXT:     (unreachable)
+ ;; CHECK-NEXT:     (drop
+ ;; CHECK-NEXT:      (i32.const 10)
+ ;; CHECK-NEXT:     )
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (block $out20
+ ;; CHECK-NEXT:   (block $in21
+ ;; CHECK-NEXT:    (br_table $out20 $in21
+ ;; CHECK-NEXT:     (i32.const 1)
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:   (unreachable)
+ ;; CHECK-NEXT:   (unreachable)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (block $out22
+ ;; CHECK-NEXT:   (block $in23
+ ;; CHECK-NEXT:    (br_table $in23 $out22
+ ;; CHECK-NEXT:     (i32.const 1)
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:   (unreachable)
+ ;; CHECK-NEXT:   (unreachable)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (if
+ ;; CHECK-NEXT:   (i32.const 0)
+ ;; CHECK-NEXT:   (block
+ ;; CHECK-NEXT:    (block $block13
+ ;; CHECK-NEXT:     (block $out25
+ ;; CHECK-NEXT:      (block $in26
+ ;; CHECK-NEXT:       (br_table $in26 $in26
+ ;; CHECK-NEXT:        (i32.const 1)
+ ;; CHECK-NEXT:       )
+ ;; CHECK-NEXT:       (unreachable)
+ ;; CHECK-NEXT:      )
+ ;; CHECK-NEXT:      (unreachable)
+ ;; CHECK-NEXT:      (unreachable)
+ ;; CHECK-NEXT:     )
+ ;; CHECK-NEXT:     (unreachable)
+ ;; CHECK-NEXT:     (drop
+ ;; CHECK-NEXT:      (i32.const 10)
+ ;; CHECK-NEXT:     )
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (if
+ ;; CHECK-NEXT:   (i32.const 0)
+ ;; CHECK-NEXT:   (block
+ ;; CHECK-NEXT:    (block $block15
+ ;; CHECK-NEXT:     (drop
+ ;; CHECK-NEXT:      (i32.const 10)
+ ;; CHECK-NEXT:     )
+ ;; CHECK-NEXT:     (drop
+ ;; CHECK-NEXT:      (i32.const 42)
+ ;; CHECK-NEXT:     )
+ ;; CHECK-NEXT:     (unreachable)
+ ;; CHECK-NEXT:     (unreachable)
+ ;; CHECK-NEXT:     (unreachable)
+ ;; CHECK-NEXT:     (return
+ ;; CHECK-NEXT:      (unreachable)
+ ;; CHECK-NEXT:     )
+ ;; CHECK-NEXT:     (unreachable)
+ ;; CHECK-NEXT:     (unreachable)
+ ;; CHECK-NEXT:     (unreachable)
+ ;; CHECK-NEXT:     (return)
+ ;; CHECK-NEXT:     (unreachable)
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (if
+ ;; CHECK-NEXT:   (i32.const 0)
+ ;; CHECK-NEXT:   (block
+ ;; CHECK-NEXT:    (loop $loop-in18
+ ;; CHECK-NEXT:     (unreachable)
+ ;; CHECK-NEXT:     (unreachable)
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (block $out29
+ ;; CHECK-NEXT:   (loop $in30
+ ;; CHECK-NEXT:    (block
+ ;; CHECK-NEXT:     (br_if $out29
+ ;; CHECK-NEXT:      (i32.const 1)
+ ;; CHECK-NEXT:     )
+ ;; CHECK-NEXT:     (unreachable)
+ ;; CHECK-NEXT:     (unreachable)
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:   (unreachable)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (if
+ ;; CHECK-NEXT:   (i32.const 0)
+ ;; CHECK-NEXT:   (block
+ ;; CHECK-NEXT:    (block $block20
+ ;; CHECK-NEXT:     (loop $in32
+ ;; CHECK-NEXT:      (block
+ ;; CHECK-NEXT:       (br_if $in32
+ ;; CHECK-NEXT:        (i32.const 1)
+ ;; CHECK-NEXT:       )
+ ;; CHECK-NEXT:       (unreachable)
+ ;; CHECK-NEXT:       (unreachable)
+ ;; CHECK-NEXT:      )
+ ;; CHECK-NEXT:      (unreachable)
+ ;; CHECK-NEXT:     )
+ ;; CHECK-NEXT:     (unreachable)
+ ;; CHECK-NEXT:     (drop
+ ;; CHECK-NEXT:      (i32.const 10)
+ ;; CHECK-NEXT:     )
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (if
+ ;; CHECK-NEXT:   (i32.const 1)
+ ;; CHECK-NEXT:   (block
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:    (call $call-me
+ ;; CHECK-NEXT:     (i32.const 123)
+ ;; CHECK-NEXT:     (unreachable)
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (if
+ ;; CHECK-NEXT:   (i32.const 2)
+ ;; CHECK-NEXT:   (block
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:    (call $call-me
+ ;; CHECK-NEXT:     (unreachable)
+ ;; CHECK-NEXT:     (i32.const 0)
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (if
+ ;; CHECK-NEXT:   (i32.const 3)
+ ;; CHECK-NEXT:   (block
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:    (call $call-me
+ ;; CHECK-NEXT:     (unreachable)
+ ;; CHECK-NEXT:     (unreachable)
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (if
+ ;; CHECK-NEXT:   (i32.const -1)
+ ;; CHECK-NEXT:   (block
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:    (call_indirect $0 (type $ii)
+ ;; CHECK-NEXT:     (i32.const 123)
+ ;; CHECK-NEXT:     (i32.const 456)
+ ;; CHECK-NEXT:     (unreachable)
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (if
+ ;; CHECK-NEXT:   (i32.const -2)
+ ;; CHECK-NEXT:   (block
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:    (call_indirect $0 (type $ii)
+ ;; CHECK-NEXT:     (i32.const 139)
+ ;; CHECK-NEXT:     (unreachable)
+ ;; CHECK-NEXT:     (i32.const 0)
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (if
+ ;; CHECK-NEXT:   (i32.const -3)
+ ;; CHECK-NEXT:   (block
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:    (call_indirect $0 (type $ii)
+ ;; CHECK-NEXT:     (i32.const 246)
+ ;; CHECK-NEXT:     (unreachable)
+ ;; CHECK-NEXT:     (unreachable)
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (if
+ ;; CHECK-NEXT:   (i32.const -4)
+ ;; CHECK-NEXT:   (block
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:    (call_indirect $0 (type $ii)
+ ;; CHECK-NEXT:     (unreachable)
+ ;; CHECK-NEXT:     (unreachable)
+ ;; CHECK-NEXT:     (unreachable)
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (if
+ ;; CHECK-NEXT:   (i32.const 11)
+ ;; CHECK-NEXT:   (block
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (if
+ ;; CHECK-NEXT:   (i32.const 22)
+ ;; CHECK-NEXT:   (block
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:    (i32.load
+ ;; CHECK-NEXT:     (unreachable)
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:    (drop
+ ;; CHECK-NEXT:     (unreachable)
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (if
+ ;; CHECK-NEXT:   (i32.const 33)
+ ;; CHECK-NEXT:   (block
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:    (i32.store
+ ;; CHECK-NEXT:     (i32.const 0)
+ ;; CHECK-NEXT:     (unreachable)
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (if
+ ;; CHECK-NEXT:   (i32.const 44)
+ ;; CHECK-NEXT:   (block
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:    (i32.store
+ ;; CHECK-NEXT:     (unreachable)
+ ;; CHECK-NEXT:     (i32.const 0)
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (if
+ ;; CHECK-NEXT:   (i32.const 55)
+ ;; CHECK-NEXT:   (block
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:    (i32.store
+ ;; CHECK-NEXT:     (unreachable)
+ ;; CHECK-NEXT:     (unreachable)
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (if
+ ;; CHECK-NEXT:   (i32.const 66)
+ ;; CHECK-NEXT:   (block
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:    (i32.eqz
+ ;; CHECK-NEXT:     (unreachable)
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:    (drop
+ ;; CHECK-NEXT:     (unreachable)
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (if
+ ;; CHECK-NEXT:   (i32.const 77)
+ ;; CHECK-NEXT:   (block
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:    (i32.add
+ ;; CHECK-NEXT:     (unreachable)
+ ;; CHECK-NEXT:     (i32.const 0)
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:    (drop
+ ;; CHECK-NEXT:     (unreachable)
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (if
+ ;; CHECK-NEXT:   (i32.const 88)
+ ;; CHECK-NEXT:   (block
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:    (i32.add
+ ;; CHECK-NEXT:     (i32.const 0)
+ ;; CHECK-NEXT:     (unreachable)
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:    (drop
+ ;; CHECK-NEXT:     (unreachable)
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (if
+ ;; CHECK-NEXT:   (i32.const 99)
+ ;; CHECK-NEXT:   (block
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:    (i32.add
+ ;; CHECK-NEXT:     (unreachable)
+ ;; CHECK-NEXT:     (unreachable)
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (if
+ ;; CHECK-NEXT:   (i32.const 100)
+ ;; C
