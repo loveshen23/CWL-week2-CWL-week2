@@ -3388,4 +3388,148 @@
   ;; CHECK-NEXT: )
   (func $tees (param $x i32) (param $y i32)
     (drop (local.tee $x (i32.const 1)))
-    (
+    (drop (local.tee $x (unreachable)))
+    (drop (local.tee $y (local.tee $x (i32.const 2))))
+  )
+  ;; CHECK:      (func $return (type $3) (param $x i32) (result i32)
+  ;; CHECK-NEXT:  (local $1 i32)
+  ;; CHECK-NEXT:  (local.set $1
+  ;; CHECK-NEXT:   (i32.sub
+  ;; CHECK-NEXT:    (i32.const 1)
+  ;; CHECK-NEXT:    (i32.const 2)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (return
+  ;; CHECK-NEXT:   (local.get $1)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (unreachable)
+  ;; CHECK-NEXT: )
+  (func $return (param $x i32) (result i32)
+    (return (i32.sub (i32.const 1) (i32.const 2)))
+  )
+
+  ;; subtypes
+
+  ;; br_if leaves a value on the stack if not taken, which later can be the last
+  ;; element of the enclosing innermost block and flow out. So in case br_if
+  ;; targets an outer branch whose return type is a supertype of the br_if's
+  ;; value type, we need the value to be set into two locals: one with the outer
+  ;; block's type, and one with its value type.
+  ;; CHECK:      (func $subtype (type $none_=>_anyref) (result anyref)
+  ;; CHECK-NEXT:  (local $0 eqref)
+  ;; CHECK-NEXT:  (local $1 anyref)
+  ;; CHECK-NEXT:  (local $2 nullref)
+  ;; CHECK-NEXT:  (local $3 nullref)
+  ;; CHECK-NEXT:  (local $4 eqref)
+  ;; CHECK-NEXT:  (local $5 eqref)
+  ;; CHECK-NEXT:  (local $6 eqref)
+  ;; CHECK-NEXT:  (local $7 anyref)
+  ;; CHECK-NEXT:  (block $label0
+  ;; CHECK-NEXT:   (block
+  ;; CHECK-NEXT:    (local.set $1
+  ;; CHECK-NEXT:     (ref.null none)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (local.set $2
+  ;; CHECK-NEXT:     (ref.null none)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (br_if $label0
+  ;; CHECK-NEXT:     (i32.const 0)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (local.set $3
+  ;; CHECK-NEXT:     (local.get $2)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (local.set $0
+  ;; CHECK-NEXT:     (local.get $3)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (local.set $4
+  ;; CHECK-NEXT:     (local.get $0)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (local.set $5
+  ;; CHECK-NEXT:     (local.get $4)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (local.set $6
+  ;; CHECK-NEXT:    (local.get $5)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (local.set $1
+  ;; CHECK-NEXT:    (local.get $6)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (local.set $7
+  ;; CHECK-NEXT:   (local.get $1)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (return
+  ;; CHECK-NEXT:   (local.get $7)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $subtype (result anyref)
+    (local $0 eqref)
+    (block $label0 (result anyref)
+      (block (result eqref)
+        (local.tee $0
+          (br_if $label0
+            (ref.null eq)
+            (i32.const 0)
+          )
+        )
+      )
+    )
+  )
+)
+(module
+ ;; CHECK:      (type $i64_f32_=>_none (func (param i64 f32)))
+
+ ;; CHECK:      (type $none_=>_i32 (func (result i32)))
+
+ ;; CHECK:      (export "test" (func $1))
+
+ ;; CHECK:      (func $0 (type $i64_f32_=>_none) (param $0 i64) (param $1 f32)
+ ;; CHECK-NEXT:  (nop)
+ ;; CHECK-NEXT: )
+ (func $0 (param $0 i64) (param $1 f32)
+  (nop)
+ )
+ (func "test" (result i32)
+  (call $0
+   (unreachable) ;; the unreachable should be handled properly, and not be
+                 ;; reordered with the return
+   (return
+    (i32.const -111)
+   )
+  )
+ )
+)
+;; non-nullable temp vars we add must be handled properly, as non-nullable
+;; locals are not allowed
+;; CHECK:      (func $1 (type $none_=>_i32) (result i32)
+;; CHECK-NEXT:  (unreachable)
+;; CHECK-NEXT:  (return
+;; CHECK-NEXT:   (i32.const -111)
+;; CHECK-NEXT:  )
+;; CHECK-NEXT:  (call $0
+;; CHECK-NEXT:   (unreachable)
+;; CHECK-NEXT:   (unreachable)
+;; CHECK-NEXT:  )
+;; CHECK-NEXT:  (unreachable)
+;; CHECK-NEXT: )
+(module
+ (type $none_=>_none (func))
+ ;; CHECK:      (type $none_=>_funcref (func (result funcref)))
+
+ ;; CHECK:      (func $0 (type $none_=>_funcref) (result funcref)
+ ;; CHECK-NEXT:  (local $0 (ref nofunc))
+ ;; CHECK-NEXT:  (local.set $0
+ ;; CHECK-NEXT:   (ref.as_non_null
+ ;; CHECK-NEXT:    (ref.null nofunc)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (return
+ ;; CHECK-NEXT:   (local.get $0)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT: )
+ (func $0 (result funcref)
+  (ref.as_non_null
+   (ref.null $none_=>_none)
+  )
+ )
+)
