@@ -2961,4 +2961,431 @@
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:   (unreachable)
   ;; CHECK-NEXT:   (local.set $0
-  ;; CHE
+  ;; CHECK-NEXT:    (i32.const 3)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (local.set $1
+  ;; CHECK-NEXT:   (local.get $0)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (return
+  ;; CHECK-NEXT:   (local.get $1)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $flatten-return-value (result i32)
+    (drop (i32.add (i32.const 1) (return (i32.const 2))))
+    (i32.const 3)
+  )
+  ;; CHECK:      (func $unbug (type $1)
+  ;; CHECK-NEXT:  (local $12 i32)
+  ;; CHECK-NEXT:  (local $432 i32)
+  ;; CHECK-NEXT:  (local $430 i32)
+  ;; CHECK-NEXT:  (local $431 i32)
+  ;; CHECK-NEXT:  (local $9 i32)
+  ;; CHECK-NEXT:  (local $5 i32)
+  ;; CHECK-NEXT:  (local $433 i32)
+  ;; CHECK-NEXT:  (local $7 i32)
+  ;; CHECK-NEXT:  (local $8 i32)
+  ;; CHECK-NEXT:  (local $9 i32)
+  ;; CHECK-NEXT:  (local $10 i32)
+  ;; CHECK-NEXT:  (local $11 i32)
+  ;; CHECK-NEXT:  (local $12 i32)
+  ;; CHECK-NEXT:  (local $13 i32)
+  ;; CHECK-NEXT:  (local $14 i32)
+  ;; CHECK-NEXT:  (local $15 i32)
+  ;; CHECK-NEXT:  (local $16 i32)
+  ;; CHECK-NEXT:  (local $17 i32)
+  ;; CHECK-NEXT:  (local $18 i32)
+  ;; CHECK-NEXT:  (local $19 i32)
+  ;; CHECK-NEXT:  (local $20 i32)
+  ;; CHECK-NEXT:  (local $21 i32)
+  ;; CHECK-NEXT:  (local $22 i32)
+  ;; CHECK-NEXT:  (block
+  ;; CHECK-NEXT:   (block
+  ;; CHECK-NEXT:    (local.set $7
+  ;; CHECK-NEXT:     (local.get $12)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (local.set $8
+  ;; CHECK-NEXT:     (i32.eq
+  ;; CHECK-NEXT:      (local.get $7)
+  ;; CHECK-NEXT:      (i32.const 65535)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (if
+  ;; CHECK-NEXT:     (local.get $8)
+  ;; CHECK-NEXT:     (block
+  ;; CHECK-NEXT:      (block $label$78
+  ;; CHECK-NEXT:       (local.set $430
+  ;; CHECK-NEXT:        (i32.const 0)
+  ;; CHECK-NEXT:       )
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:      (local.set $9
+  ;; CHECK-NEXT:       (local.get $430)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:      (local.set $432
+  ;; CHECK-NEXT:       (local.get $9)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (block
+  ;; CHECK-NEXT:      (block $label$79
+  ;; CHECK-NEXT:       (local.set $10
+  ;; CHECK-NEXT:        (local.get $9)
+  ;; CHECK-NEXT:       )
+  ;; CHECK-NEXT:       (local.set $11
+  ;; CHECK-NEXT:        (local.get $5)
+  ;; CHECK-NEXT:       )
+  ;; CHECK-NEXT:       (local.set $12
+  ;; CHECK-NEXT:        (local.get $12)
+  ;; CHECK-NEXT:       )
+  ;; CHECK-NEXT:       (local.set $13
+  ;; CHECK-NEXT:        (i32.mul
+  ;; CHECK-NEXT:         (local.get $12)
+  ;; CHECK-NEXT:         (i32.const 12)
+  ;; CHECK-NEXT:        )
+  ;; CHECK-NEXT:       )
+  ;; CHECK-NEXT:       (local.set $14
+  ;; CHECK-NEXT:        (i32.add
+  ;; CHECK-NEXT:         (local.get $11)
+  ;; CHECK-NEXT:         (local.get $13)
+  ;; CHECK-NEXT:        )
+  ;; CHECK-NEXT:       )
+  ;; CHECK-NEXT:       (local.set $15
+  ;; CHECK-NEXT:        (i32.load16_u offset=2
+  ;; CHECK-NEXT:         (local.get $14)
+  ;; CHECK-NEXT:        )
+  ;; CHECK-NEXT:       )
+  ;; CHECK-NEXT:       (local.set $16
+  ;; CHECK-NEXT:        (i32.lt_u
+  ;; CHECK-NEXT:         (local.get $10)
+  ;; CHECK-NEXT:         (local.get $15)
+  ;; CHECK-NEXT:        )
+  ;; CHECK-NEXT:       )
+  ;; CHECK-NEXT:       (local.set $431
+  ;; CHECK-NEXT:        (local.get $16)
+  ;; CHECK-NEXT:       )
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:      (local.set $17
+  ;; CHECK-NEXT:       (local.get $431)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:      (local.set $432
+  ;; CHECK-NEXT:       (local.get $17)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (local.set $433
+  ;; CHECK-NEXT:    (i32.const 1)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (local.set $18
+  ;; CHECK-NEXT:    (local.get $432)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (local.set $19
+  ;; CHECK-NEXT:    (local.get $433)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (local.set $20
+  ;; CHECK-NEXT:    (i32.xor
+  ;; CHECK-NEXT:     (local.get $18)
+  ;; CHECK-NEXT:     (local.get $19)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (local.set $21
+  ;; CHECK-NEXT:    (local.get $20)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (local.set $22
+  ;; CHECK-NEXT:   (local.get $21)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (local.get $22)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $unbug
+   (local $12 i32)
+   (local $432 i32)
+   (local $430 i32)
+   (local $431 i32)
+   (local $9 i32)
+   (local $5 i32)
+   (local $433 i32)
+   (drop
+    (block (result i32)
+     (if
+      (i32.eq
+       (local.get $12)
+       (i32.const 65535)
+      )
+      (block
+       (block $label$78
+        (local.set $430
+         (i32.const 0)
+        )
+       )
+       (local.set $432
+        (local.get $430)
+       )
+      )
+      (block
+       (block $label$79
+        (local.set $431
+         (i32.lt_u
+          (local.get $9)
+          (i32.load16_u offset=2
+           (i32.add
+            (local.get $5)
+            (i32.mul
+             (local.get $12)
+             (i32.const 12)
+            )
+           )
+          )
+         )
+        )
+       )
+       (local.set $432
+        (local.get $431)
+       )
+      )
+     )
+     (local.set $433
+      (i32.const 1)
+     )
+     (i32.xor
+      (local.get $432)
+      (local.get $433)
+     )
+    )
+   )
+  )
+  ;; CHECK:      (func $outer-block-typed (type $3) (param $var$0 i32) (result i32)
+  ;; CHECK-NEXT:  (local $1 i32)
+  ;; CHECK-NEXT:  (local $2 i32)
+  ;; CHECK-NEXT:  (local $3 i32)
+  ;; CHECK-NEXT:  (local $4 i32)
+  ;; CHECK-NEXT:  (local $5 i32)
+  ;; CHECK-NEXT:  (block
+  ;; CHECK-NEXT:   (block $label$0
+  ;; CHECK-NEXT:    (local.set $1
+  ;; CHECK-NEXT:     (i32.const 16)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (local.set $2
+  ;; CHECK-NEXT:    (local.get $1)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (local.set $3
+  ;; CHECK-NEXT:    (i32.add
+  ;; CHECK-NEXT:     (i32.const 1)
+  ;; CHECK-NEXT:     (local.get $2)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (local.set $4
+  ;; CHECK-NEXT:    (local.get $3)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (local.set $5
+  ;; CHECK-NEXT:   (local.get $4)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (return
+  ;; CHECK-NEXT:   (local.get $5)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $outer-block-typed (type $3) (param $var$0 i32) (result i32)
+   (block (result i32)
+    (i32.add
+     (i32.const 1)
+     (block $label$0 (result i32)
+      (i32.const 16)
+     )
+    )
+   )
+  )
+  ;; CHECK:      (func $nested-br_if-with-value (type $2) (result i32)
+  ;; CHECK-NEXT:  (local $0 i32)
+  ;; CHECK-NEXT:  (local $1 i32)
+  ;; CHECK-NEXT:  (local $2 i32)
+  ;; CHECK-NEXT:  (local $3 i32)
+  ;; CHECK-NEXT:  (local $4 i32)
+  ;; CHECK-NEXT:  (local $5 i32)
+  ;; CHECK-NEXT:  (local $6 i32)
+  ;; CHECK-NEXT:  (block $label$0
+  ;; CHECK-NEXT:   (block
+  ;; CHECK-NEXT:    (local.set $1
+  ;; CHECK-NEXT:     (local.get $0)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (local.set $2
+  ;; CHECK-NEXT:     (local.get $1)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (local.set $3
+  ;; CHECK-NEXT:    (local.get $2)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (local.set $4
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (br_if $label$0
+  ;; CHECK-NEXT:    (local.get $3)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (local.set $5
+  ;; CHECK-NEXT:    (local.get $4)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (drop
+  ;; CHECK-NEXT:    (local.get $5)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (local.set $4
+  ;; CHECK-NEXT:    (i32.const 1)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (local.set $6
+  ;; CHECK-NEXT:   (local.get $4)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (return
+  ;; CHECK-NEXT:   (local.get $6)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $nested-br_if-with-value (result i32)
+   (local $0 i32)
+   (block $label$0 (result i32)
+    (drop
+     (br_if $label$0
+      (i32.const 0)
+      (block (result i32)
+       (local.get $0)
+      )
+     )
+    )
+    (i32.const 1)
+   )
+  )
+  ;; CHECK:      (func $switch-unreachable (type $1)
+  ;; CHECK-NEXT:  (block $label$3
+  ;; CHECK-NEXT:   (unreachable)
+  ;; CHECK-NEXT:   (br_table $label$3
+  ;; CHECK-NEXT:    (unreachable)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (unreachable)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $switch-unreachable
+   (block $label$3
+    (br_table $label$3
+     (unreachable)
+    )
+   )
+  )
+  ;; CHECK:      (func $br_if_order (type $3) (param $x i32) (result i32)
+  ;; CHECK-NEXT:  (local $1 i32)
+  ;; CHECK-NEXT:  (local $2 i32)
+  ;; CHECK-NEXT:  (local $3 i32)
+  ;; CHECK-NEXT:  (local $4 i32)
+  ;; CHECK-NEXT:  (local $5 i32)
+  ;; CHECK-NEXT:  (local $6 i32)
+  ;; CHECK-NEXT:  (local $7 i32)
+  ;; CHECK-NEXT:  (local $8 i32)
+  ;; CHECK-NEXT:  (local $9 i32)
+  ;; CHECK-NEXT:  (block $outer
+  ;; CHECK-NEXT:   (block $inner
+  ;; CHECK-NEXT:    (local.set $1
+  ;; CHECK-NEXT:     (i32.const 0)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (br_if $outer
+  ;; CHECK-NEXT:     (i32.const 1)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (local.set $2
+  ;; CHECK-NEXT:     (local.get $1)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (block
+  ;; CHECK-NEXT:     (local.set $3
+  ;; CHECK-NEXT:      (i32.const -16)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (local.set $4
+  ;; CHECK-NEXT:     (local.get $3)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (local.set $5
+  ;; CHECK-NEXT:     (call $br_if_order
+  ;; CHECK-NEXT:      (local.get $4)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (local.set $6
+  ;; CHECK-NEXT:     (local.get $2)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (br_if $inner
+  ;; CHECK-NEXT:     (local.get $5)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (local.set $7
+  ;; CHECK-NEXT:     (local.get $6)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (local.set $6
+  ;; CHECK-NEXT:     (local.get $7)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (local.set $8
+  ;; CHECK-NEXT:    (local.get $6)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (local.set $1
+  ;; CHECK-NEXT:    (local.get $8)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (local.set $9
+  ;; CHECK-NEXT:   (local.get $1)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (return
+  ;; CHECK-NEXT:   (local.get $9)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $br_if_order (param $x i32) (result i32)
+   (block $outer (result i32)
+    (block $inner (result i32)
+     (br_if $inner
+      (br_if $outer
+       (i32.const 0)
+       (i32.const 1)
+      )
+      (call $br_if_order
+       (block (result i32)
+        (i32.const -16)
+       )
+      )
+     )
+    )
+   )
+  )
+  ;; CHECK:      (func $tees (type $ii) (param $x i32) (param $y i32)
+  ;; CHECK-NEXT:  (local $2 i32)
+  ;; CHECK-NEXT:  (local $3 i32)
+  ;; CHECK-NEXT:  (local $4 i32)
+  ;; CHECK-NEXT:  (block
+  ;; CHECK-NEXT:   (local.set $x
+  ;; CHECK-NEXT:    (i32.const 1)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (local.set $2
+  ;; CHECK-NEXT:    (local.get $x)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (drop
+  ;; CHECK-NEXT:    (local.get $2)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (unreachable)
+  ;; CHECK-NEXT:   (unreachable)
+  ;; CHECK-NEXT:   (drop
+  ;; CHECK-NEXT:    (unreachable)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (unreachable)
+  ;; CHECK-NEXT:   (local.set $x
+  ;; CHECK-NEXT:    (i32.const 2)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (local.set $3
+  ;; CHECK-NEXT:    (local.get $x)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (local.set $y
+  ;; CHECK-NEXT:    (local.get $3)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (local.set $4
+  ;; CHECK-NEXT:    (local.get $y)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (drop
+  ;; CHECK-NEXT:    (local.get $4)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (unreachable)
+  ;; CHECK-NEXT: )
+  (func $tees (param $x i32) (param $y i32)
+    (drop (local.tee $x (i32.const 1)))
+    (
