@@ -34,4 +34,29 @@
   ;; NO_OPT-NEXT:        )
   ;; NO_OPT-NEXT:        (i32.const 1)
   ;; NO_OPT-NEXT:       )
-  ;; NO_OPT-NEXT:    
+  ;; NO_OPT-NEXT:      )
+  ;; NO_OPT-NEXT:     )
+  ;; NO_OPT-NEXT:     (i32.const 1)
+  ;; NO_OPT-NEXT:    )
+  ;; NO_OPT-NEXT:   )
+  ;; NO_OPT-NEXT:  )
+  ;; NO_OPT-NEXT:  (i32.const 1)
+  ;; NO_OPT-NEXT: )
+  ;; DO_OPT:      (func $bar (type $none_=>_i32) (result i32)
+  ;; DO_OPT-NEXT:  (drop
+  ;; DO_OPT-NEXT:   (call $foo)
+  ;; DO_OPT-NEXT:  )
+  ;; DO_OPT-NEXT:  (i32.const 1)
+  ;; DO_OPT-NEXT: )
+  (func $bar (result i32)
+    ;; GUFA infers a constant value for each block here, adding multiple
+    ;; constants of 1 and dropped earlier values. The optimizing variant of this
+    ;; pass will avoid all that and just emit minimal code here (a drop of the
+    ;; call followed by the value we inferred for it, 1).
+    (block $out (result i32)
+      (block $in (result i32)
+        (call $foo)
+      )
+    )
+  )
+)
