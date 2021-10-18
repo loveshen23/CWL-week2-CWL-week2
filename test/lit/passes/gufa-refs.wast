@@ -373,4 +373,405 @@
 
   ;; CHECK:      (global $mut-null (mut anyref) (ref.null none))
   (global $mut-null (mut (ref null any)) (ref.null any))
-  ;; CHECK:      (g
+  ;; CHECK:      (global $mut-something (mut anyref) (ref.null none))
+  (global $mut-something (mut (ref null any)) (ref.null any))
+
+  ;; CHECK:      (func $read-globals (type $none_=>_none)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.null none)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (unreachable)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.as_non_null
+  ;; CHECK-NEXT:    (global.get $something)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (unreachable)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.as_non_null
+  ;; CHECK-NEXT:    (global.get $mut-something)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $read-globals
+    ;; This global has no possible contents aside from a null, which we can
+    ;; infer and place here.
+    (drop
+      (global.get $null)
+    )
+    ;; This global has no possible contents aside from a null, so the
+    ;; ref.as_non_null can be optimized to an unreachable (since a null is not
+    ;; compatible with its non-nullable type).
+    (drop
+      (ref.as_non_null
+        (global.get $null)
+      )
+    )
+    ;; This global has a possible non-null value (in the initializer), so there
+    ;; is nothing to do.
+    (drop
+      (ref.as_non_null
+        (global.get $something)
+      )
+    )
+    ;; This mutable global has a write aside from the initializer, but it is
+    ;; also of a null, so we can optimize here.
+    (drop
+      (ref.as_non_null
+        (global.get $mut-null)
+      )
+    )
+    ;; This one also has a later write, of a non-null value, so there is nothing
+    ;; to do.
+    (drop
+      (ref.as_non_null
+        (global.get $mut-something)
+      )
+    )
+  )
+
+  ;; CHECK:      (func $write-globals (type $none_=>_none)
+  ;; CHECK-NEXT:  (global.set $mut-null
+  ;; CHECK-NEXT:   (ref.null none)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (global.set $mut-something
+  ;; CHECK-NEXT:   (struct.new_default $struct)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $write-globals
+    (global.set $mut-null
+      (ref.null $struct)
+    )
+    (global.set $mut-something
+      (struct.new $struct)
+    )
+  )
+)
+
+;; As above, but now with a chain of globals: A starts with a value, which is
+;; copied to B, and then C, and then C is read. We will be able to optimize
+;; away *-null (which is where A-null starts with null) but not *-something
+;; (which is where A-something starts with a value).
+(module
+  ;; CHECK:      (type $none_=>_none (func))
+
+  ;; CHECK:      (type $struct (struct ))
+  (type $struct (struct))
+
+  ;; CHECK:      (global $A-null anyref (ref.null none))
+  (global $A-null (ref null any) (ref.null any))
+  ;; CHECK:      (global $A-something anyref (struct.new_default $struct))
+  (global $A-something (ref null any) (struct.new $struct))
+
+  ;; CHECK:      (global $B-null (mut anyref) (ref.null none))
+  (global $B-null (mut (ref null any)) (ref.null any))
+  ;; CHECK:      (global $B-something (mut anyref) (ref.null none))
+  (global $B-something (mut (ref null any)) (ref.null any))
+
+  ;; CHECK:      (global $C-null (mut anyref) (ref.null none))
+  (global $C-null (mut (ref null any)) (ref.null any))
+  ;; CHECK:      (global $C-something (mut anyref) (ref.null none))
+  (global $C-something (mut (ref null any)) (ref.null any))
+
+  ;; CHECK:      (func $read-globals (type $none_=>_none)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (unreachable)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.as_non_null
+  ;; CHECK-NEXT:    (global.get $A-something)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (unreachable)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.as_non_null
+  ;; CHECK-NEXT:    (global.get $B-something)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (unreachable)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.as_non_null
+  ;; CHECK-NEXT:    (global.get $C-something)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $read-globals
+    (drop
+      (ref.as_non_null
+        (global.get $A-null)
+      )
+    )
+    (drop
+      (ref.as_non_null
+        (global.get $A-something)
+      )
+    )
+    (drop
+      (ref.as_non_null
+        (global.get $B-null)
+      )
+    )
+    (drop
+      (ref.as_non_null
+        (global.get $B-something)
+      )
+    )
+    (drop
+      (ref.as_non_null
+        (global.get $C-null)
+      )
+    )
+    (drop
+      (ref.as_non_null
+        (global.get $C-something)
+      )
+    )
+  )
+
+  ;; CHECK:      (func $write-globals (type $none_=>_none)
+  ;; CHECK-NEXT:  (global.set $B-null
+  ;; CHECK-NEXT:   (ref.null none)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (global.set $C-null
+  ;; CHECK-NEXT:   (ref.null none)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (global.set $B-something
+  ;; CHECK-NEXT:   (global.get $A-something)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (global.set $C-something
+  ;; CHECK-NEXT:   (global.get $B-something)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $write-globals
+    (global.set $B-null
+      (global.get $A-null)
+    )
+    (global.set $C-null
+      (global.get $B-null)
+    )
+    (global.set $B-something
+      (global.get $A-something)
+    )
+    (global.set $C-something
+      (global.get $B-something)
+    )
+  )
+)
+
+(module
+  ;; CHECK:      (type $ref|any|_=>_ref|any| (func (param (ref any)) (result (ref any))))
+
+  ;; CHECK:      (type $struct (struct ))
+  (type $struct (struct))
+
+  ;; CHECK:      (type $i32_=>_i32 (func (param i32) (result i32)))
+
+  ;; CHECK:      (type $ref|any|_ref|any|_ref|any|_=>_none (func (param (ref any) (ref any) (ref any))))
+
+  ;; CHECK:      (type $none_=>_none (func))
+
+  ;; CHECK:      (func $never-called (type $i32_=>_i32) (param $x i32) (result i32)
+  ;; CHECK-NEXT:  (unreachable)
+  ;; CHECK-NEXT: )
+  (func $never-called (param $x i32) (result i32)
+    ;; This function is never called, so the parameter has no possible contents,
+    ;; and we can optimize to an unreachable.
+    (local.get $x)
+  )
+
+  ;; CHECK:      (func $never-called-ref (type $ref|any|_=>_ref|any|) (param $x (ref any)) (result (ref any))
+  ;; CHECK-NEXT:  (unreachable)
+  ;; CHECK-NEXT: )
+  (func $never-called-ref (param $x (ref any)) (result (ref any))
+    ;; As above but with a reference type. Again, we can apply an unreachable.
+    (local.get $x)
+  )
+
+  ;; CHECK:      (func $recursion (type $ref|any|_=>_ref|any|) (param $x (ref any)) (result (ref any))
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (call $recursion
+  ;; CHECK-NEXT:    (unreachable)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (unreachable)
+  ;; CHECK-NEXT: )
+  (func $recursion (param $x (ref any)) (result (ref any))
+    ;; This function calls itself recursively. That forms a loop, but still,
+    ;; nothing reaches here, so we can optimize to an unreachable (we cannot
+    ;; remove the call though, as it has effects, so we drop it).
+    (call $recursion
+      (local.get $x)
+    )
+  )
+
+  ;; CHECK:      (func $called (type $ref|any|_ref|any|_ref|any|_=>_none) (param $x (ref any)) (param $y (ref any)) (param $z (ref any))
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (local.get $x)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (unreachable)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (local.get $z)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $called (param $x (ref any)) (param $y (ref any)) (param $z (ref any))
+    ;; This function is called, with possible (non-null) values in the 1st & 3rd
+    ;; params, but nothing can arrive in the 2nd, which we can optimize to an
+    ;; unreachable.
+    (drop
+      (local.get $x)
+    )
+    (drop
+      (local.get $y)
+    )
+    (drop
+      (local.get $z)
+    )
+  )
+
+  ;; CHECK:      (func $call-called (type $none_=>_none)
+  ;; CHECK-NEXT:  (call $called
+  ;; CHECK-NEXT:   (struct.new_default $struct)
+  ;; CHECK-NEXT:   (unreachable)
+  ;; CHECK-NEXT:   (unreachable)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (call $called
+  ;; CHECK-NEXT:   (unreachable)
+  ;; CHECK-NEXT:   (unreachable)
+  ;; CHECK-NEXT:   (struct.new_default $struct)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $call-called
+    ;; Call the above function as described there: Nothing can arrive in the
+    ;; second param (since we cast a null to non-null there), while the others
+    ;; have both a null and a non-null (different in the 2 calls here). (With
+    ;; more precise analysis we could see that the ref.as must trap, and we
+    ;; could optimize even more here.)
+    (call $called
+      (struct.new $struct)
+      (ref.as_non_null
+        (ref.null any)
+      )
+      (ref.as_non_null
+        (ref.null any)
+      )
+    )
+    (call $called
+      (ref.as_non_null
+        (ref.null any)
+      )
+      (ref.as_non_null
+        (ref.null any)
+      )
+      (struct.new $struct)
+    )
+  )
+)
+
+;; As above, but using indirect calls.
+(module
+  ;; CHECK:      (type $struct (struct ))
+
+  ;; CHECK:      (type $two-params (func (param (ref $struct) (ref $struct))))
+  (type $two-params (func (param (ref $struct)) (param (ref $struct))))
+
+  ;; CHECK:      (type $three-params (func (param (ref $struct) (ref $struct) (ref $struct))))
+  (type $three-params (func (param (ref $struct)) (param (ref $struct)) (param (ref $struct))))
+
+  (type $struct (struct))
+
+  (table 10 funcref)
+
+  (elem (i32.const 0) funcref
+    (ref.func $func-2params-a)
+    (ref.func $func-2params-b)
+    (ref.func $func-3params)
+  )
+
+  ;; CHECK:      (table $0 10 funcref)
+
+  ;; CHECK:      (elem (i32.const 0) $func-2params-a $func-2params-b $func-3params)
+
+  ;; CHECK:      (func $func-2params-a (type $two-params) (param $x (ref $struct)) (param $y (ref $struct))
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (unreachable)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (local.get $y)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (call_indirect $0 (type $two-params)
+  ;; CHECK-NEXT:   (unreachable)
+  ;; CHECK-NEXT:   (struct.new_default $struct)
+  ;; CHECK-NEXT:   (i32.const 0)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $func-2params-a (type $two-params) (param $x (ref $struct)) (param $y (ref $struct))
+    ;; Only null is possible for the first, so we can optimize it to an
+    ;; unreachable.
+    (drop
+      (local.get $x)
+    )
+    (drop
+      (local.get $y)
+    )
+    ;; Send a value only to the second param.
+    (call_indirect (type $two-params)
+      (ref.as_non_null
+        (ref.null $struct)
+      )
+      (struct.new $struct)
+      (i32.const 0)
+    )
+  )
+
+  ;; CHECK:      (func $func-2params-b (type $two-params) (param $x (ref $struct)) (param $y (ref $struct))
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (unreachable)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (local.get $y)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $func-2params-b (type $two-params) (param $x (ref $struct)) (param $y (ref $struct))
+    ;; Another function with the same signature as before, which we should
+    ;; optimize in the same way: the indirect call can go to either.
+    (drop
+      (local.get $x)
+    )
+    (drop
+      (local.get $y)
+    )
+  )
+
+  ;; CHECK:      (func $func-3params (type $three-params) (param $x (ref $struct)) (param $y (ref $struct)) (param $z (ref $struct))
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (local.get $x)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (unreachable)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (local.get $z)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (call_indirect $0 (type $three-params)
+  ;; CHECK-NEXT:   (struct.new_default $struct)
+  ;; CHECK-NEXT:   (unreachable)
+  ;; CHECK-NEXT:   (unreachable)
+  ;; CHECK-NEXT:   (i32.const 0)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (call_indirect $0 (type $three-params)
+  ;; CHECK-NEXT:   (unreachable)
+  ;; CHECK-NEXT:   (unreachable)
+  ;; CHECK-NEXT:   (struct.new_default $struct)
+  ;; CHECK-NEXT:   (i32.const 0)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:
