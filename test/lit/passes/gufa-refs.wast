@@ -774,4 +774,436 @@
   ;; CHECK-NEXT:   (struct.new_default $struct)
   ;; CHECK-NEXT:   (i32.const 0)
   ;; CHECK-NEXT:  )
-  ;; CHECK-NEXT:
+  ;; CHECK-NEXT: )
+  (func $func-3params (type $three-params) (param $x (ref $struct)) (param $y (ref $struct)) (param $z (ref $struct))
+    (drop
+      (local.get $x)
+    )
+    (drop
+      (local.get $y)
+    )
+    (drop
+      (local.get $z)
+    )
+    ;; Send a non-null value only to the first and third param. Do so in two
+    ;; separate calls. The second param, $y, can be optimized.
+    (call_indirect (type $three-params)
+      (struct.new $struct)
+      (ref.as_non_null
+        (ref.null $struct)
+      )
+      (ref.as_non_null
+        (ref.null $struct)
+      )
+      (i32.const 0)
+    )
+    (call_indirect (type $three-params)
+      (ref.as_non_null
+        (ref.null $struct)
+      )
+      (ref.as_non_null
+        (ref.null $struct)
+      )
+      (struct.new $struct)
+      (i32.const 0)
+    )
+  )
+)
+
+;; As above, but using call_ref.
+(module
+  ;; CHECK:      (type $struct (struct ))
+
+  ;; CHECK:      (type $two-params (func (param (ref $struct) (ref $struct))))
+  (type $two-params (func (param (ref $struct)) (param (ref $struct))))
+
+  (type $struct (struct))
+
+  ;; CHECK:      (elem declare func $func-2params-a)
+
+  ;; CHECK:      (func $func-2params-a (type $two-params) (param $x (ref $struct)) (param $y (ref $struct))
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (unreachable)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (local.get $y)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (call_ref $two-params
+  ;; CHECK-NEXT:   (unreachable)
+  ;; CHECK-NEXT:   (struct.new_default $struct)
+  ;; CHECK-NEXT:   (ref.func $func-2params-a)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $func-2params-a (type $two-params) (param $x (ref $struct)) (param $y (ref $struct))
+    (drop
+      (local.get $x)
+    )
+    (drop
+      (local.get $y)
+    )
+    ;; Send a non-null value only to the second param.
+    (call_ref $two-params
+      (ref.as_non_null
+        (ref.null $struct)
+      )
+      (struct.new $struct)
+      (ref.func $func-2params-a)
+    )
+  )
+)
+
+;; Array creation.
+(module
+  ;; CHECK:      (type $vector (array (mut f64)))
+  (type $vector (array (mut f64)))
+
+  ;; CHECK:      (type $none_=>_none (func))
+
+  ;; CHECK:      (func $arrays (type $none_=>_none)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.as_non_null
+  ;; CHECK-NEXT:    (array.new $vector
+  ;; CHECK-NEXT:     (f64.const 3.14159)
+  ;; CHECK-NEXT:     (i32.const 1)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.as_non_null
+  ;; CHECK-NEXT:    (array.new_default $vector
+  ;; CHECK-NEXT:     (i32.const 100)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.as_non_null
+  ;; CHECK-NEXT:    (array.new_fixed $vector
+  ;; CHECK-NEXT:     (f64.const 1.1)
+  ;; CHECK-NEXT:     (f64.const 2.2)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (unreachable)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $arrays
+    (drop
+      (ref.as_non_null
+        (array.new $vector
+          (f64.const 3.14159)
+          (i32.const 1)
+        )
+      )
+    )
+    (drop
+      (ref.as_non_null
+        (array.new_default $vector
+          (i32.const 100)
+        )
+      )
+    )
+    (drop
+      (ref.as_non_null
+        (array.new_fixed $vector
+          (f64.const 1.1)
+          (f64.const 2.2)
+        )
+      )
+    )
+    ;; In the last case we have no possible non-null value and can optimize to
+    ;; an unreachable.
+    (drop
+      (ref.as_non_null
+        (ref.null $vector)
+      )
+    )
+  )
+)
+
+;; Struct fields.
+(module
+  ;; CHECK:      (type $parent (struct (field (mut (ref null $struct)))))
+
+  ;; CHECK:      (type $child (struct_subtype (field (mut (ref null $struct))) (field (mut (ref null $struct))) $parent))
+
+  ;; CHECK:      (type $struct (struct ))
+  (type $struct (struct_subtype data))
+
+  (type $parent (struct_subtype (field (mut (ref null $struct))) data))
+  (type $child (struct_subtype (field (mut (ref null $struct))) (field (mut (ref null $struct))) $parent))
+
+  ;; CHECK:      (type $none_=>_none (func))
+
+  ;; CHECK:      (type $unrelated (struct ))
+  (type $unrelated (struct))
+
+  ;; CHECK:      (func $func (type $none_=>_none)
+  ;; CHECK-NEXT:  (local $child (ref null $child))
+  ;; CHECK-NEXT:  (local $parent (ref null $parent))
+  ;; CHECK-NEXT:  (local.set $child
+  ;; CHECK-NEXT:   (struct.new $child
+  ;; CHECK-NEXT:    (struct.new_default $struct)
+  ;; CHECK-NEXT:    (ref.null none)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $child 0
+  ;; CHECK-NEXT:    (local.get $child)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (block (result nullref)
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (struct.get $child 1
+  ;; CHECK-NEXT:      (local.get $child)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (ref.null none)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (local.set $parent
+  ;; CHECK-NEXT:   (struct.new $parent
+  ;; CHECK-NEXT:    (ref.null none)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (block (result nullref)
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (struct.get $parent 0
+  ;; CHECK-NEXT:      (local.get $parent)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (ref.null none)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (block
+  ;; CHECK-NEXT:    (unreachable)
+  ;; CHECK-NEXT:    (unreachable)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (block
+  ;; CHECK-NEXT:    (block
+  ;; CHECK-NEXT:     (drop
+  ;; CHECK-NEXT:      (block $parent (result (ref $parent))
+  ;; CHECK-NEXT:       (drop
+  ;; CHECK-NEXT:        (br_on_cast $parent $parent
+  ;; CHECK-NEXT:         (struct.new_default $unrelated)
+  ;; CHECK-NEXT:        )
+  ;; CHECK-NEXT:       )
+  ;; CHECK-NEXT:       (unreachable)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (unreachable)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (unreachable)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $func
+    (local $child (ref null $child))
+    (local $parent (ref null $parent))
+    ;; We create a child with a non-null value in field 0 and null in 1.
+    (local.set $child
+      (struct.new $child
+        (struct.new $struct)
+        (ref.null $struct)
+      )
+    )
+    ;; Getting field 0 should not be optimized or changed in any way.
+    (drop
+      (struct.get $child 0
+        (local.get $child)
+      )
+    )
+    ;; Field one can be optimized into a null constant (+ a drop of the get).
+    (drop
+      (struct.get $child 1
+        (local.get $child)
+      )
+    )
+    ;; Create a parent with a null. The child wrote to the shared field, but
+    ;; using exact type info we can infer that the get's value must be a null,
+    ;; so we can optimize.
+    (local.set $parent
+      (struct.new $parent
+        (ref.null $struct)
+      )
+    )
+    (drop
+      (struct.get $parent 0
+        (local.get $parent)
+      )
+    )
+    ;; An unrelated type is cast to a struct type, and then we read from that.
+    ;; The cast will trap at runtime, of course; for here, we should not error
+    ;; and also we can optimize these to unreachables. atm we filter out
+    ;; trapping contents in ref.cast, but not br_on_cast, so test both.
+    (drop
+      (struct.get $parent 0
+        (ref.cast $parent
+          (struct.new $unrelated)
+        )
+      )
+    )
+    (drop
+      (struct.get $parent 0
+        (block $parent (result (ref $parent))
+          (drop
+            (br_on_cast $parent $parent
+              (struct.new $unrelated)
+            )
+          )
+          (unreachable)
+        )
+      )
+    )
+  )
+
+  ;; CHECK:      (func $nulls (type $none_=>_none)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.null none)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (unreachable)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (block (result nullref)
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (block $block (result nullref)
+  ;; CHECK-NEXT:      (br $block
+  ;; CHECK-NEXT:       (ref.null none)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:      (unreachable)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (ref.null none)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (block (result nullref)
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (block $block0 (result nullref)
+  ;; CHECK-NEXT:      (br $block0
+  ;; CHECK-NEXT:       (ref.null none)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:      (unreachable)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (ref.null none)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (block (result nullref)
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (block $block1 (result nullref)
+  ;; CHECK-NEXT:      (br $block1
+  ;; CHECK-NEXT:       (block (result nullref)
+  ;; CHECK-NEXT:        (drop
+  ;; CHECK-NEXT:         (ref.cast null $child
+  ;; CHECK-NEXT:          (ref.null none)
+  ;; CHECK-NEXT:         )
+  ;; CHECK-NEXT:        )
+  ;; CHECK-NEXT:        (ref.null none)
+  ;; CHECK-NEXT:       )
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:      (unreachable)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (ref.null none)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $nulls
+    ;; Leave null constants alone.
+    (drop
+      (ref.null $parent)
+    )
+    ;; Reading from a null reference is easy to optimize - it will trap.
+    (drop
+      (struct.get $parent 0
+        (ref.null $parent)
+      )
+    )
+    ;; Send a null to the block, which is the only value exiting, so we can
+    ;; optimize here.
+    (drop
+      (block $block (result (ref null any))
+        (br $block
+          (ref.null any)
+        )
+        (unreachable)
+      )
+    )
+    ;; Send a more specific type. We should emit a valid null constant (but in
+    ;; this case, a null of either $parent or $child would be ok).
+    (drop
+      (block $block (result (ref null $parent))
+        (br $block
+          (ref.null $child)
+        )
+        (unreachable)
+      )
+    )
+    ;; Send a less specific type, via a cast. But all nulls are identical and
+    ;; ref.cast null passes nulls through, so this is ok, but we must be careful to
+    ;; emit a ref.null $child on the outside (to not change the outer type to a
+    ;; less refined one).
+    (drop
+      (block $block (result (ref null $child))
+        (br $block
+          (ref.cast null $child
+            (ref.null $parent)
+          )
+        )
+        (unreachable)
+      )
+    )
+  )
+)
+
+;; Default values in struct fields.
+(module
+  (type $A (struct_subtype (field i32) data))
+  (type $B (struct_subtype (field i32) data))
+  (type $C (struct_subtype (field i32) data))
+
+  ;; CHECK:      (type $none_=>_none (func))
+
+  ;; CHECK:      (func $func (type $none_=>_none)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i32.const 0)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i32.const 1)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $func
+    ;; Create a struct with default values. We can propagate a 0 to the get.
+    (drop
+      (struct.get $A 0
+        (struct.new_default $A)
+      )
+    )
+    ;; Allocate with a non-default value, that can also be propagated.
+    (drop
+      (struct.get $B 0
+        (struct.new $B
+          (i32.const 1)
+        )
+      )
+    )
+  )
+)
+
+;; Exact types: Writes to the parent class do not confuse us.
+(module
+  ;; CHECK:      (type $parent (struct (field (mut (ref null $struct)))))
+
+  ;; CHECK:      (type $child (struct_subtype (field (mut (ref null $struct))) (field i32) $parent))
+
+  ;; CHECK:      (type $struct (struct ))
+  (type $struct (struct_subtype data))
+  (type $parent (struct_subtype (field (mut (ref null $struc
