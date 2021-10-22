@@ -1206,4 +1206,419 @@
 
   ;; CHECK:      (type $struct (struct ))
   (type $struct (struct_subtype data))
-  (type $parent (struct_subtype (field (mut (ref null $struc
+  (type $parent (struct_subtype (field (mut (ref null $struct))) data))
+  (type $child (struct_subtype (field (mut (ref null $struct))) (field i32) $parent))
+
+  ;; CHECK:      (type $none_=>_none (func))
+
+  ;; CHECK:      (func $func (type $none_=>_none)
+  ;; CHECK-NEXT:  (local $child (ref null $child))
+  ;; CHECK-NEXT:  (local $parent (ref null $parent))
+  ;; CHECK-NEXT:  (local.set $parent
+  ;; CHECK-NEXT:   (struct.new $parent
+  ;; CHECK-NEXT:    (struct.new_default $struct)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.as_non_null
+  ;; CHECK-NEXT:    (struct.get $parent 0
+  ;; CHECK-NEXT:     (local.get $parent)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (local.set $child
+  ;; CHECK-NEXT:   (struct.new $child
+  ;; CHECK-NEXT:    (ref.null none)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (block
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (block (result nullref)
+  ;; CHECK-NEXT:      (drop
+  ;; CHECK-NEXT:       (struct.get $child 0
+  ;; CHECK-NEXT:        (local.get $child)
+  ;; CHECK-NEXT:       )
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:      (ref.null none)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (unreachable)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $func
+    (local $child (ref null $child))
+    (local $parent (ref null $parent))
+    ;; Allocate when writing to the parent's field.
+    (local.set $parent
+      (struct.new $parent
+        (struct.new $struct)
+      )
+    )
+    ;; This cannot be optimized in any way.
+    (drop
+      (ref.as_non_null
+        (struct.get $parent 0
+          (local.get $parent)
+        )
+      )
+    )
+    ;; The child writes a null to the first field.
+    (local.set $child
+      (struct.new $child
+        (ref.null $struct)
+        (i32.const 0)
+      )
+    )
+    ;; The parent wrote to the shared field, but that does not prevent us from
+    ;; seeing that the child must have a null there, and so this will trap.
+    (drop
+      (ref.as_non_null
+        (struct.get $child 0
+          (local.get $child)
+        )
+      )
+    )
+  )
+)
+
+;; Write values to the parent *and* the child and read from the child.
+(module
+  ;; CHECK:      (type $parent (struct (field (mut i32))))
+  (type $parent (struct_subtype (field (mut i32)) data))
+  ;; CHECK:      (type $child (struct_subtype (field (mut i32)) (field i32) $parent))
+  (type $child (struct_subtype (field (mut i32)) (field i32) $parent))
+
+  ;; CHECK:      (type $none_=>_none (func))
+
+  ;; CHECK:      (func $func (type $none_=>_none)
+  ;; CHECK-NEXT:  (local $child (ref null $child))
+  ;; CHECK-NEXT:  (local $parent (ref null $parent))
+  ;; CHECK-NEXT:  (local.set $parent
+  ;; CHECK-NEXT:   (struct.new $parent
+  ;; CHECK-NEXT:    (i32.const 10)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (block (result i32)
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (struct.get $parent 0
+  ;; CHECK-NEXT:      (local.get $parent)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (i32.const 10)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (local.set $child
+  ;; CHECK-NEXT:   (struct.new $child
+  ;; CHECK-NEXT:    (i32.const 20)
+  ;; CHECK-NEXT:    (i32.const 30)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (block (result i32)
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (struct.get $child 0
+  ;; CHECK-NEXT:      (local.get $child)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (i32.const 20)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (block (result i32)
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (struct.get $child 1
+  ;; CHECK-NEXT:      (local.get $child)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (i32.const 30)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $func
+    (local $child (ref null $child))
+    (local $parent (ref null $parent))
+    (local.set $parent
+      (struct.new $parent
+        (i32.const 10)
+      )
+    )
+    ;; This can be optimized to 10. The child also sets this field, but the
+    ;; reference in the local $parent can only be a $parent and nothing else.
+    (drop
+      (struct.get $parent 0
+        (local.get $parent)
+      )
+    )
+    (local.set $child
+      (struct.new $child
+        ;; The value here conflicts with the parent's for this field, but the
+        ;; local $child can only contain a $child and nothing else, so we can
+        ;; optimize the get below us.
+        (i32.const 20)
+        (i32.const 30)
+      )
+    )
+    (drop
+      (struct.get $child 0
+        (local.get $child)
+      )
+    )
+    ;; This get aliases nothing but 30, so we can optimize.
+    (drop
+      (struct.get $child 1
+        (local.get $child)
+      )
+    )
+  )
+)
+
+;; As above, but the $parent local can now contain a child too.
+(module
+  ;; CHECK:      (type $parent (struct (field (mut i32))))
+  (type $parent (struct_subtype (field (mut i32)) data))
+  ;; CHECK:      (type $child (struct_subtype (field (mut i32)) (field i32) $parent))
+  (type $child (struct_subtype (field (mut i32)) (field i32) $parent))
+
+  ;; CHECK:      (type $i32_=>_none (func (param i32)))
+
+  ;; CHECK:      (export "func" (func $func))
+
+  ;; CHECK:      (func $func (type $i32_=>_none) (param $x i32)
+  ;; CHECK-NEXT:  (local $child (ref null $child))
+  ;; CHECK-NEXT:  (local $parent (ref null $parent))
+  ;; CHECK-NEXT:  (local.set $parent
+  ;; CHECK-NEXT:   (struct.new $parent
+  ;; CHECK-NEXT:    (i32.const 10)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (if
+  ;; CHECK-NEXT:   (local.get $x)
+  ;; CHECK-NEXT:   (local.set $parent
+  ;; CHECK-NEXT:    (local.tee $child
+  ;; CHECK-NEXT:     (struct.new $child
+  ;; CHECK-NEXT:      (i32.const 20)
+  ;; CHECK-NEXT:      (i32.const 30)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $parent 0
+  ;; CHECK-NEXT:    (local.get $parent)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (block (result i32)
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (struct.get $child 0
+  ;; CHECK-NEXT:      (local.get $child)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (i32.const 20)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $func (export "func") (param $x i32)
+    (local $child (ref null $child))
+    (local $parent (ref null $parent))
+    (local.set $parent
+      (struct.new $parent
+        (i32.const 10)
+      )
+    )
+    ;; Another, optional, set to $parent.
+    (if
+      (local.get $x)
+      (local.set $parent
+        (local.tee $child
+          (struct.new $child
+            (i32.const 20)
+            (i32.const 30)
+          )
+        )
+      )
+    )
+    ;; This get cannot be optimized because before us the local might be set a
+    ;; child as well. So the local $parent can refer to either type, and they
+    ;; disagree on the aliased value.
+    (drop
+      (struct.get $parent 0
+        (local.get $parent)
+      )
+    )
+    ;; But this one can be optimized as $child can only contain a child.
+    (drop
+      (struct.get $child 0
+        (local.get $child)
+      )
+    )
+  )
+)
+
+;; As above, but now the parent and child happen to agree on the aliased value.
+(module
+  ;; CHECK:      (type $parent (struct (field (mut i32))))
+  (type $parent (struct_subtype (field (mut i32)) data))
+  ;; CHECK:      (type $child (struct_subtype (field (mut i32)) (field i32) $parent))
+  (type $child (struct_subtype (field (mut i32)) (field i32) $parent))
+
+  ;; CHECK:      (type $none_=>_none (func))
+
+  ;; CHECK:      (func $func (type $none_=>_none)
+  ;; CHECK-NEXT:  (local $child (ref null $child))
+  ;; CHECK-NEXT:  (local $parent (ref null $parent))
+  ;; CHECK-NEXT:  (local.set $parent
+  ;; CHECK-NEXT:   (struct.new $parent
+  ;; CHECK-NEXT:    (i32.const 10)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (block (result i32)
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (struct.get $parent 0
+  ;; CHECK-NEXT:      (local.get $parent)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (i32.const 10)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (local.set $parent
+  ;; CHECK-NEXT:   (local.tee $child
+  ;; CHECK-NEXT:    (struct.new $child
+  ;; CHECK-NEXT:     (i32.const 10)
+  ;; CHECK-NEXT:     (i32.const 30)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (block (result i32)
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (struct.get $child 0
+  ;; CHECK-NEXT:      (local.get $child)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (i32.const 10)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $func
+    (local $child (ref null $child))
+    (local $parent (ref null $parent))
+    (local.set $parent
+      (struct.new $parent
+        (i32.const 10)
+      )
+    )
+    (drop
+      (struct.get $parent 0
+        (local.get $parent)
+      )
+    )
+    (local.set $parent
+      (local.tee $child
+        (struct.new $child
+          (i32.const 10) ;; This is 10, like above, so we can optimize the get
+                         ;; before us.
+          (i32.const 30)
+        )
+      )
+    )
+    (drop
+      (struct.get $child 0
+        (local.get $child)
+      )
+    )
+  )
+)
+
+;; Arrays get/set
+(module
+  (type $nothing (array_subtype (mut (ref null any)) data))
+
+  ;; CHECK:      (type $null (array (mut anyref)))
+  (type $null (array_subtype (mut (ref null any)) data))
+
+  ;; CHECK:      (type $something (array (mut anyref)))
+  (type $something (array_subtype (mut (ref null any)) data))
+
+  (type $something-child (array_subtype (mut (ref null any)) $something))
+
+  ;; CHECK:      (type $none_=>_none (func))
+
+  ;; CHECK:      (type $struct (struct ))
+  (type $struct (struct))
+
+  ;; CHECK:      (func $func (type $none_=>_none)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (unreachable)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (array.set $null
+  ;; CHECK-NEXT:   (array.new_default $null
+  ;; CHECK-NEXT:    (i32.const 10)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (i32.const 0)
+  ;; CHECK-NEXT:   (ref.null none)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (block
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (block (result nullref)
+  ;; CHECK-NEXT:      (drop
+  ;; CHECK-NEXT:       (array.get $null
+  ;; CHECK-NEXT:        (array.new_default $null
+  ;; CHECK-NEXT:         (i32.const 10)
+  ;; CHECK-NEXT:        )
+  ;; CHECK-NEXT:        (i32.const 0)
+  ;; CHECK-NEXT:       )
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:      (ref.null none)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (unreachable)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (array.set $something
+  ;; CHECK-NEXT:   (array.new_default $something
+  ;; CHECK-NEXT:    (i32.const 10)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (i32.const 0)
+  ;; CHECK-NEXT:   (struct.new_default $struct)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.as_non_null
+  ;; CHECK-NEXT:    (array.get $something
+  ;; CHECK-NEXT:     (array.new_default $something
+  ;; CHECK-NEXT:      (i32.const 10)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (i32.const 0)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (block
+  ;; CHECK-NEXT:    (block
+  ;; CHECK-NEXT:     (unreachable)
+  ;; CHECK-NEXT:     (unreachable)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (unreachable)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $func
+    ;; Reading from a null will trap, and we can optimize to an unreachable.
+    (drop
+      (array.get $nothing
+        (ref.null $nothing)
+        (i32.const 0)
+      )
+    )
+    ;; Write a null to this array.
+    (array.set $null
+      (array.new_default $null
+        (i32.const 10)
+      )
+      (i32.cons
