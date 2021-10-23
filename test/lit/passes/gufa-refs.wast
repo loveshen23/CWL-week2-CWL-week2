@@ -1621,4 +1621,446 @@
       (array.new_default $null
         (i32.const 10)
       )
-      (i32.cons
+      (i32.const 0)
+      (ref.null any)
+    )
+    ;; We can only read a null here, so this will trap and can be optimized.
+    (drop
+      (ref.as_non_null
+        (array.get $null
+          (array.new_default $null
+            (i32.const 10)
+          )
+          (i32.const 0)
+        )
+      )
+    )
+    ;; In $something we do actually write a non-null value, so we cannot add
+    ;; unreachables here.
+    (array.set $something
+      (array.new_default $something
+        (i32.const 10)
+      )
+      (i32.const 0)
+      (struct.new $struct)
+    )
+    (drop
+      (ref.as_non_null
+        (array.get $something
+          (array.new_default $something
+            (i32.const 10)
+          )
+          (i32.const 0)
+        )
+      )
+    )
+    ;; $something-child has nothing written to it, but its parent does. Still,
+    ;; with exact type info that does not confuse us, and we can optimize to an
+    ;; unreachable.
+    (drop
+      (ref.as_non_null
+        (array.get $something-child
+          (ref.cast $something-child
+            (array.new_default $something
+              (i32.const 10)
+            )
+          )
+          (i32.const 0)
+        )
+      )
+    )
+  )
+)
+
+;; A big chain, from an allocation that passes through many locations along the
+;; way before it is used. Nothing here can be optimized.
+(module
+  ;; CHECK:      (type $storage (struct (field (mut anyref))))
+
+  ;; CHECK:      (type $none_=>_none (func))
+
+  ;; CHECK:      (type $struct (struct ))
+  (type $struct (struct))
+
+  (type $storage (struct (field (mut (ref null any)))))
+
+  ;; CHECK:      (type $anyref_=>_anyref (func (param anyref) (result anyref)))
+
+  ;; CHECK:      (global $x (mut anyref) (ref.null none))
+  (global $x (mut (ref null any)) (ref.null any))
+
+  ;; CHECK:      (func $foo (type $none_=>_none)
+  ;; CHECK-NEXT:  (local $x anyref)
+  ;; CHECK-NEXT:  (local.set $x
+  ;; CHECK-NEXT:   (struct.new_default $struct)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (global.set $x
+  ;; CHECK-NEXT:   (local.get $x)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.as_non_null
+  ;; CHECK-NEXT:    (struct.get $storage 0
+  ;; CHECK-NEXT:     (struct.new $storage
+  ;; CHECK-NEXT:      (call $pass-through
+  ;; CHECK-NEXT:       (global.get $x)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $foo
+    (local $x (ref null any))
+    ;; Allocate a non-null value and pass it through a local.
+    (local.set $x
+      (struct.new $struct)
+    )
+    ;; Pass it through a global.
+    (global.set $x
+      (local.get $x)
+    )
+    ;; Pass it through a call, then write it to a struct, then read it from
+    ;; there, and coerce to non-null which we would optimize if the value were
+    ;; only a null. But it is not a null, and no optimizations happen here.
+    (drop
+      (ref.as_non_null
+        (struct.get $storage 0
+          (struct.new $storage
+            (call $pass-through
+              (global.get $x)
+            )
+          )
+        )
+      )
+    )
+  )
+
+  ;; CHECK:      (func $pass-through (type $anyref_=>_anyref) (param $x anyref) (result anyref)
+  ;; CHECK-NEXT:  (local.get $x)
+  ;; CHECK-NEXT: )
+  (func $pass-through (param $x (ref null any)) (result (ref null any))
+    (local.get $x)
+  )
+)
+
+;; As above, but the chain is turned into a loop, replacing the initial
+;; allocation with a get from the end. We can optimize such cycles.
+(module
+  (type $struct (struct))
+
+  ;; CHECK:      (type $none_=>_none (func))
+
+  ;; CHECK:      (type $storage (struct (field (mut anyref))))
+  (type $storage (struct (field (mut (ref null any)))))
+
+  ;; CHECK:      (type $anyref_=>_anyref (func (param anyref) (result anyref)))
+
+  ;; CHECK:      (global $x (mut anyref) (ref.null none))
+  (global $x (mut (ref null any)) (ref.null any))
+
+  ;; CHECK:      (func $foo (type $none_=>_none)
+  ;; CHECK-NEXT:  (local $x anyref)
+  ;; CHECK-NEXT:  (local.set $x
+  ;; CHECK-NEXT:   (ref.null none)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (global.set $x
+  ;; CHECK-NEXT:   (block (result nullref)
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (struct.new $storage
+  ;; CHECK-NEXT:      (block (result nullref)
+  ;; CHECK-NEXT:       (drop
+  ;; CHECK-NEXT:        (call $pass-through
+  ;; CHECK-NEXT:         (ref.null none)
+  ;; CHECK-NEXT:        )
+  ;; CHECK-NEXT:       )
+  ;; CHECK-NEXT:       (ref.null none)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (ref.null none)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (unreachable)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $foo
+    (local $x (ref null any))
+    ;; Replace the initial allocation with a read from the global. That is
+    ;; written to lower down, forming a loop - a loop with no actual allocation
+    ;; anywhere, so we can infer the possible values are only a null.
+    (local.set $x
+      (global.get $x)
+    )
+    (global.set $x
+      (struct.get $storage 0
+        (struct.new $storage
+          (call $pass-through
+            (local.get $x)
+          )
+        )
+      )
+    )
+    (drop
+      (ref.as_non_null
+        (global.get $x)
+      )
+    )
+  )
+
+  ;; CHECK:      (func $pass-through (type $anyref_=>_anyref) (param $x anyref) (result anyref)
+  ;; CHECK-NEXT:  (ref.null none)
+  ;; CHECK-NEXT: )
+  (func $pass-through (param $x (ref null any)) (result (ref null any))
+    (local.get $x)
+  )
+)
+
+;; A single long chain as above, but now we break the chain in the middle by
+;; adding a non-null value.
+(module
+  ;; CHECK:      (type $storage (struct (field (mut anyref))))
+
+  ;; CHECK:      (type $none_=>_none (func))
+
+  ;; CHECK:      (type $struct (struct ))
+  (type $struct (struct))
+
+  (type $storage (struct (field (mut (ref null any)))))
+
+  ;; CHECK:      (type $anyref_=>_anyref (func (param anyref) (result anyref)))
+
+  ;; CHECK:      (global $x (mut anyref) (ref.null none))
+  (global $x (mut (ref null any)) (ref.null any))
+
+  ;; CHECK:      (func $foo (type $none_=>_none)
+  ;; CHECK-NEXT:  (local $x anyref)
+  ;; CHECK-NEXT:  (local.set $x
+  ;; CHECK-NEXT:   (global.get $x)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (global.set $x
+  ;; CHECK-NEXT:   (struct.get $storage 0
+  ;; CHECK-NEXT:    (struct.new $storage
+  ;; CHECK-NEXT:     (call $pass-through
+  ;; CHECK-NEXT:      (struct.new_default $struct)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.as_non_null
+  ;; CHECK-NEXT:    (global.get $x)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $foo
+    (local $x (ref null any))
+    (local.set $x
+      (global.get $x)
+    )
+    (global.set $x
+      (struct.get $storage 0
+        (struct.new $storage
+          (call $pass-through
+            ;; The only change is to allocate here instead of reading the local
+            ;; $x. This causes us to not optimize anything in this function.
+            (struct.new $struct)
+          )
+        )
+      )
+    )
+    (drop
+      (ref.as_non_null
+        (global.get $x)
+      )
+    )
+  )
+
+  ;; CHECK:      (func $pass-through (type $anyref_=>_anyref) (param $x anyref) (result anyref)
+  ;; CHECK-NEXT:  (local.get $x)
+  ;; CHECK-NEXT: )
+  (func $pass-through (param $x (ref null any)) (result (ref null any))
+    (local.get $x)
+  )
+)
+
+;; Exceptions.
+(module
+  ;; CHECK:      (type $none_=>_none (func))
+
+  ;; CHECK:      (type $anyref_=>_none (func (param anyref)))
+
+  ;; CHECK:      (type $struct (struct ))
+  (type $struct (struct))
+
+  ;; CHECK:      (tag $nothing (param anyref))
+  (tag $nothing (param (ref null any)))
+
+  ;; CHECK:      (tag $something (param anyref))
+  (tag $something (param (ref null any)))
+
+  ;; CHECK:      (tag $empty (param))
+  (tag $empty (param))
+
+  ;; CHECK:      (func $func (type $none_=>_none)
+  ;; CHECK-NEXT:  (local $0 anyref)
+  ;; CHECK-NEXT:  (throw $nothing
+  ;; CHECK-NEXT:   (ref.null none)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (try $try
+  ;; CHECK-NEXT:   (do
+  ;; CHECK-NEXT:    (nop)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (catch $nothing
+  ;; CHECK-NEXT:    (local.set $0
+  ;; CHECK-NEXT:     (pop anyref)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (block
+  ;; CHECK-NEXT:      (drop
+  ;; CHECK-NEXT:       (block (result nullref)
+  ;; CHECK-NEXT:        (drop
+  ;; CHECK-NEXT:         (local.get $0)
+  ;; CHECK-NEXT:        )
+  ;; CHECK-NEXT:        (ref.null none)
+  ;; CHECK-NEXT:       )
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:      (unreachable)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (throw $something
+  ;; CHECK-NEXT:   (struct.new_default $struct)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (try $try0
+  ;; CHECK-NEXT:   (do
+  ;; CHECK-NEXT:    (nop)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (catch $something
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (ref.as_non_null
+  ;; CHECK-NEXT:      (pop anyref)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $func
+    ;; This tag receives no non-null value, so we can optimize the pop of it,
+    ;; in the next try-catch, to an unreachable.
+    (throw $nothing
+      (ref.null $struct)
+    )
+    (try
+      (do)
+      (catch $nothing
+        (drop
+          (ref.as_non_null
+            (pop (ref null any))
+          )
+        )
+      )
+    )
+    ;; This tag cannot be optimized as we send it something.
+    (throw $something
+      (struct.new $struct)
+    )
+    (try
+      (do)
+      (catch $something
+        (drop
+          (ref.as_non_null
+            (pop (ref null any))
+          )
+        )
+      )
+    )
+  )
+
+  ;; CHECK:      (func $empty-tag (type $none_=>_none)
+  ;; CHECK-NEXT:  (try $label$3
+  ;; CHECK-NEXT:   (do
+  ;; CHECK-NEXT:    (nop)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (catch $empty
+  ;; CHECK-NEXT:    (nop)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $empty-tag
+    ;; Check we do not error on catching an empty tag.
+    (try $label$3
+      (do
+        (nop)
+      )
+      (catch $empty
+        (nop)
+      )
+    )
+  )
+
+  ;; CHECK:      (func $try-results (type $none_=>_none)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (block (result i32)
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (try $try (result i32)
+  ;; CHECK-NEXT:      (do
+  ;; CHECK-NEXT:       (i32.const 0)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:      (catch $empty
+  ;; CHECK-NEXT:       (i32.const 0)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:      (catch_all
+  ;; CHECK-NEXT:       (i32.const 0)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (try $try1 (result i32)
+  ;; CHECK-NEXT:    (do
+  ;; CHECK-NEXT:     (i32.const 42)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (catch $empty
+  ;; CHECK-NEXT:     (i32.const 0)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (catch_all
+  ;; CHECK-NEXT:     (i32.const 0)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (try $try2 (result i32)
+  ;; CHECK-NEXT:    (do
+  ;; CHECK-NEXT:     (i32.const 0)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (catch $empty
+  ;; CHECK-NEXT:     (i32.const 42)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (catch_all
+  ;; CHECK-NEXT:     (i32.const 0)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (try $try3 (result i32)
+  ;; CHECK-NEXT:    (do
+  ;; CHECK-NEXT:     (i32.const 0)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (catch $empty
+  ;; CHECK-NEXT:     (i32.const 0)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (catch_all
+  ;; CHECK-NEXT:     (i32.const 42)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $try-results
+    ;; If all values flowing out are identical, we can optimize. That is only
+    ;; the case in the very first try.
+    (drop
+      (tr
