@@ -2063,4 +2063,442 @@
     ;; If all values flowing out are identical, we can optimize. That is only
     ;; the case in the very first try.
     (drop
-      (tr
+      (try (result i32)
+        (do
+          (i32.const 0)
+        )
+        (catch $empty
+          (i32.const 0)
+        )
+        (catch_all
+          (i32.const 0)
+        )
+      )
+    )
+    ;; If any of the values is changed, we cannot.
+    (drop
+      (try (result i32)
+        (do
+          (i32.const 42)
+        )
+        (catch $empty
+          (i32.const 0)
+        )
+        (catch_all
+          (i32.const 0)
+        )
+      )
+    )
+    (drop
+      (try (result i32)
+        (do
+          (i32.const 0)
+        )
+        (catch $empty
+          (i32.const 42)
+        )
+        (catch_all
+          (i32.const 0)
+        )
+      )
+    )
+    (drop
+      (try (result i32)
+        (do
+          (i32.const 0)
+        )
+        (catch $empty
+          (i32.const 0)
+        )
+        (catch_all
+          (i32.const 42)
+        )
+      )
+    )
+  )
+)
+
+;; Exceptions with a tuple
+(module
+  ;; CHECK:      (type $anyref_anyref_=>_none (func (param anyref anyref)))
+
+  ;; CHECK:      (type $none_=>_none (func))
+
+  ;; CHECK:      (type $struct (struct ))
+  (type $struct (struct))
+
+  ;; CHECK:      (tag $tag (param anyref anyref))
+  (tag $tag (param (ref null any)) (param (ref null any)))
+
+  ;; CHECK:      (func $func (type $none_=>_none)
+  ;; CHECK-NEXT:  (local $0 (anyref anyref))
+  ;; CHECK-NEXT:  (throw $tag
+  ;; CHECK-NEXT:   (ref.null none)
+  ;; CHECK-NEXT:   (struct.new_default $struct)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (try $try
+  ;; CHECK-NEXT:   (do
+  ;; CHECK-NEXT:    (nop)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (catch $tag
+  ;; CHECK-NEXT:    (local.set $0
+  ;; CHECK-NEXT:     (pop anyref anyref)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (block (result nullref)
+  ;; CHECK-NEXT:      (drop
+  ;; CHECK-NEXT:       (local.get $0)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:      (ref.null none)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (try $try0
+  ;; CHECK-NEXT:   (do
+  ;; CHECK-NEXT:    (nop)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (catch $tag
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (tuple.extract 1
+  ;; CHECK-NEXT:      (pop anyref anyref)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $func
+    ;; This tag receives a null in the first parameter.
+    (throw $tag
+      (ref.null $struct)
+      (struct.new $struct)
+    )
+    ;; Catch the first, which we can optimize to a null.
+    (try
+      (do)
+      (catch $tag
+        (drop
+          (tuple.extract 0
+            (pop (ref null any) (ref null any))
+          )
+        )
+      )
+    )
+    ;; Catch the second, which we cannot optimize.
+    (try
+      (do)
+      (catch $tag
+        (drop
+          (tuple.extract 1
+            (pop (ref null any) (ref null any))
+          )
+        )
+      )
+    )
+  )
+)
+
+(module
+  ;; CHECK:      (type $none_=>_ref|${}| (func (result (ref ${}))))
+
+  ;; CHECK:      (type ${} (struct ))
+  (type ${} (struct_subtype data))
+
+  ;; CHECK:      (func $func (type $none_=>_ref|${}|) (result (ref ${}))
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (block $block (result (ref none))
+  ;; CHECK-NEXT:    (br_on_non_null $block
+  ;; CHECK-NEXT:     (ref.null none)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (unreachable)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (unreachable)
+  ;; CHECK-NEXT: )
+  (func $func (result (ref ${}))
+    ;; This block can only return a null in theory (in practice, not even that -
+    ;; the br will not be taken, but this pass is not smart enough to see that).
+    ;; We can optimize to an unreachable here, but must be careful - we cannot
+    ;; remove the block as the wasm would not validate (not unless we also
+    ;; removed the br, which we don't do atm). All we will do is add an
+    ;; unreachable after the block, on the outside of it (which would help other
+    ;; passes do more work).
+    (block $block (result (ref ${}))
+      (br_on_non_null $block
+        (ref.null ${})
+      )
+      (unreachable)
+    )
+  )
+)
+
+(module
+  ;; CHECK:      (type $none_=>_none (func))
+
+  ;; CHECK:      (type $A (struct (field i32)))
+  (type $A (struct_subtype (field i32) data))
+  ;; CHECK:      (type $B (struct (field i64)))
+  (type $B (struct_subtype (field i64) data))
+  ;; CHECK:      (type $C (struct (field f32)))
+  (type $C (struct_subtype (field f32) data))
+  ;; CHECK:      (type $D (struct (field f64)))
+  (type $D (struct_subtype (field f64) data))
+
+  ;; CHECK:      (func $many-types (type $none_=>_none)
+  ;; CHECK-NEXT:  (local $x anyref)
+  ;; CHECK-NEXT:  (local.set $x
+  ;; CHECK-NEXT:   (struct.new $A
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (local.set $x
+  ;; CHECK-NEXT:   (struct.new $B
+  ;; CHECK-NEXT:    (i64.const 1)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (local.set $x
+  ;; CHECK-NEXT:   (struct.new $C
+  ;; CHECK-NEXT:    (f32.const 2)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (local.set $x
+  ;; CHECK-NEXT:   (struct.new $D
+  ;; CHECK-NEXT:    (f64.const 3)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.as_non_null
+  ;; CHECK-NEXT:    (local.get $x)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $many-types
+    (local $x (ref null any))
+    ;; Write 4 different types into $x. That should not confuse us, and we
+    ;; should not make any changes in this function.
+    (local.set $x
+      (struct.new $A
+        (i32.const 0)
+      )
+    )
+    (local.set $x
+      (struct.new $B
+        (i64.const 1)
+      )
+    )
+    (local.set $x
+      (struct.new $C
+        (f32.const 2)
+      )
+    )
+    (local.set $x
+      (struct.new $D
+        (f64.const 3)
+      )
+    )
+    (drop
+      (ref.as_non_null
+        (local.get $x)
+      )
+    )
+  )
+)
+
+;; Test a vtable-like pattern. This tests ref.func values flowing into struct
+;; locations being properly noticed, both from global locations (the global's
+;; init) and a function ($create).
+(module
+  ;; CHECK:      (type $vtable-A (struct (field funcref) (field funcref) (field funcref)))
+  (type $vtable-A (struct_subtype (field (ref null func)) (field (ref null func)) (field (ref null func)) data))
+
+  ;; CHECK:      (type $none_=>_none (func))
+
+  ;; CHECK:      (global $global-A (ref $vtable-A) (struct.new $vtable-A
+  ;; CHECK-NEXT:  (ref.func $foo)
+  ;; CHECK-NEXT:  (ref.null nofunc)
+  ;; CHECK-NEXT:  (ref.func $foo)
+  ;; CHECK-NEXT: ))
+  (global $global-A (ref $vtable-A)
+    (struct.new $vtable-A
+      (ref.func $foo)
+      (ref.null func)
+      (ref.func $foo)
+    )
+  )
+
+  ;; CHECK:      (elem declare func $foo $test)
+
+  ;; CHECK:      (func $test (type $none_=>_none)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.func $foo)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.null nofunc)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $vtable-A 2
+  ;; CHECK-NEXT:    (global.get $global-A)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $test
+    ;; The first item here contains a fixed value (ref.func $foo) in both the
+    ;; global init and in the function $create, which we can apply.
+    (drop
+      (struct.get $vtable-A 0
+        (global.get $global-A)
+      )
+    )
+    ;; The second item here contains a null in all cases, which we can also
+    ;; apply.
+    (drop
+      (struct.get $vtable-A 1
+        (global.get $global-A)
+      )
+    )
+    ;; The third item has more than one possible value, due to the function
+    ;; $create later down, so we cannot optimize.
+    (drop
+      (struct.get $vtable-A 2
+        (global.get $global-A)
+      )
+    )
+  )
+
+  ;; CHECK:      (func $create (type $none_=>_none)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.new $vtable-A
+  ;; CHECK-NEXT:    (ref.func $foo)
+  ;; CHECK-NEXT:    (ref.null nofunc)
+  ;; CHECK-NEXT:    (ref.func $test)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $create
+    (drop
+      (struct.new $vtable-A
+        (ref.func $foo)
+        (ref.null func)
+        (ref.func $test)
+      )
+    )
+  )
+
+  ;; CHECK:      (func $foo (type $none_=>_none)
+  ;; CHECK-NEXT:  (nop)
+  ;; CHECK-NEXT: )
+  (func $foo)
+)
+
+(module
+  ;; CHECK:      (type $struct (struct (field i32)))
+  (type $struct (struct_subtype (field i32) data))
+
+  ;; CHECK:      (type $none_=>_none (func))
+
+  ;; CHECK:      (func $test (type $none_=>_none)
+  ;; CHECK-NEXT:  (local $ref (ref null $struct))
+  ;; CHECK-NEXT:  (local.set $ref
+  ;; CHECK-NEXT:   (block (result (ref $struct))
+  ;; CHECK-NEXT:    (block (result (ref $struct))
+  ;; CHECK-NEXT:     (struct.new $struct
+  ;; CHECK-NEXT:      (i32.const 42)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (block (result i32)
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (struct.get $struct 0
+  ;; CHECK-NEXT:      (local.get $ref)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (i32.const 42)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $test
+    (local $ref (ref null $struct))
+    ;; Regression test for an assertion firing in this case. We should properly
+    ;; handle the multiple intermediate blocks here, allowing us to optimize the
+    ;; get below to a 42.
+    (local.set $ref
+      (block (result (ref $struct))
+        (block (result (ref $struct))
+          (struct.new $struct
+            (i32.const 42)
+          )
+        )
+      )
+    )
+    (drop
+      (struct.get $struct 0
+        (local.get $ref)
+      )
+    )
+  )
+)
+
+;; Casts.
+(module
+  ;; CHECK:      (type $struct (struct (field i32)))
+  (type $struct (struct_subtype (field i32) data))
+  ;; CHECK:      (type $substruct (struct_subtype (field i32) (field i32) $struct))
+  (type $substruct (struct_subtype (field i32) (field i32) $struct))
+  ;; CHECK:      (type $none_=>_none (func))
+
+  ;; CHECK:      (type $i32_=>_none (func (param i32)))
+
+  ;; CHECK:      (type $subsubstruct (struct_subtype (field i32) (field i32) (field i32) $substruct))
+  (type $subsubstruct (struct_subtype (field i32) (field i32) (field i32) $substruct))
+
+  ;; CHECK:      (type $other (struct ))
+  (type $other (struct_subtype data))
+
+  ;; CHECK:      (type $none_=>_i32 (func (result i32)))
+
+  ;; CHECK:      (type $i32_ref?|$struct|_ref?|$struct|_ref?|$other|_ref|$struct|_ref|$struct|_ref|$other|_=>_none (func (param i32 (ref null $struct) (ref null $struct) (ref null $other) (ref $struct) (ref $struct) (ref $other))))
+
+  ;; CHECK:      (type $none_=>_ref|eq| (func (result (ref eq))))
+
+  ;; CHECK:      (import "a" "b" (func $import (result i32)))
+  (import "a" "b" (func $import (result i32)))
+
+  ;; CHECK:      (export "test-cones" (func $test-cones))
+
+  ;; CHECK:      (export "ref.test-inexact" (func $ref.test-inexact))
+
+  ;; CHECK:      (export "ref.eq-zero" (func $ref.eq-zero))
+
+  ;; CHECK:      (export "ref.eq-unknown" (func $ref.eq-unknown))
+
+  ;; CHECK:      (export "ref.eq-cone" (func $ref.eq-cone))
+
+  ;; CHECK:      (export "local-no" (func $ref.eq-local-no))
+
+  ;; CHECK:      (func $test (type $none_=>_none)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (unreachable)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.cast $substruct
+  ;; CHECK-NEXT:    (struct.new $substruct
+  ;; CHECK-NEXT:     (i32.const 1)
+  ;; CHECK-NEXT:     (i32.const 2)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.cast $substruct
+  ;; CHECK-NEXT:    (struct.new $subsubstruct
+  ;; CHECK-NEXT:     (i32.const 3)
+  ;; CHECK-NEXT:     (i32.const 4)
+  ;; CHECK-NEXT:     (i32.const 5)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $test
+    ;; The cast here will fail, and the ref.cast null allows nothing through, so we
+    ;; can emit an unreach
