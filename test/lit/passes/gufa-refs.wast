@@ -2926,4 +2926,425 @@
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
   ;; CHECK-NEXT:   (ref.eq
-  ;; CHECK-NEXT:    (lo
+  ;; CHECK-NEXT:    (local.get $struct)
+  ;; CHECK-NEXT:    (local.get $other)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.eq
+  ;; CHECK-NEXT:    (local.get $struct)
+  ;; CHECK-NEXT:    (local.get $struct2)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.eq
+  ;; CHECK-NEXT:    (local.get $struct)
+  ;; CHECK-NEXT:    (local.get $nn-struct)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.eq
+  ;; CHECK-NEXT:    (local.get $nn-struct)
+  ;; CHECK-NEXT:    (local.get $nn-struct2)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i32.const 0)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.eq
+  ;; CHECK-NEXT:    (ref.null none)
+  ;; CHECK-NEXT:    (unreachable)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (block (result i32)
+  ;; CHECK-NEXT:    (block
+  ;; CHECK-NEXT:     (drop
+  ;; CHECK-NEXT:      (call $unreachable)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (unreachable)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $ref.eq-unknown (export "ref.eq-unknown") (param $x i32) (param $struct (ref null $struct)) (param $struct2 (ref null $struct)) (param $other (ref null $other)) (param $nn-struct (ref $struct)) (param $nn-struct2 (ref $struct)) (param $nn-other (ref $other))
+    ;; Here we cannot infer as the type is identical. (Though, if we used more
+    ;; than the type, we could see they cannot be identical.)
+    (drop
+      (ref.eq
+        (struct.new $struct
+          (i32.const 4)
+        )
+        (struct.new $struct
+          (i32.const 5)
+        )
+      )
+    )
+    ;; These nulls are identical, so we could infer 1, but we leave that for
+    ;; other passes, and do not infer here.
+    (drop
+      (ref.eq
+        (ref.null $struct)
+        (ref.null $struct)
+      )
+    )
+    ;; When nulls are possible, we cannot infer anything (with or without the
+    ;; same type on both sides).
+    (drop
+      (ref.eq
+        (local.get $struct)
+        (local.get $other)
+      )
+    )
+    (drop
+      (ref.eq
+        (local.get $struct)
+        (local.get $struct2)
+      )
+    )
+    ;; A null is only possible on one side, but the same non-null value could be
+    ;; on both.
+    (drop
+      (ref.eq
+        (local.get $struct)
+        (local.get $nn-struct)
+      )
+    )
+    ;; The type is identical, and non-null, but we don't know if the value is
+    ;; the same or not.
+    (drop
+      (ref.eq
+        (local.get $nn-struct)
+        (local.get $nn-struct2)
+      )
+    )
+    ;; Non-null on both sides, and incompatible types. We can infer 0 here.
+    (drop
+      (ref.eq
+        (local.get $nn-struct)
+        (local.get $nn-other)
+      )
+    )
+    ;; We can ignore unreachable code.
+    (drop
+      (ref.eq
+        (ref.null $struct)
+        (unreachable)
+      )
+    )
+    ;; The called function here traps and never returns an actual value, which
+    ;; will lead to an unreachable emitted right after the call. We should not
+    ;; prevent that from happening: an unreachable must be emitted (we will also
+    ;; emit an i32.const 0, which will never be reached, and not cause issues).
+    (drop
+      (ref.eq
+        (ref.null $struct)
+        (call $unreachable)
+      )
+    )
+  )
+
+  ;; CHECK:      (func $ref.eq-cone (type $i32_=>_none) (param $x i32)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i32.const 0)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.eq
+  ;; CHECK-NEXT:    (struct.new $substruct
+  ;; CHECK-NEXT:     (i32.const 1)
+  ;; CHECK-NEXT:     (i32.const 2)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (select (result (ref $struct))
+  ;; CHECK-NEXT:     (struct.new $struct
+  ;; CHECK-NEXT:      (i32.const 3)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (struct.new $subsubstruct
+  ;; CHECK-NEXT:      (i32.const 4)
+  ;; CHECK-NEXT:      (i32.const 5)
+  ;; CHECK-NEXT:      (i32.const 6)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (local.get $x)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.eq
+  ;; CHECK-NEXT:    (struct.new $substruct
+  ;; CHECK-NEXT:     (i32.const 1)
+  ;; CHECK-NEXT:     (i32.const 2)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (select (result (ref $struct))
+  ;; CHECK-NEXT:     (struct.new $struct
+  ;; CHECK-NEXT:      (i32.const 3)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (struct.new $substruct
+  ;; CHECK-NEXT:      (i32.const 4)
+  ;; CHECK-NEXT:      (i32.const 5)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (local.get $x)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.eq
+  ;; CHECK-NEXT:    (struct.new $substruct
+  ;; CHECK-NEXT:     (i32.const 1)
+  ;; CHECK-NEXT:     (i32.const 2)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (select (result (ref $substruct))
+  ;; CHECK-NEXT:     (struct.new $substruct
+  ;; CHECK-NEXT:      (i32.const 3)
+  ;; CHECK-NEXT:      (i32.const 4)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (struct.new $subsubstruct
+  ;; CHECK-NEXT:      (i32.const 5)
+  ;; CHECK-NEXT:      (i32.const 6)
+  ;; CHECK-NEXT:      (i32.const 7)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (local.get $x)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.eq
+  ;; CHECK-NEXT:    (struct.new $substruct
+  ;; CHECK-NEXT:     (i32.const 1)
+  ;; CHECK-NEXT:     (i32.const 2)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (select (result (ref $substruct))
+  ;; CHECK-NEXT:     (struct.new $substruct
+  ;; CHECK-NEXT:      (i32.const 3)
+  ;; CHECK-NEXT:      (i32.const 4)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (struct.new $substruct
+  ;; CHECK-NEXT:      (i32.const 5)
+  ;; CHECK-NEXT:      (i32.const 6)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (local.get $x)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $ref.eq-cone (export "ref.eq-cone") (param $x i32)
+    ;; One side has two possible types, so we have a cone there. This cone is
+    ;; of subtypes of the other type, which is exact, so we cannot intersect
+    ;; here and we infer a 0.
+    (drop
+      (ref.eq
+        (struct.new $struct
+          (i32.const 1)
+        )
+        (select
+          (struct.new $substruct
+            (i32.const 2)
+            (i32.const 3)
+          )
+          (struct.new $subsubstruct
+            (i32.const 4)
+            (i32.const 5)
+            (i32.const 6)
+          )
+          (local.get $x)
+        )
+      )
+    )
+    ;; Now the cone is large enough, so there might be an intersection, and we
+    ;; do not optimize (the cone of $struct and $subsubstruct contains
+    ;; $substruct which is in the middle).
+    (drop
+      (ref.eq
+        (struct.new $substruct
+          (i32.const 1)
+          (i32.const 2)
+        )
+        (select
+          (struct.new $struct
+            (i32.const 3)
+          )
+          (struct.new $subsubstruct
+            (i32.const 4)
+            (i32.const 5)
+            (i32.const 6)
+          )
+          (local.get $x)
+        )
+      )
+    )
+    (drop
+      (ref.eq
+        (struct.new $substruct
+          (i32.const 1)
+          (i32.const 2)
+        )
+        (select
+          (struct.new $struct
+            (i32.const 3)
+          )
+          (struct.new $substruct ;; As above, but with this changed. We still
+            (i32.const 4)        ;; cannot optimize.
+            (i32.const 5)
+          )
+          (local.get $x)
+        )
+      )
+    )
+    (drop
+      (ref.eq
+        (struct.new $substruct
+          (i32.const 1)
+          (i32.const 2)
+        )
+        (select
+          (struct.new $substruct ;; As above, but with this changed. We still
+            (i32.const 3)        ;; cannot optimize.
+            (i32.const 4)
+          )
+          (struct.new $subsubstruct
+            (i32.const 5)
+            (i32.const 6)
+            (i32.const 7)
+          )
+          (local.get $x)
+        )
+      )
+    )
+    (drop
+      (ref.eq
+        (struct.new $substruct
+          (i32.const 1)
+          (i32.const 2)
+        )
+        (select
+          (struct.new $substruct
+            (i32.const 3)
+            (i32.const 4)
+          )
+          (struct.new $substruct ;; As above, but with this changed. We still
+            (i32.const 5)        ;; cannot optimize (here the type is actually
+            (i32.const 6)        ;; exact, despite the select).
+          )
+          (local.get $x)
+        )
+      )
+    )
+  )
+
+  ;; CHECK:      (func $unreachable (type $none_=>_ref|eq|) (result (ref eq))
+  ;; CHECK-NEXT:  (unreachable)
+  ;; CHECK-NEXT: )
+  (func $unreachable (result (ref eq))
+    (unreachable)
+  )
+
+  ;; CHECK:      (func $ref.eq-updates (type $none_=>_none)
+  ;; CHECK-NEXT:  (local $x eqref)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.eq
+  ;; CHECK-NEXT:    (ref.null none)
+  ;; CHECK-NEXT:    (ref.null none)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.eq
+  ;; CHECK-NEXT:    (block (result nullref)
+  ;; CHECK-NEXT:     (drop
+  ;; CHECK-NEXT:      (call $import)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (ref.null none)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (ref.null none)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $ref.eq-updates
+    (local $x (ref null eq))
+    ;; The local.get will be optimized to a ref.null. After that we will leave
+    ;; the ref.eq as it is. This guards against a possible bug of us not
+    ;; setting the contents of the new ref.null expression just created: the
+    ;; parent ref.eq will query the contents right after adding that expression,
+    ;; and the contents must be set or else we'll think nothing is possible
+    ;; there.
+    ;;
+    ;; (We could optimize ref.eq of two nulls to 1, but we leave that for other
+    ;; passes.)
+    (drop
+      (ref.eq
+        (ref.null eq)
+        (local.get $x)
+      )
+    )
+    ;; Another situation we need to be careful with effects of updates. Here
+    ;; we have a block whose result we can infer to a null, but that does not
+    ;; let us optimize the ref.eq, and we also must be careful to not drop side
+    ;; effects - the call must remain.
+    (drop
+      (ref.eq
+        (block (result eqref)
+          (drop
+            (call $import)
+          )
+          (ref.null $struct)
+        )
+        (ref.null $struct)
+      )
+    )
+  )
+
+  ;; CHECK:      (func $ref.eq-local-no (type $i32_=>_none) (param $x i32)
+  ;; CHECK-NEXT:  (local $ref (ref $struct))
+  ;; CHECK-NEXT:  (local $ref-null (ref null $struct))
+  ;; CHECK-NEXT:  (local.set $ref
+  ;; CHECK-NEXT:   (struct.new $struct
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (if
+  ;; CHECK-NEXT:   (local.get $x)
+  ;; CHECK-NEXT:   (local.set $ref-null
+  ;; CHECK-NEXT:    (local.get $ref)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.eq
+  ;; CHECK-NEXT:    (local.get $ref)
+  ;; CHECK-NEXT:    (local.get $ref-null)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $ref.eq-local-no (export "local-no") (param $x i32)
+    (local $ref (ref $struct))
+    (local $ref-null (ref null $struct))
+    ;; Always set the non-nullable ref, but only sometimes set the nullable.
+    (local.set $ref
+      (struct.new $struct
+        (i32.const 0)
+      )
+    )
+    (if
+      (local.get $x)
+      (local.set $ref-null
+        (local.get $ref)
+      )
+    )
+    ;; If the |if| executed they are equal, but otherwise not, so we can't
+    ;; optimize.
+    (drop
+      (ref.eq
+        (local.get $ref)
+        (local.get $ref-null)
+      )
+    )
+  )
+)
+
+;; Test ref.eq on globals.
+(module
+  ;; CHECK:      (type $A (struct (field i32)))
+  (type $A (struct_subtype (field i32) data))
+  (type $B (struct_subtype (field i32) $A))
+
+  ;; CHECK:      (type $none_=>_none (func))
+
+  ;; CHECK:      (global $a (
