@@ -3765,4 +3765,498 @@
   ;; CHECK-NEXT:  (local $bytes (ref null $bytes))
   ;; CHECK-NEXT:  (local $chars (ref null $chars))
   ;; CHECK-NEXT:  (local.set $bytes
-  ;; CHECK-NEXT:   (array.new_fixed $b
+  ;; CHECK-NEXT:   (array.new_fixed $bytes
+  ;; CHECK-NEXT:    (i31.new
+  ;; CHECK-NEXT:     (i32.const 0)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (local.set $chars
+  ;; CHECK-NEXT:   (array.new_fixed $chars
+  ;; CHECK-NEXT:    (ref.null none)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (array.copy $bytes $chars
+  ;; CHECK-NEXT:   (local.get $bytes)
+  ;; CHECK-NEXT:   (i32.const 0)
+  ;; CHECK-NEXT:   (local.get $chars)
+  ;; CHECK-NEXT:   (i32.const 0)
+  ;; CHECK-NEXT:   (i32.const 1)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (array.get $bytes
+  ;; CHECK-NEXT:    (local.get $bytes)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (block (result nullref)
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (array.get $chars
+  ;; CHECK-NEXT:      (local.get $chars)
+  ;; CHECK-NEXT:      (i32.const 0)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (ref.null none)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $test
+    (local $bytes (ref null $bytes))
+    (local $chars (ref null $chars))
+    (local.set $bytes
+      (array.new_fixed $bytes
+        (i31.new (i32.const 0))
+      )
+    )
+    (local.set $chars
+      (array.new_fixed $chars
+        (ref.null any)
+      )
+    )
+    (array.copy $bytes $chars
+      (local.get $bytes)
+      (i32.const 0)
+      (local.get $chars)
+      (i32.const 0)
+      (i32.const 1)
+    )
+    (drop
+      (array.get $bytes
+        (local.get $bytes)
+        (i32.const 0)
+      )
+    )
+    (drop
+      (array.get $chars
+        (local.get $chars)
+        (i32.const 0)
+      )
+    )
+  )
+)
+
+;; Basic tests for all instructions appearing in possible-contents.cpp but not
+;; already shown above. If we forgot to add the proper links to any of them,
+;; they might appear as if no content were possible there, and we'd emit an
+;; unreachable. That should not happen anywhere here.
+(module
+  (type $A (struct_subtype data))
+
+  ;; CHECK:      (type $none_=>_none (func))
+
+  ;; CHECK:      (type $B (array (mut anyref)))
+  (type $B (array (mut anyref)))
+
+  ;; CHECK:      (type $i32_=>_none (func (param i32)))
+
+  ;; CHECK:      (type $ref|$B|_=>_none (func (param (ref $B))))
+
+  ;; CHECK:      (memory $0 10)
+
+  ;; CHECK:      (table $t 0 externref)
+
+  ;; CHECK:      (tag $e-i32 (param i32))
+  (tag $e-i32 (param i32))
+
+  (memory $0 10)
+
+  (table $t 0 externref)
+
+  ;; CHECK:      (func $br_table (type $none_=>_none)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (block (result i32)
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (block $A (result i32)
+  ;; CHECK-NEXT:      (br_table $A $A
+  ;; CHECK-NEXT:       (i32.const 1)
+  ;; CHECK-NEXT:       (i32.const 2)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (i32.const 1)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $br_table
+    (drop
+      ;; The value 1 can be inferred here.
+      (block $A (result i32)
+        (br_table $A $A
+          (i32.const 1)
+          (i32.const 2)
+        )
+      )
+    )
+  )
+
+  ;; CHECK:      (func $memory (type $none_=>_none)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i32.load
+  ;; CHECK-NEXT:    (i32.const 5)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i32.atomic.rmw.add
+  ;; CHECK-NEXT:    (i32.const 5)
+  ;; CHECK-NEXT:    (i32.const 10)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i32.atomic.rmw.cmpxchg
+  ;; CHECK-NEXT:    (i32.const 5)
+  ;; CHECK-NEXT:    (i32.const 10)
+  ;; CHECK-NEXT:    (i32.const 15)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (memory.atomic.wait32
+  ;; CHECK-NEXT:    (i32.const 5)
+  ;; CHECK-NEXT:    (i32.const 10)
+  ;; CHECK-NEXT:    (i64.const 15)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (memory.atomic.notify
+  ;; CHECK-NEXT:    (i32.const 5)
+  ;; CHECK-NEXT:    (i32.const 10)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (memory.size)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (memory.grow
+  ;; CHECK-NEXT:    (i32.const 1)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $memory
+    (drop
+      (i32.load
+        (i32.const 5)
+      )
+    )
+    (drop
+      (i32.atomic.rmw.add
+        (i32.const 5)
+        (i32.const 10)
+      )
+    )
+    (drop
+      (i32.atomic.rmw.cmpxchg
+        (i32.const 5)
+        (i32.const 10)
+        (i32.const 15)
+      )
+    )
+    (drop
+      (memory.atomic.wait32
+        (i32.const 5)
+        (i32.const 10)
+        (i64.const 15)
+      )
+    )
+    (drop
+      (memory.atomic.notify
+        (i32.const 5)
+        (i32.const 10)
+      )
+    )
+    (drop
+      (memory.size)
+    )
+    (drop
+      (memory.grow
+        (i32.const 1)
+      )
+    )
+  )
+
+  ;; CHECK:      (func $simd (type $none_=>_none)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i8x16.extract_lane_s 0
+  ;; CHECK-NEXT:    (v128.const i32x4 0x00000001 0x00000000 0x00000002 0x00000000)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i8x16.replace_lane 0
+  ;; CHECK-NEXT:    (v128.const i32x4 0x00000001 0x00000000 0x00000002 0x00000000)
+  ;; CHECK-NEXT:    (i32.const 3)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i8x16.shuffle 0 17 2 19 4 21 6 23 8 25 10 27 12 29 14 31
+  ;; CHECK-NEXT:    (v128.const i32x4 0x00000001 0x00000000 0x00000002 0x00000000)
+  ;; CHECK-NEXT:    (v128.const i32x4 0x00000003 0x00000000 0x00000004 0x00000000)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (v128.bitselect
+  ;; CHECK-NEXT:    (v128.const i32x4 0x00000001 0x00000000 0x00000002 0x00000000)
+  ;; CHECK-NEXT:    (v128.const i32x4 0x00000003 0x00000000 0x00000004 0x00000000)
+  ;; CHECK-NEXT:    (v128.const i32x4 0x00000005 0x00000000 0x00000006 0x00000000)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i8x16.shr_s
+  ;; CHECK-NEXT:    (v128.const i32x4 0x00000001 0x00000000 0x00000002 0x00000000)
+  ;; CHECK-NEXT:    (i32.const 3)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (v128.load8_splat
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (v128.load8_lane 0
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (v128.const i32x4 0x00000001 0x00000000 0x00000002 0x00000000)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $simd
+    (drop
+      (i8x16.extract_lane_s 0
+        (v128.const i64x2 1 2)
+      )
+    )
+    (drop
+      (i8x16.replace_lane 0
+        (v128.const i64x2 1 2)
+        (i32.const 3)
+      )
+    )
+    (drop
+      (i8x16.shuffle 0 17 2 19 4 21 6 23 8 25 10 27 12 29 14 31
+        (v128.const i64x2 1 2)
+        (v128.const i64x2 3 4)
+      )
+    )
+    (drop
+      (v128.bitselect
+        (v128.const i64x2 1 2)
+        (v128.const i64x2 3 4)
+        (v128.const i64x2 5 6)
+      )
+    )
+    (drop
+      (i8x16.shr_s
+        (v128.const i64x2 1 2)
+        (i32.const 3)
+      )
+    )
+    (drop
+      (v128.load8_splat
+        (i32.const 0)
+      )
+    )
+    (drop
+      (v128.load8_lane 0
+        (i32.const 0)
+        (v128.const i64x2 1 2)
+      )
+    )
+  )
+
+  ;; CHECK:      (func $unary (type $none_=>_none)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i32.eqz
+  ;; CHECK-NEXT:    (i32.const 1)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $unary
+    (drop
+      (i32.eqz
+        (i32.const 1)
+      )
+    )
+  )
+
+  ;; CHECK:      (func $binary (type $none_=>_none)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i32.add
+  ;; CHECK-NEXT:    (i32.const 1)
+  ;; CHECK-NEXT:    (i32.const 2)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $binary
+    (drop
+      (i32.add
+        (i32.const 1)
+        (i32.const 2)
+      )
+    )
+  )
+
+  ;; CHECK:      (func $table (type $none_=>_none)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (table.get $t
+  ;; CHECK-NEXT:    (i32.const 1)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (table.size $t)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (table.grow $t
+  ;; CHECK-NEXT:    (ref.null noextern)
+  ;; CHECK-NEXT:    (i32.const 1)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $table
+    (drop
+      (table.get $t
+        (i32.const 1)
+      )
+    )
+    (drop
+      (table.size $t)
+    )
+    (drop
+      (table.grow $t
+        (ref.null extern)
+        (i32.const 1)
+      )
+    )
+  )
+
+  ;; CHECK:      (func $i31 (type $none_=>_none)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i31.get_s
+  ;; CHECK-NEXT:    (i31.new
+  ;; CHECK-NEXT:     (i32.const 0)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $i31
+    (drop
+      (i31.get_s
+        (i31.new
+          (i32.const 0)
+        )
+      )
+    )
+  )
+
+  ;; CHECK:      (func $arrays (type $ref|$B|_=>_none) (param $B (ref $B))
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (array.len
+  ;; CHECK-NEXT:    (array.new_fixed $B
+  ;; CHECK-NEXT:     (ref.null none)
+  ;; CHECK-NEXT:     (ref.null none)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $arrays (param $B (ref $B))
+    (drop
+      (array.len $B
+        (array.new_fixed $B
+          (ref.null none)
+          (ref.null none)
+        )
+      )
+    )
+  )
+
+  ;; CHECK:      (func $rethrow (type $none_=>_none)
+  ;; CHECK-NEXT:  (local $0 i32)
+  ;; CHECK-NEXT:  (try $l0
+  ;; CHECK-NEXT:   (do
+  ;; CHECK-NEXT:    (throw $e-i32
+  ;; CHECK-NEXT:     (i32.const 0)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (catch $e-i32
+  ;; CHECK-NEXT:    (local.set $0
+  ;; CHECK-NEXT:     (pop i32)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (block
+  ;; CHECK-NEXT:     (drop
+  ;; CHECK-NEXT:      (block (result i32)
+  ;; CHECK-NEXT:       (drop
+  ;; CHECK-NEXT:        (local.get $0)
+  ;; CHECK-NEXT:       )
+  ;; CHECK-NEXT:       (i32.const 0)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (rethrow $l0)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $rethrow
+    (try $l0
+      (do
+        (throw $e-i32
+          (i32.const 0)
+        )
+      )
+      (catch $e-i32
+        (drop
+          (pop i32)
+        )
+        (rethrow $l0)
+      )
+    )
+  )
+
+  ;; CHECK:      (func $tuples (type $none_=>_none)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (tuple.make
+  ;; CHECK-NEXT:    (i32.const 1)
+  ;; CHECK-NEXT:    (i32.const 2)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $tuples
+    (drop
+      (tuple.make
+        (i32.const 1)
+        (i32.const 2)
+      )
+    )
+  )
+)
+
+(module
+  ;; CHECK:      (type $struct (struct (field (mut i32))))
+  (type $struct (struct_subtype (mut i32) data))
+
+  ;; CHECK:      (type $substruct (struct_subtype (field (mut i32)) (field f64) $struct))
+  (type $substruct (struct_subtype (mut i32) f64 $struct))
+
+  ;; CHECK:      (type $none_=>_none (func))
+
+  ;; CHECK:      (global $something (mut (ref $struct)) (struct.new $struct
+  ;; CHECK-NEXT:  (i32.const 10)
+  ;; CHECK-NEXT: ))
+  (global $something (mut (ref $struct)) (struct.new $struct
+    (i32.const 10)
+  ))
+
+  ;; CHECK:      (global $subsomething (mut (ref $substruct)) (struct.new $substruct
+  ;; CHECK-NEXT:  (i32.const 22)
+  ;; CHECK-NEXT:  (f64.const 3.14159)
+  ;; CHECK-NEXT: ))
+  (global $subsomething (mut (ref $substruct)) (struct.new $substruct
+    (i32.const 22)
+    (f64.const 3.14159)
+  ))
+
+  ;; CHECK:      (func $foo (type $none_=>_none)
+  ;; CHECK-NEXT:  (global.set $something
+  ;; CHECK-NEXT:   (struct.new $struct
+  ;; CHECK-NEXT:    (i32.const 10)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (struct.set $struct 0
+  ;; CHECK-NEXT:   (global.get $something)
+  ;; CHECK-NEXT:   (i32.const 12)
+  ;; CHE
