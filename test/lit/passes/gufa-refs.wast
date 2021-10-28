@@ -3347,4 +3347,422 @@
 
   ;; CHECK:      (type $none_=>_none (func))
 
-  ;; CHECK:      (global $a (
+  ;; CHECK:      (global $a (ref $A) (struct.new $A
+  ;; CHECK-NEXT:  (i32.const 0)
+  ;; CHECK-NEXT: ))
+  (global $a (ref $A) (struct.new $A
+    (i32.const 0)
+  ))
+
+  ;; CHECK:      (global $a-other (ref $A) (struct.new $A
+  ;; CHECK-NEXT:  (i32.const 1)
+  ;; CHECK-NEXT: ))
+  (global $a-other (ref $A) (struct.new $A
+    (i32.const 1)
+  ))
+
+  ;; CHECK:      (global $a-copy (ref $A) (global.get $a))
+  (global $a-copy (ref $A) (global.get $a))
+
+  ;; CHECK:      (global $a-mut (mut (ref $A)) (struct.new $A
+  ;; CHECK-NEXT:  (i32.const 2)
+  ;; CHECK-NEXT: ))
+  (global $a-mut (mut (ref $A)) (struct.new $A
+    (i32.const 2)
+  ))
+
+  ;; CHECK:      (global $a-mut-copy (mut (ref $A)) (global.get $a))
+  (global $a-mut-copy (mut (ref $A)) (global.get $a))
+
+  ;; CHECK:      (global $a-copy-mut (ref $A) (global.get $a-mut))
+  (global $a-copy-mut (ref $A) (global.get $a-mut))
+
+  ;; CHECK:      (global $a-mut-copy-written (mut (ref $A)) (global.get $a))
+  (global $a-mut-copy-written (mut (ref $A)) (global.get $a))
+
+  ;; CHECK:      (func $compare-a (type $none_=>_none)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.eq
+  ;; CHECK-NEXT:    (global.get $a)
+  ;; CHECK-NEXT:    (global.get $a)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.eq
+  ;; CHECK-NEXT:    (global.get $a)
+  ;; CHECK-NEXT:    (global.get $a)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.eq
+  ;; CHECK-NEXT:    (global.get $a)
+  ;; CHECK-NEXT:    (global.get $a)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.eq
+  ;; CHECK-NEXT:    (global.get $a)
+  ;; CHECK-NEXT:    (global.get $a-other)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.eq
+  ;; CHECK-NEXT:    (global.get $a)
+  ;; CHECK-NEXT:    (global.get $a-mut)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.eq
+  ;; CHECK-NEXT:    (global.get $a)
+  ;; CHECK-NEXT:    (global.get $a-copy-mut)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (global.set $a-mut-copy-written
+  ;; CHECK-NEXT:   (global.get $a-other)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.eq
+  ;; CHECK-NEXT:    (global.get $a)
+  ;; CHECK-NEXT:    (global.get $a-mut-copy-written)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $compare-a
+    ;; Comparisons of $a to everything else.
+    ;;
+    ;; GUFA does not compute the results of these yet, as it leaves it to other
+    ;; passes. This test guards against us doing anything unexpected here.
+    ;;
+    ;; What we do change here is update a copied global to the original,
+    ;; so $a-copy will turn into $a (because that is the only value it can
+    ;; contain). That should happen for the first three only. (For the 3rd, it
+    ;; works even though it is mutable, since there is only a single write
+    ;; anywhere.)
+    (drop
+      (ref.eq
+        (global.get $a)
+        (global.get $a)
+      )
+    )
+    (drop
+      (ref.eq
+        (global.get $a)
+        (global.get $a-copy)
+      )
+    )
+    (drop
+      (ref.eq
+        (global.get $a)
+        (global.get $a-mut-copy)
+      )
+    )
+    (drop
+      (ref.eq
+        (global.get $a)
+        (global.get $a-other)
+      )
+    )
+    (drop
+      (ref.eq
+        (global.get $a)
+        (global.get $a-mut)
+      )
+    )
+    (drop
+      (ref.eq
+        (global.get $a)
+        (global.get $a-copy-mut)
+      )
+    )
+    (global.set $a-mut-copy-written
+      (global.get $a-other)
+    )
+    (drop
+      (ref.eq
+        (global.get $a)
+        (global.get $a-mut-copy-written)
+      )
+    )
+  )
+)
+
+(module
+  (type $A (struct_subtype (field i32) data))
+  (type $B (struct_subtype (ref $A) data))
+  (type $C (struct_subtype (ref $B) data))
+
+  ;; CHECK:      (type $none_=>_none (func))
+
+  ;; CHECK:      (func $test (type $none_=>_none)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i32.const 42)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $test
+    ;; Test nested struct.get operations. We can optimize all this into the
+    ;; constant 42.
+    (drop
+      (struct.get $A 0
+        (struct.get $B 0
+          (struct.get $C 0
+            (struct.new $C
+              (struct.new $B
+                (struct.new $A
+                  (i32.const 42)
+                )
+              )
+            )
+          )
+        )
+      )
+    )
+  )
+)
+
+(module
+  ;; CHECK:      (type $A (struct (field i32)))
+  (type $A (struct_subtype (field i32) data))
+  ;; CHECK:      (type $B (struct (field (ref $A))))
+  (type $B (struct_subtype (ref $A) data))
+  ;; CHECK:      (type $C (struct (field (ref $B))))
+  (type $C (struct_subtype (ref $B) data))
+
+  ;; CHECK:      (type $none_=>_i32 (func (result i32)))
+
+  ;; CHECK:      (type $none_=>_none (func))
+
+  ;; CHECK:      (import "a" "b" (func $import (result i32)))
+  (import "a" "b" (func $import (result i32)))
+
+  ;; CHECK:      (func $test (type $none_=>_none)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $A 0
+  ;; CHECK-NEXT:    (struct.get $B 0
+  ;; CHECK-NEXT:     (struct.get $C 0
+  ;; CHECK-NEXT:      (struct.new $C
+  ;; CHECK-NEXT:       (struct.new $B
+  ;; CHECK-NEXT:        (struct.new $A
+  ;; CHECK-NEXT:         (call $import)
+  ;; CHECK-NEXT:        )
+  ;; CHECK-NEXT:       )
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $test
+    ;; As above, but now call an import for the i32; we cannot optimize.
+    (drop
+      (struct.get $A 0
+        (struct.get $B 0
+          (struct.get $C 0
+            (struct.new $C
+              (struct.new $B
+                (struct.new $A
+                  (call $import)
+                )
+              )
+            )
+          )
+        )
+      )
+    )
+  )
+)
+
+;; ref.as* test.
+(module
+  ;; CHECK:      (type $A (struct (field i32)))
+  (type $A (struct_subtype (field i32) data))
+  ;; CHECK:      (type $B (struct_subtype (field i32) (field f64) $A))
+  (type $B (struct_subtype (field i32) (field f64) $A))
+
+  ;; CHECK:      (type $none_=>_i32 (func (result i32)))
+
+  ;; CHECK:      (type $none_=>_ref|$B| (func (result (ref $B))))
+
+  ;; CHECK:      (import "a" "b" (func $import (result i32)))
+  (import "a" "b" (func $import (result i32)))
+
+  ;; CHECK:      (func $foo (type $none_=>_ref|$B|) (result (ref $B))
+  ;; CHECK-NEXT:  (local $A (ref null $A))
+  ;; CHECK-NEXT:  (ref.cast $B
+  ;; CHECK-NEXT:   (ref.as_non_null
+  ;; CHECK-NEXT:    (local.tee $A
+  ;; CHECK-NEXT:     (struct.new $B
+  ;; CHECK-NEXT:      (i32.const 42)
+  ;; CHECK-NEXT:      (f64.const 13.37)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $foo (result (ref $B))
+    (local $A (ref null $A))
+
+    ;; Read the following from the most nested comment first.
+
+    (ref.cast $B ;; if we mistakenly think this contains content of
+                 ;; type $A, it would trap, but it should not, and we
+                 ;; have nothing to optimize here
+      (ref.as_non_null ;; also $B, based on the child's *contents* (not type!)
+        (local.tee $A ;; flows out a $B, but has type $A
+          (struct.new $B ;; returns a $B
+            (i32.const 42)
+            (f64.const 13.37)
+          )
+        )
+      )
+    )
+  )
+)
+
+(module
+  ;; CHECK:      (type $A (struct (field i32)))
+  (type $A (struct_subtype (field i32) data))
+  ;; CHECK:      (type $none_=>_i32 (func (result i32)))
+
+  ;; CHECK:      (type $B (struct_subtype (field i32) (field i32) $A))
+  (type $B (struct_subtype (field i32) (field i32) $A))
+  ;; CHECK:      (func $0 (type $none_=>_i32) (result i32)
+  ;; CHECK-NEXT:  (local $ref (ref null $A))
+  ;; CHECK-NEXT:  (local.set $ref
+  ;; CHECK-NEXT:   (struct.new $B
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 1)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (block (result i32)
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (struct.get $A 0
+  ;; CHECK-NEXT:      (local.get $ref)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (i32.const 0)
+  ;; CHECK-NEXT: )
+  (func $0 (result i32)
+    (local $ref (ref null $A))
+    (local.set $ref
+      (struct.new $B
+        (i32.const 0)
+        (i32.const 1)
+      )
+    )
+    ;; This struct.get has a reference of type $A, but we can infer the type
+    ;; present in the reference must actually be a $B, and $B precisely - no
+    ;; sub or supertypes. So we can infer a value of 0.
+    ;;
+    ;; A possible bug that this is a regression test for is a confusion between
+    ;; the type of the content and the declared type. If we mixed them up and
+    ;; thought this must be precisely an $A and not a $B then we'd emit an
+    ;; unreachable here (since no $A is ever allocated).
+    (struct.get $A 0
+      (local.get $ref)
+    )
+  )
+)
+
+;; array.copy between types.
+(module
+  ;; CHECK:      (type $bytes (array (mut anyref)))
+  (type $bytes (array (mut anyref)))
+  ;; CHECK:      (type $chars (array (mut anyref)))
+  (type $chars (array (mut anyref)))
+
+  ;; CHECK:      (type $none_=>_none (func))
+
+  ;; CHECK:      (func $test (type $none_=>_none)
+  ;; CHECK-NEXT:  (local $bytes (ref null $bytes))
+  ;; CHECK-NEXT:  (local $chars (ref null $chars))
+  ;; CHECK-NEXT:  (local.set $bytes
+  ;; CHECK-NEXT:   (array.new_fixed $bytes
+  ;; CHECK-NEXT:    (i31.new
+  ;; CHECK-NEXT:     (i32.const 0)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (local.set $chars
+  ;; CHECK-NEXT:   (array.new_fixed $chars
+  ;; CHECK-NEXT:    (ref.null none)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (array.copy $chars $bytes
+  ;; CHECK-NEXT:   (local.get $chars)
+  ;; CHECK-NEXT:   (i32.const 0)
+  ;; CHECK-NEXT:   (local.get $bytes)
+  ;; CHECK-NEXT:   (i32.const 0)
+  ;; CHECK-NEXT:   (i32.const 1)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (array.get $bytes
+  ;; CHECK-NEXT:    (local.get $bytes)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (array.get $chars
+  ;; CHECK-NEXT:    (local.get $chars)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $test
+    (local $bytes (ref null $bytes))
+    (local $chars (ref null $chars))
+
+    ;; Write something to $bytes, but just a null to $chars. But then do a copy
+    ;; which means two things are possible in $chars, and we can't optimize
+    ;; there.
+    (local.set $bytes
+      (array.new_fixed $bytes
+        (i31.new (i32.const 0))
+      )
+    )
+    (local.set $chars
+      (array.new_fixed $chars
+        (ref.null any)
+      )
+    )
+    (array.copy $chars $bytes
+      (local.get $chars)
+      (i32.const 0)
+      (local.get $bytes)
+      (i32.const 0)
+      (i32.const 1)
+    )
+    (drop
+      (array.get $bytes
+        (local.get $bytes)
+        (i32.const 0)
+      )
+    )
+    (drop
+      (array.get $chars
+        (local.get $chars)
+        (i32.const 0)
+      )
+    )
+  )
+)
+
+;; As above, but with a copy in the opposite direction. Now $chars has a single
+;; value (a null) which we can optimize, but $bytes has two values and we
+;; cannot optimize there.
+(module
+  ;; CHECK:      (type $bytes (array (mut anyref)))
+  (type $bytes (array (mut anyref)))
+  ;; CHECK:      (type $chars (array (mut anyref)))
+  (type $chars (array (mut anyref)))
+
+  ;; CHECK:      (type $none_=>_none (func))
+
+  ;; CHECK:      (func $test (type $none_=>_none)
+  ;; CHECK-NEXT:  (local $bytes (ref null $bytes))
+  ;; CHECK-NEXT:  (local $chars (ref null $chars))
+  ;; CHECK-NEXT:  (local.set $bytes
+  ;; CHECK-NEXT:   (array.new_fixed $b
