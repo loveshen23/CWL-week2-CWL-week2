@@ -4259,4 +4259,433 @@
   ;; CHECK-NEXT:  (struct.set $struct 0
   ;; CHECK-NEXT:   (global.get $something)
   ;; CHECK-NEXT:   (i32.const 12)
-  ;; CHE
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $struct 0
+  ;; CHECK-NEXT:    (global.get $something)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i32.const 22)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $foo
+    ;; The global $something has an initial value and this later value, and they
+    ;; are both of type $struct, so we can infer an exact type for the global.
+    (global.set $something
+      (struct.new $struct
+        (i32.const 10)
+      )
+    )
+    ;; Write to that global here. This can only affect $struct, and *not*
+    ;; $substruct, thanks to the exact type.
+    (struct.set $struct 0
+      (global.get $something)
+      (i32.const 12)
+    )
+    ;; We cannot optimize the first get here, as it might be 10 or 11.
+    (drop
+      (struct.get $struct 0
+        (global.get $something)
+      )
+    )
+    ;; We can optimize this get, however, as nothing aliased it and 22 is the
+    ;; only possibility.
+    (drop
+      (struct.get $substruct 0
+        (global.get $subsomething)
+      )
+    )
+  )
+)
+
+;; As above, but we can no longer infer an exact type for the struct.set on the
+;; global $something.
+(module
+  ;; CHECK:      (type $struct (struct (field (mut i32))))
+  (type $struct (struct_subtype (mut i32) data))
+
+  ;; CHECK:      (type $substruct (struct_subtype (field (mut i32)) (field f64) $struct))
+  (type $substruct (struct_subtype (mut i32) f64 $struct))
+
+  ;; CHECK:      (type $none_=>_none (func))
+
+  ;; CHECK:      (global $something (mut (ref $struct)) (struct.new $struct
+  ;; CHECK-NEXT:  (i32.const 10)
+  ;; CHECK-NEXT: ))
+  (global $something (mut (ref $struct)) (struct.new $struct
+    (i32.const 10)
+  ))
+
+  ;; CHECK:      (global $subsomething (mut (ref $substruct)) (struct.new $substruct
+  ;; CHECK-NEXT:  (i32.const 22)
+  ;; CHECK-NEXT:  (f64.const 3.14159)
+  ;; CHECK-NEXT: ))
+  (global $subsomething (mut (ref $substruct)) (struct.new $substruct
+    (i32.const 22)
+    (f64.const 3.14159)
+  ))
+
+  ;; CHECK:      (func $foo (type $none_=>_none)
+  ;; CHECK-NEXT:  (global.set $something
+  ;; CHECK-NEXT:   (struct.new $substruct
+  ;; CHECK-NEXT:    (i32.const 22)
+  ;; CHECK-NEXT:    (f64.const 3.14159)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (struct.set $struct 0
+  ;; CHECK-NEXT:   (global.get $something)
+  ;; CHECK-NEXT:   (i32.const 12)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $struct 0
+  ;; CHECK-NEXT:    (global.get $something)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $substruct 0
+  ;; CHECK-NEXT:    (global.get $subsomething)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $foo
+    ;; Write a $substruct to $something, so that the global might contain either
+    ;; of the two types.
+    (global.set $something
+      (struct.new $substruct
+        (i32.const 22)
+        (f64.const 3.14159)
+      )
+      (i32.const 11)
+    )
+    ;; This write might alias both types now.
+    (struct.set $struct 0
+      (global.get $something)
+      (i32.const 12)
+    )
+    ;; As a result, we can optimize neither of these gets.
+    (drop
+      (struct.get $struct 0
+        (global.get $something)
+      )
+    )
+    (drop
+      (struct.get $substruct 0
+        (global.get $subsomething)
+      )
+    )
+  )
+)
+
+;; As above, but change the constants in the first field in all cases to 10. Now
+;; we can optimize.
+(module
+  ;; CHECK:      (type $struct (struct (field (mut i32))))
+  (type $struct (struct_subtype (mut i32) data))
+
+  ;; CHECK:      (type $substruct (struct_subtype (field (mut i32)) (field f64) $struct))
+  (type $substruct (struct_subtype (mut i32) f64 $struct))
+
+  ;; CHECK:      (type $none_=>_none (func))
+
+  ;; CHECK:      (global $something (mut (ref $struct)) (struct.new $struct
+  ;; CHECK-NEXT:  (i32.const 10)
+  ;; CHECK-NEXT: ))
+  (global $something (mut (ref $struct)) (struct.new $struct
+    (i32.const 10)
+  ))
+
+  ;; CHECK:      (global $subsomething (mut (ref $substruct)) (struct.new $substruct
+  ;; CHECK-NEXT:  (i32.const 10)
+  ;; CHECK-NEXT:  (f64.const 3.14159)
+  ;; CHECK-NEXT: ))
+  (global $subsomething (mut (ref $substruct)) (struct.new $substruct
+    (i32.const 10)
+    (f64.const 3.14159)
+  ))
+
+  ;; CHECK:      (func $foo (type $none_=>_none)
+  ;; CHECK-NEXT:  (global.set $something
+  ;; CHECK-NEXT:   (struct.new $substruct
+  ;; CHECK-NEXT:    (i32.const 10)
+  ;; CHECK-NEXT:    (f64.const 3.14159)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (struct.set $struct 0
+  ;; CHECK-NEXT:   (global.get $something)
+  ;; CHECK-NEXT:   (i32.const 10)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i32.const 10)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i32.const 10)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $foo
+    (global.set $something
+      (struct.new $substruct
+        (i32.const 10)
+        (f64.const 3.14159)
+      )
+      (i32.const 10)
+    )
+    (struct.set $struct 0
+      (global.get $something)
+      (i32.const 10)
+    )
+    (drop
+      (struct.get $struct 0
+        (global.get $something)
+      )
+    )
+    (drop
+      (struct.get $substruct 0
+        (global.get $subsomething)
+      )
+    )
+  )
+)
+
+;; call_ref types
+(module
+  ;; CHECK:      (type $i1 (func (param i32)))
+  (type $i1 (func (param i32)))
+  ;; CHECK:      (type $i2 (func (param i32)))
+  (type $i2 (func (param i32)))
+
+  ;; CHECK:      (type $none_=>_none (func))
+
+  ;; CHECK:      (type $none_=>_i32 (func (result i32)))
+
+  ;; CHECK:      (import "a" "b" (func $import (result i32)))
+  (import "a" "b" (func $import (result i32)))
+
+  ;; CHECK:      (global $func (ref func) (ref.func $reffed-in-global-code))
+  (global $func (ref func) (ref.func $reffed-in-global-code))
+
+  ;; CHECK:      (elem declare func $reffed1 $reffed2)
+
+  ;; CHECK:      (func $reffed1 (type $i1) (param $x i32)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i32.const 42)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $reffed1 (type $i1) (param $x i32)
+    ;; This is called with one possible value, 42, which we can optimize the
+    ;; param to.
+    (drop
+      (local.get $x)
+    )
+  )
+
+  ;; CHECK:      (func $not-reffed (type $i1) (param $x i32)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (unreachable)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $not-reffed (type $i1) (param $x i32)
+    ;; This function has the same type as the previous one, but it is never
+    ;; taken by reference, which means the call_refs below do not affect it. As
+    ;; there are no other calls, this local.get can be turned into an
+    ;; unreachable.
+    (drop
+      (local.get $x)
+    )
+  )
+
+  ;; CHECK:      (func $reffed-in-global-code (type $i1) (param $x i32)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i32.const 42)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $reffed-in-global-code (type $i1) (param $x i32)
+    ;; The only ref to this function is in global code, so this tests that we
+    ;; scan that properly. This can be optimized like $reffed, that is, we can
+    ;; infer 42 here.
+    (drop
+      (local.get $x)
+    )
+  )
+
+  ;; CHECK:      (func $reffed2 (type $i2) (param $x i32)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (local.get $x)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $reffed2 (type $i2) (param $x i32)
+    ;; This is called with two possible values, so we cannot optimize.
+    (drop
+      (local.get $x)
+    )
+  )
+
+  ;; CHECK:      (func $do-calls (type $none_=>_none)
+  ;; CHECK-NEXT:  (call_ref $i1
+  ;; CHECK-NEXT:   (i32.const 42)
+  ;; CHECK-NEXT:   (ref.func $reffed1)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (call_ref $i1
+  ;; CHECK-NEXT:   (i32.const 42)
+  ;; CHECK-NEXT:   (ref.func $reffed1)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (call_ref $i2
+  ;; CHECK-NEXT:   (i32.const 1337)
+  ;; CHECK-NEXT:   (ref.func $reffed2)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (call_ref $i2
+  ;; CHECK-NEXT:   (i32.const 99999)
+  ;; CHECK-NEXT:   (ref.func $reffed2)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $do-calls
+    ;; Call $i1 twice with the same value, and $i2 twice with different values.
+    ;; Note that structurally the types are identical, but we still
+    ;; differentiate them, allowing us to optimize.
+    (call_ref $i1
+      (i32.const 42)
+      (ref.func $reffed1)
+    )
+    (call_ref $i1
+      (i32.const 42)
+      (ref.func $reffed1)
+    )
+    (call_ref $i2
+      (i32.const 1337)
+      (ref.func $reffed2)
+    )
+    (call_ref $i2
+      (i32.const 99999)
+      (ref.func $reffed2)
+    )
+  )
+
+  ;; CHECK:      (func $call_ref-nofunc (type $none_=>_none)
+  ;; CHECK-NEXT:  (block ;; (replaces something unreachable we can't emit)
+  ;; CHECK-NEXT:   (drop
+  ;; CHECK-NEXT:    (i32.const 1)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (drop
+  ;; CHECK-NEXT:    (ref.null nofunc)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (unreachable)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $call_ref-nofunc
+    ;; Test a call_ref of something of type nofunc. That has a heap type, but it
+    ;; is not a signature type. We should not crash on that.
+    (call_ref $i1
+      (i32.const 1)
+      (ref.null nofunc)
+    )
+  )
+)
+
+;; Limited cone reads.
+(module
+  ;; CHECK:      (type $A (struct (field (mut i32))))
+  (type $A (struct_subtype (field (mut i32)) data))
+  ;; CHECK:      (type $B (struct_subtype (field (mut i32)) $A))
+  (type $B (struct_subtype (field (mut i32)) $A))
+  ;; CHECK:      (type $C (struct_subtype (field (mut i32)) $B))
+  (type $C (struct_subtype (field (mut i32)) $B))
+
+
+
+  ;; CHECK:      (type $i32_=>_none (func (param i32)))
+
+  ;; CHECK:      (export "reads" (func $reads))
+
+  ;; CHECK:      (func $reads (type $i32_=>_none) (param $x i32)
+  ;; CHECK-NEXT:  (local $A (ref $A))
+  ;; CHECK-NEXT:  (local $B (ref $B))
+  ;; CHECK-NEXT:  (local $C (ref $C))
+  ;; CHECK-NEXT:  (local.set $A
+  ;; CHECK-NEXT:   (struct.new $A
+  ;; CHECK-NEXT:    (i32.const 10)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (local.set $B
+  ;; CHECK-NEXT:   (struct.new $B
+  ;; CHECK-NEXT:    (i32.const 20)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (local.set $C
+  ;; CHECK-NEXT:   (struct.new $C
+  ;; CHECK-NEXT:    (i32.const 20)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $A 0
+  ;; CHECK-NEXT:    (select (result (ref $A))
+  ;; CHECK-NEXT:     (local.get $A)
+  ;; CHECK-NEXT:     (local.get $B)
+  ;; CHECK-NEXT:     (local.get $x)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $A 0
+  ;; CHECK-NEXT:    (select (result (ref $A))
+  ;; CHECK-NEXT:     (local.get $A)
+  ;; CHECK-NEXT:     (local.get $C)
+  ;; CHECK-NEXT:     (local.get $x)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i32.const 20)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $reads (export "reads") (param $x i32)
+    (local $A (ref $A))
+    (local $B (ref $B))
+    (local $C (ref $C))
+    ;; B and C agree on their value.
+    (local.set $A
+      (struct.new $A
+        (i32.const 10)
+      )
+    )
+    (local.set $B
+      (struct.new $B
+        (i32.const 20)
+      )
+    )
+    (local.set $C
+      (struct.new $C
+        (i32.const 20)
+      )
+    )
+    ;; We can optimize the last of these, which mixes B and C, into 20.
+    (drop
+      (struct.get $A 0
+        (select
+          (local.get $A)
+          (local.get $B)
+          (local.get $x)
+        )
+      )
+    )
+    (drop
+      (struct.get $A 0
+        (select
+          (local.get $A)
+          (local.get $C)
+          (local.get $x)
+        )
+      )
+    )
+    (drop
+      (struct.get $A 0
+        (select
+          (local.get $B)
+          (local.get $C)
+          (local.get $x)
+        )
+      )
+    )
+  )
+)
+
+;; As above,
