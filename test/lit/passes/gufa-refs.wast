@@ -5137,4 +5137,345 @@
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (struct.set $B 0
   ;; CHECK-NEXT:   (select (result (ref $B))
-  ;; CHECK-NEXT:    (local.g
+  ;; CHECK-NEXT:    (local.get $B)
+  ;; CHECK-NEXT:    (local.get $C)
+  ;; CHECK-NEXT:    (local.get $x)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (i32.const 20)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i32.const 10)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $B 0
+  ;; CHECK-NEXT:    (local.get $B)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i32.const 20)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $write (export "write") (param $x i32)
+    (local $A (ref $A))
+    (local $B (ref $B))
+    (local $C (ref $C))
+    (local.set $A
+      (struct.new $A
+        (i32.const 10)
+      )
+    )
+    (local.set $B
+      (struct.new $B
+        (i32.const 10)
+      )
+    )
+    (local.set $C
+      (struct.new $C
+        (i32.const 20)
+      )
+    )
+    ;; Write a different value now: 20. This prevents us from optimizing B, but
+    ;; we can still optimize A and C.
+    (struct.set $A 0
+      (select
+        (local.get $B)
+        (local.get $C)
+        (local.get $x)
+      )
+      (i32.const 20)
+    )
+    (drop
+      (struct.get $A 0
+        (local.get $A)
+      )
+    )
+    (drop
+      (struct.get $B 0
+        (local.get $B)
+      )
+    )
+    (drop
+      (struct.get $C 0
+        (local.get $C)
+      )
+    )
+  )
+)
+
+;; Tests for proper inference of imported etc. values - we do know their type,
+;; at least.
+(module
+  ;; CHECK:      (type $A (struct (field (mut i32))))
+  (type $A (struct_subtype (field (mut i32)) data))
+
+  ;; CHECK:      (type $B (struct_subtype (field (mut i32)) $A))
+  (type $B (struct_subtype (field (mut i32)) $A))
+
+  ;; CHECK:      (type $ref|$A|_=>_none (func (param (ref $A))))
+
+  ;; CHECK:      (type $none_=>_ref|$A| (func (result (ref $A))))
+
+  ;; CHECK:      (type $none_=>_none (func))
+
+  ;; CHECK:      (import "a" "b" (global $A (ref $A)))
+  (import "a" "b" (global $A (ref $A)))
+
+  ;; CHECK:      (import "a" "c" (func $A (result (ref $A))))
+  (import "a" "c" (func $A (result (ref $A))))
+
+  ;; CHECK:      (global $mut_A (ref $A) (struct.new $A
+  ;; CHECK-NEXT:  (i32.const 42)
+  ;; CHECK-NEXT: ))
+  (global $mut_A (ref $A) (struct.new $A
+    (i32.const 42)
+  ))
+
+  ;; CHECK:      (export "mut_A" (global $mut_A))
+  (export "mut_A" (global $mut_A))
+
+  ;; CHECK:      (export "yes" (func $yes))
+
+  ;; CHECK:      (export "no" (func $no))
+
+  ;; CHECK:      (func $yes (type $ref|$A|_=>_none) (param $A (ref $A))
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i32.const 1)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (block (result i32)
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (call $A)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (i32.const 1)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i32.const 1)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i32.const 1)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $yes (export "yes") (param $A (ref $A))
+    ;; An imported global has a known type, at least, which in this case is
+    ;; enough for us to infer a result of 1.
+    (drop
+      (ref.test $A
+        (global.get $A)
+      )
+    )
+    ;; Likewise, a function result.
+    (drop
+      (ref.test $A
+        (call $A)
+      )
+    )
+    ;; Likewise, a parameter to this function, which is exported, but we do
+    ;; still know the type it will be called with, and can optimize to 1.
+    (drop
+      (ref.test $A
+        (local.get $A)
+      )
+    )
+    ;; Likewise, an exported mutable global can be modified by the outside, but
+    ;; the type remains known, and we can optimize to 1.
+    (drop
+      (ref.test $A
+        (global.get $A)
+      )
+    )
+  )
+
+  ;; CHECK:      (func $no (type $ref|$A|_=>_none) (param $A (ref $A))
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.test $B
+  ;; CHECK-NEXT:    (global.get $A)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.test $B
+  ;; CHECK-NEXT:    (call $A)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.test $B
+  ;; CHECK-NEXT:    (local.get $A)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.test $B
+  ;; CHECK-NEXT:    (global.get $A)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $no (export "no") (param $A (ref $A))
+    ;; Identical to the above function, but now all tests are vs type $B. We
+    ;; cannot optimize any of these, as all we know is the type is $A.
+    (drop
+      (ref.test $B
+        (global.get $A)
+      )
+    )
+    (drop
+      (ref.test $B
+        (call $A)
+      )
+    )
+    (drop
+      (ref.test $B
+        (local.get $A)
+      )
+    )
+    (drop
+      (ref.test $B
+        (global.get $A)
+      )
+    )
+  )
+
+  ;; CHECK:      (func $filtering (type $none_=>_none)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (block
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (block $B (result (ref $B))
+  ;; CHECK-NEXT:      (drop
+  ;; CHECK-NEXT:       (br_on_cast $B $B
+  ;; CHECK-NEXT:        (struct.new $A
+  ;; CHECK-NEXT:         (i32.const 100)
+  ;; CHECK-NEXT:        )
+  ;; CHECK-NEXT:       )
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:      (unreachable)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (unreachable)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (block (result i32)
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (block $A (result (ref $A))
+  ;; CHECK-NEXT:      (drop
+  ;; CHECK-NEXT:       (br_on_cast $A $A
+  ;; CHECK-NEXT:        (struct.new $A
+  ;; CHECK-NEXT:         (i32.const 200)
+  ;; CHECK-NEXT:        )
+  ;; CHECK-NEXT:       )
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:      (unreachable)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (i32.const 1)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $filtering
+    ;; Check for filtering of values by the declared type in the wasm. We do not
+    ;; have specific filtering or flowing for br_on_* yet, so it will always
+    ;; send the value to the branch target. But the target has a declared type
+    ;; of $B, which means the exact $A gets filtered out, and nothing remains,
+    ;; so we can append an unreachable.
+    ;;
+    ;; When we add filtering/flowing for br_on_* this test should continue to
+    ;; pass and only the comment will need to be updated, so if you are reading
+    ;; this and it is stale, please fix that :)
+    (drop
+      (block $B (result (ref $B))
+        (drop
+          (br_on_cast $B $B
+            (struct.new $A
+              (i32.const 100)
+            )
+          )
+        )
+        (unreachable)
+      )
+    )
+    ;; But casting to $A will succeed, so the block is reachable, and also the
+    ;; cast will return 1.
+    (drop
+      (ref.test $A
+        (block $A (result (ref $A))
+          (drop
+            (br_on_cast $A $A
+              (struct.new $A
+                (i32.const 200)
+              )
+            )
+          )
+          (unreachable)
+        )
+      )
+    )
+  )
+)
+
+
+;; Check that array.new_data and array.new_seg are handled properly.
+(module
+  ;; CHECK:      (type $array-i8 (array i8))
+  (type $array-i8 (array i8))
+  ;; CHECK:      (type $array-funcref (array funcref))
+  (type $array-funcref (array funcref))
+  ;; CHECK:      (type $ref|$array-i8|_ref|$array-funcref|_=>_none (func (param (ref $array-i8) (ref $array-funcref))))
+
+  ;; CHECK:      (data "hello")
+  (data "hello")
+  ;; CHECK:      (elem func $test)
+  (elem func $test)
+
+  ;; CHECK:      (export "test" (func $test))
+
+  ;; CHECK:      (func $test (type $ref|$array-i8|_ref|$array-funcref|_=>_none) (param $array-i8 (ref $array-i8)) (param $array-funcref (ref $array-funcref))
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (array.new_data $array-i8 0
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 5)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (array.new_elem $array-funcref 0
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 1)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (array.get_u $array-i8
+  ;; CHECK-NEXT:    (local.get $array-i8)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (array.get $array-funcref
+  ;; CHECK-NEXT:    (local.get $array-funcref)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $test (export "test") (param $array-i8 (ref $array-i8)) (param $array-funcref (ref $array-funcref))
+    (drop
+      (array.new_data $array-i8 0
+        (i32.const 0)
+        (i32.const 5)
+      )
+    )
+    (drop
+      (array.new_elem $array-funcref 0
+        (i32.const 0)
+        (i32.const 1)
+      )
+    )
+    (drop
+      (array.get $array-i8
+        (local.get $array-i8)
+        (i32.const 0)
+      )
+    )
+    (drop
+      (array.get $array-funcref
+        (local.get $array-funcref)
+        (i32.const 0)
+      )
+    )
+  )
+)
