@@ -94,4 +94,18 @@
   ;; CHECK-NEXT: )
   (func $bar (result i32)
     ;; Like the first case, we can optimize the pop here. The pop and the try
-    ;; body agree on the value, 42, so we can replace the entire try
+    ;; body agree on the value, 42, so we can replace the entire try in theory,
+    ;; but we should not - removing the try would leave a pop without a proper
+    ;; parent (that is a problem even though the try does not have a name). We
+    ;; can still emit a 42 for the try, but must leave the try right before it,
+    ;; dropped.
+    (try (result i32)
+      (do
+        (i32.const 42)
+      )
+      (catch $tag$i32
+        (pop i32)
+      )
+    )
+  )
+)
