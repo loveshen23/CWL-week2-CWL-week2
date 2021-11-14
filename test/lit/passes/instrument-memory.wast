@@ -546,4 +546,134 @@
   ;; CHECK-NEXT:    (f64.const 9)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
-  ;; CHECK-NEXT:  (i32.store8 offset=
+  ;; CHECK-NEXT:  (i32.store8 offset=1
+  ;; CHECK-NEXT:   (call $store_ptr
+  ;; CHECK-NEXT:    (i32.const 38)
+  ;; CHECK-NEXT:    (i32.const 1)
+  ;; CHECK-NEXT:    (i32.const 1)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (call $store_val_i32
+  ;; CHECK-NEXT:    (i32.const 38)
+  ;; CHECK-NEXT:    (i32.const 1)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (i32.store16 offset=2 align=1
+  ;; CHECK-NEXT:   (call $store_ptr
+  ;; CHECK-NEXT:    (i32.const 39)
+  ;; CHECK-NEXT:    (i32.const 2)
+  ;; CHECK-NEXT:    (i32.const 2)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (call $store_val_i32
+  ;; CHECK-NEXT:    (i32.const 39)
+  ;; CHECK-NEXT:    (i32.const 2)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (i32.store offset=3 align=2
+  ;; CHECK-NEXT:   (call $store_ptr
+  ;; CHECK-NEXT:    (i32.const 40)
+  ;; CHECK-NEXT:    (i32.const 4)
+  ;; CHECK-NEXT:    (i32.const 3)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (call $store_val_i32
+  ;; CHECK-NEXT:    (i32.const 40)
+  ;; CHECK-NEXT:    (i32.const 3)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (i64.store8 offset=4
+  ;; CHECK-NEXT:   (call $store_ptr
+  ;; CHECK-NEXT:    (i32.const 41)
+  ;; CHECK-NEXT:    (i32.const 1)
+  ;; CHECK-NEXT:    (i32.const 4)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (call $store_val_i64
+  ;; CHECK-NEXT:    (i32.const 41)
+  ;; CHECK-NEXT:    (i64.const 4)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (i64.store16 offset=5
+  ;; CHECK-NEXT:   (call $store_ptr
+  ;; CHECK-NEXT:    (i32.const 42)
+  ;; CHECK-NEXT:    (i32.const 2)
+  ;; CHECK-NEXT:    (i32.const 5)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (call $store_val_i64
+  ;; CHECK-NEXT:    (i32.const 42)
+  ;; CHECK-NEXT:    (i64.const 5)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (i64.store32 offset=6 align=2
+  ;; CHECK-NEXT:   (call $store_ptr
+  ;; CHECK-NEXT:    (i32.const 43)
+  ;; CHECK-NEXT:    (i32.const 4)
+  ;; CHECK-NEXT:    (i32.const 6)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (call $store_val_i64
+  ;; CHECK-NEXT:    (i32.const 43)
+  ;; CHECK-NEXT:    (i64.const 6)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (i64.store offset=7 align=2
+  ;; CHECK-NEXT:   (call $store_ptr
+  ;; CHECK-NEXT:    (i32.const 44)
+  ;; CHECK-NEXT:    (i32.const 8)
+  ;; CHECK-NEXT:    (i32.const 7)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (call $store_val_i64
+  ;; CHECK-NEXT:    (i32.const 44)
+  ;; CHECK-NEXT:    (i64.const 7)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (f32.store offset=8 align=2
+  ;; CHECK-NEXT:   (call $store_ptr
+  ;; CHECK-NEXT:    (i32.const 45)
+  ;; CHECK-NEXT:    (i32.const 4)
+  ;; CHECK-NEXT:    (i32.const 8)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (call $store_val_f32
+  ;; CHECK-NEXT:    (i32.const 45)
+  ;; CHECK-NEXT:    (f32.const 8)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (f64.store offset=9 align=2
+  ;; CHECK-NEXT:   (call $store_ptr
+  ;; CHECK-NEXT:    (i32.const 46)
+  ;; CHECK-NEXT:    (i32.const 8)
+  ;; CHECK-NEXT:    (i32.const 9)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (call $store_val_f64
+  ;; CHECK-NEXT:    (i32.const 46)
+  ;; CHECK-NEXT:    (f64.const 9)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $B (type $1)
+    (i32.store8 (i32.const 0) (i32.const 1))
+    (i32.store16 (i32.const 0) (i32.const 2))
+    (i32.store (i32.const 0) (i32.const 3))
+    (i64.store8 (i32.const 0) (i64.const 4))
+    (i64.store16 (i32.const 0) (i64.const 5))
+    (i64.store32 (i32.const 0) (i64.const 6))
+    (i64.store (i32.const 0) (i64.const 7))
+    (f32.store (i32.const 0) (f32.const 8))
+    (f64.store (i32.const 0) (f64.const 9))
+
+    (i32.store8 align=1 offset=1 (i32.const 0) (i32.const 1))
+    (i32.store16 align=1 offset=2 (i32.const 0) (i32.const 2))
+    (i32.store align=2 offset=3 (i32.const 0) (i32.const 3))
+    (i64.store8 align=1 offset=4 (i32.const 0) (i64.const 4))
+    (i64.store16 align=2 offset=5 (i32.const 0) (i64.const 5))
+    (i64.store32 align=2 offset=6 (i32.const 0) (i64.const 6))
+    (i64.store align=2 offset=7 (i32.const 0) (i64.const 7))
+    (f32.store align=2 offset=8 (i32.const 0) (f32.const 8))
+    (f64.store align=2 offset=9 (i32.const 0) (f64.const 9))
+  )
+)
