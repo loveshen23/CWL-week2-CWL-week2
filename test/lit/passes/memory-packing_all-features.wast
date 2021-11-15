@@ -177,4 +177,427 @@
 
   ;; CHECK:      (data "more")
 
-  ;; CHEC
+  ;; CHECK:      (data "zeroes")
+
+  ;; CHECK:      (data "no zeroes")
+
+  ;; CHECK:      (func $zeroes-at-start (type $none_=>_none)
+  ;; CHECK-NEXT:  (block
+  ;; CHECK-NEXT:   (if
+  ;; CHECK-NEXT:    (global.get $__mem_segment_drop_state)
+  ;; CHECK-NEXT:    (unreachable)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.fill
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 30)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.init 0
+  ;; CHECK-NEXT:    (i32.const 30)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 15)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (block
+  ;; CHECK-NEXT:   (global.set $__mem_segment_drop_state
+  ;; CHECK-NEXT:    (i32.const 1)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (data.drop 0)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $zeroes-at-start
+    (memory.init 1
+      (i32.const 0)
+      (i32.const 0)
+      (i32.const 45)
+    )
+    (data.drop 1)
+  )
+
+  ;; the not-split tests have too many memory.init and data.drop instructions for splitting to be worth it
+  (data "\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00zeroes at start") ;; 2
+
+  ;; CHECK:      (func $zeroes-at-start-not-split (type $none_=>_none)
+  ;; CHECK-NEXT:  (memory.init 1
+  ;; CHECK-NEXT:   (i32.const 0)
+  ;; CHECK-NEXT:   (i32.const 0)
+  ;; CHECK-NEXT:   (i32.const 45)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (memory.init 1
+  ;; CHECK-NEXT:   (i32.const 0)
+  ;; CHECK-NEXT:   (i32.const 0)
+  ;; CHECK-NEXT:   (i32.const 45)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (memory.init 1
+  ;; CHECK-NEXT:   (i32.const 0)
+  ;; CHECK-NEXT:   (i32.const 0)
+  ;; CHECK-NEXT:   (i32.const 45)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (memory.init 1
+  ;; CHECK-NEXT:   (i32.const 0)
+  ;; CHECK-NEXT:   (i32.const 0)
+  ;; CHECK-NEXT:   (i32.const 45)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (data.drop 1)
+  ;; CHECK-NEXT: )
+  (func $zeroes-at-start-not-split
+    (memory.init 2
+      (i32.const 0)
+      (i32.const 0)
+      (i32.const 45)
+    )
+    (memory.init 2
+      (i32.const 0)
+      (i32.const 0)
+      (i32.const 45)
+    )
+    (memory.init 2
+      (i32.const 0)
+      (i32.const 0)
+      (i32.const 45)
+    )
+    (memory.init 2
+      (i32.const 0)
+      (i32.const 0)
+      (i32.const 45)
+    )
+    (data.drop 2)
+  )
+
+  (data "\00\00\00few zeroes at start") ;; 3
+
+  ;; CHECK:      (func $few-zeroes-at-start (type $none_=>_none)
+  ;; CHECK-NEXT:  (memory.init 2
+  ;; CHECK-NEXT:   (i32.const 0)
+  ;; CHECK-NEXT:   (i32.const 0)
+  ;; CHECK-NEXT:   (i32.const 22)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (data.drop 2)
+  ;; CHECK-NEXT: )
+  (func $few-zeroes-at-start
+    (memory.init 3
+      (i32.const 0)
+      (i32.const 0)
+      (i32.const 22)
+    )
+    (data.drop 3)
+  )
+
+  (data "zeroes at end\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00") ;; 4
+
+  ;; CHECK:      (func $zeroes-at-end (type $none_=>_none)
+  ;; CHECK-NEXT:  (block
+  ;; CHECK-NEXT:   (memory.init 3
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 13)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.fill
+  ;; CHECK-NEXT:    (i32.const 13)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 30)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (data.drop 3)
+  ;; CHECK-NEXT: )
+  (func $zeroes-at-end
+    (memory.init 4
+      (i32.const 0)
+      (i32.const 0)
+      (i32.const 43)
+    )
+    (data.drop 4)
+  )
+
+  (data "zeroes at end\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00") ;; 5
+
+  ;; CHECK:      (func $zeroes-at-end-not-split (type $none_=>_none)
+  ;; CHECK-NEXT:  (memory.init 4
+  ;; CHECK-NEXT:   (i32.const 0)
+  ;; CHECK-NEXT:   (i32.const 0)
+  ;; CHECK-NEXT:   (i32.const 43)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (memory.init 4
+  ;; CHECK-NEXT:   (i32.const 0)
+  ;; CHECK-NEXT:   (i32.const 0)
+  ;; CHECK-NEXT:   (i32.const 43)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (memory.init 4
+  ;; CHECK-NEXT:   (i32.const 0)
+  ;; CHECK-NEXT:   (i32.const 0)
+  ;; CHECK-NEXT:   (i32.const 43)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (memory.init 4
+  ;; CHECK-NEXT:   (i32.const 0)
+  ;; CHECK-NEXT:   (i32.const 0)
+  ;; CHECK-NEXT:   (i32.const 43)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (data.drop 4)
+  ;; CHECK-NEXT: )
+  (func $zeroes-at-end-not-split
+    (memory.init 5
+      (i32.const 0)
+      (i32.const 0)
+      (i32.const 43)
+    )
+    (memory.init 5
+      (i32.const 0)
+      (i32.const 0)
+      (i32.const 43)
+    )
+    (memory.init 5
+      (i32.const 0)
+      (i32.const 0)
+      (i32.const 43)
+    )
+    (memory.init 5
+      (i32.const 0)
+      (i32.const 0)
+      (i32.const 43)
+    )
+    (data.drop 5)
+  )
+
+  (data "few zeroes at end\00\00\00") ;; 6
+
+  ;; CHECK:      (func $few-zeroes-at-end (type $none_=>_none)
+  ;; CHECK-NEXT:  (memory.init 5
+  ;; CHECK-NEXT:   (i32.const 0)
+  ;; CHECK-NEXT:   (i32.const 0)
+  ;; CHECK-NEXT:   (i32.const 20)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (data.drop 5)
+  ;; CHECK-NEXT: )
+  (func $few-zeroes-at-end
+    (memory.init 6
+      (i32.const 0)
+      (i32.const 0)
+      (i32.const 20)
+    )
+    (data.drop 6)
+  )
+
+  (data "zeroes\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00in middle") ;; 7
+
+  ;; CHECK:      (func $zeroes-in-middle (type $none_=>_none)
+  ;; CHECK-NEXT:  (block
+  ;; CHECK-NEXT:   (memory.init 6
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 6)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.fill
+  ;; CHECK-NEXT:    (i32.const 6)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 30)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.init 7
+  ;; CHECK-NEXT:    (i32.const 36)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 9)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (block
+  ;; CHECK-NEXT:   (data.drop 6)
+  ;; CHECK-NEXT:   (data.drop 7)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $zeroes-in-middle
+    (memory.init 7
+      (i32.const 0)
+      (i32.const 0)
+      (i32.const 45)
+    )
+    (data.drop 7)
+  )
+
+  (data "zeroes\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00in middle") ;; 8
+
+  ;; CHECK:      (func $zeroes-in-middle-not-split (type $none_=>_none)
+  ;; CHECK-NEXT:  (memory.init 8
+  ;; CHECK-NEXT:   (i32.const 0)
+  ;; CHECK-NEXT:   (i32.const 0)
+  ;; CHECK-NEXT:   (i32.const 35)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (memory.init 8
+  ;; CHECK-NEXT:   (i32.const 0)
+  ;; CHECK-NEXT:   (i32.const 0)
+  ;; CHECK-NEXT:   (i32.const 45)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (data.drop 8)
+  ;; CHECK-NEXT: )
+  (func $zeroes-in-middle-not-split
+    (memory.init 8
+      (i32.const 0)
+      (i32.const 0)
+      (i32.const 35)
+    )
+    (memory.init 8
+      (i32.const 0)
+      (i32.const 0)
+      (i32.const 45)
+    )
+    (data.drop 8)
+  )
+
+  (data "few zeroes\00\00\00in middle") ;; 9
+
+  ;; CHECK:      (func $few-zeroes-in-middle (type $none_=>_none)
+  ;; CHECK-NEXT:  (memory.init 9
+  ;; CHECK-NEXT:   (i32.const 0)
+  ;; CHECK-NEXT:   (i32.const 0)
+  ;; CHECK-NEXT:   (i32.const 22)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (data.drop 9)
+  ;; CHECK-NEXT: )
+  (func $few-zeroes-in-middle
+    (memory.init 9
+      (i32.const 0)
+      (i32.const 0)
+      (i32.const 22)
+    )
+    (data.drop 9)
+  )
+
+  (data "multiple\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00spans\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00of zeroes") ;; 10
+
+  ;; CHECK:      (func $multiple-spans-of-zeroes (type $none_=>_none)
+  ;; CHECK-NEXT:  (block
+  ;; CHECK-NEXT:   (memory.init 10
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 8)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.fill
+  ;; CHECK-NEXT:    (i32.const 8)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 30)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.init 11
+  ;; CHECK-NEXT:    (i32.const 38)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 5)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.fill
+  ;; CHECK-NEXT:    (i32.const 43)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 30)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.init 12
+  ;; CHECK-NEXT:    (i32.const 73)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 9)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (block
+  ;; CHECK-NEXT:   (data.drop 10)
+  ;; CHECK-NEXT:   (data.drop 11)
+  ;; CHECK-NEXT:   (data.drop 12)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $multiple-spans-of-zeroes
+    (memory.init 10
+      (i32.const 0)
+      (i32.const 0)
+      (i32.const 82)
+    )
+    (data.drop 10)
+  )
+
+  (data "\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00even\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00more\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00zeroes\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00") ;; 11
+
+  ;; CHECK:      (func $even-more-zeroes (type $none_=>_none)
+  ;; CHECK-NEXT:  (block
+  ;; CHECK-NEXT:   (if
+  ;; CHECK-NEXT:    (global.get $__mem_segment_drop_state_0)
+  ;; CHECK-NEXT:    (unreachable)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.fill
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 30)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.init 13
+  ;; CHECK-NEXT:    (i32.const 30)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 4)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.fill
+  ;; CHECK-NEXT:    (i32.const 34)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 30)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.init 14
+  ;; CHECK-NEXT:    (i32.const 64)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 4)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.fill
+  ;; CHECK-NEXT:    (i32.const 68)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 30)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.init 15
+  ;; CHECK-NEXT:    (i32.const 98)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 6)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.fill
+  ;; CHECK-NEXT:    (i32.const 104)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 30)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (block
+  ;; CHECK-NEXT:   (global.set $__mem_segment_drop_state_0
+  ;; CHECK-NEXT:    (i32.const 1)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (data.drop 13)
+  ;; CHECK-NEXT:   (data.drop 14)
+  ;; CHECK-NEXT:   (data.drop 15)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $even-more-zeroes
+    (memory.init 11
+      (i32.const 0)
+      (i32.const 0)
+      (i32.const 134)
+    )
+    (data.drop 11)
+  )
+
+  (data "\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00") ;; 12
+
+  ;; CHECK:      (func $only-zeroes (type $none_=>_none)
+  ;; CHECK-NEXT:  (block
+  ;; CHECK-NEXT:   (if
+  ;; CHECK-NEXT:    (global.get $__mem_segment_drop_state_1)
+  ;; CHECK-NEXT:    (unreachable)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.fill
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 30)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (global.set $__mem_segment_drop_state_1
+  ;; CHECK-NEXT:   (i32.const 1)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $only-zeroes
+    (memory.init 12
+      (i32.const 0)
+      (i32.const 0)
+      (i32.const 30)
+    )
+    (data.drop 12)
+  )
+
+  (data "no zeroes") ;; 13
+
+  ;; CHECK:      (func $no-zeroes (type $none_=>_none)
+  ;; CHECK-NEXT:  (memory.init 16
+  ;; CHECK-NEXT:   (i32.const 0)
+  ;; CHECK-NEXT:   (i32.const 0)
+  ;; CHECK-NEXT:   (i32.const 9)
+  ;; CHECK-NEXT: 
