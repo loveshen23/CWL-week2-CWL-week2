@@ -600,4 +600,375 @@
   ;; CHECK-NEXT:   (i32.const 0)
   ;; CHECK-NEXT:   (i32.const 0)
   ;; CHECK-NEXT:   (i32.const 9)
-  ;; CHECK-NEXT: 
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (data.drop 16)
+  ;; CHECK-NEXT: )
+  (func $no-zeroes
+    (memory.init 13
+      (i32.const 0)
+      (i32.const 0)
+      (i32.const 9)
+    )
+    (data.drop 13)
+  )
+
+  (data "") ;; 14
+
+  ;; CHECK:      (func $empty (type $none_=>_none)
+  ;; CHECK-NEXT:  (if
+  ;; CHECK-NEXT:   (i32.gt_u
+  ;; CHECK-NEXT:    (i32.const 13)
+  ;; CHECK-NEXT:    (i32.shl
+  ;; CHECK-NEXT:     (memory.size)
+  ;; CHECK-NEXT:     (i32.const 16)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (unreachable)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (nop)
+  ;; CHECK-NEXT: )
+  (func $empty
+    (memory.init 14
+      (i32.const 13)
+      (i32.const 0)
+      (i32.const 0)
+    )
+    (data.drop 14)
+  )
+
+  (data "only dropped") ;; 15
+
+  ;; CHECK:      (func $only-dropped (type $none_=>_none)
+  ;; CHECK-NEXT:  (nop)
+  ;; CHECK-NEXT:  (nop)
+  ;; CHECK-NEXT: )
+  (func $only-dropped
+    (data.drop 15)
+    (data.drop 15)
+  )
+
+  (data "\00\00\00\00\00") ;; 16
+
+  ;; CHECK:      (func $only-dropped-zeroes (type $none_=>_none)
+  ;; CHECK-NEXT:  (nop)
+  ;; CHECK-NEXT:  (nop)
+  ;; CHECK-NEXT: )
+  (func $only-dropped-zeroes
+    (data.drop 16)
+    (data.drop 16)
+  )
+
+  (data "") ;; not referenced
+
+  (data "\00\00\00\00\00") ;; not referenced
+)
+
+(module
+  ;; CHECK:      (type $none_=>_none (func))
+
+  ;; CHECK:      (import "env" "param" (global $param i32))
+
+  ;; CHECK:      (global $__mem_segment_drop_state (mut i32) (i32.const 0))
+
+  ;; CHECK:      (global $__mem_segment_drop_state_0 (mut i32) (i32.const 0))
+
+  ;; CHECK:      (global $__mem_segment_drop_state_1 (mut i32) (i32.const 0))
+
+  ;; CHECK:      (global $__mem_segment_drop_state_2 (mut i32) (i32.const 0))
+
+  ;; CHECK:      (global $__mem_segment_drop_state_3 (mut i32) (i32.const 0))
+
+  ;; CHECK:      (global $__mem_segment_drop_state_4 (mut i32) (i32.const 0))
+
+  ;; CHECK:      (global $__mem_segment_drop_state_5 (mut i32) (i32.const 0))
+
+  ;; CHECK:      (global $__mem_segment_drop_state_6 (mut i32) (i32.const 0))
+
+  ;; CHECK:      (memory $0 2048 2048)
+  (memory $0 2048 2048)
+  (import "env" "param" (global $param i32))
+
+  ;; CHECK:      (data "even")
+
+  ;; CHECK:      (data "more")
+
+  ;; CHECK:      (data "zeroes")
+
+  ;; CHECK:      (data "\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00even\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00more\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00zeroes\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00")
+  (data "\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00even\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00more\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00zeroes\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00") ;; 0
+
+  ;; CHECK:      (data "\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00even\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00more\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00zeroes\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00")
+
+  ;; CHECK:      (data "even")
+
+  ;; CHECK:      (data "more")
+
+  ;; CHECK:      (data "zeroes")
+
+  ;; CHECK:      (data "even")
+
+  ;; CHECK:      (data "more")
+
+  ;; CHECK:      (data "zeroes")
+
+  ;; CHECK:      (data "even")
+
+  ;; CHECK:      (data "more")
+
+  ;; CHECK:      (data "zeroes")
+
+  ;; CHECK:      (data "even")
+
+  ;; CHECK:      (data "more")
+
+  ;; CHECK:      (data "zeroes")
+
+  ;; CHECK:      (data "even")
+
+  ;; CHECK:      (data "more")
+
+  ;; CHECK:      (data "zeroes")
+
+  ;; CHECK:      (data "even")
+
+  ;; CHECK:      (data "more")
+
+  ;; CHECK:      (data "zeroes")
+
+  ;; CHECK:      (data "even")
+
+  ;; CHECK:      (data "more")
+
+  ;; CHECK:      (data "zeroes")
+
+  ;; CHECK:      (data "even")
+
+  ;; CHECK:      (data "more")
+
+  ;; CHECK:      (data "zeroes")
+
+  ;; CHECK:      (data "even")
+
+  ;; CHECK:      (data "more")
+
+  ;; CHECK:      (data "zeroes")
+
+  ;; CHECK:      (func $nonconst-dest (type $none_=>_none)
+  ;; CHECK-NEXT:  (local $0 i32)
+  ;; CHECK-NEXT:  (block
+  ;; CHECK-NEXT:   (local.set $0
+  ;; CHECK-NEXT:    (global.get $param)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (if
+  ;; CHECK-NEXT:    (global.get $__mem_segment_drop_state)
+  ;; CHECK-NEXT:    (unreachable)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.fill
+  ;; CHECK-NEXT:    (local.get $0)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 30)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.init 0
+  ;; CHECK-NEXT:    (i32.add
+  ;; CHECK-NEXT:     (local.get $0)
+  ;; CHECK-NEXT:     (i32.const 30)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 4)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.fill
+  ;; CHECK-NEXT:    (i32.add
+  ;; CHECK-NEXT:     (local.get $0)
+  ;; CHECK-NEXT:     (i32.const 34)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 30)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.init 1
+  ;; CHECK-NEXT:    (i32.add
+  ;; CHECK-NEXT:     (local.get $0)
+  ;; CHECK-NEXT:     (i32.const 64)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 4)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.fill
+  ;; CHECK-NEXT:    (i32.add
+  ;; CHECK-NEXT:     (local.get $0)
+  ;; CHECK-NEXT:     (i32.const 68)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 30)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.init 2
+  ;; CHECK-NEXT:    (i32.add
+  ;; CHECK-NEXT:     (local.get $0)
+  ;; CHECK-NEXT:     (i32.const 98)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 6)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.fill
+  ;; CHECK-NEXT:    (i32.add
+  ;; CHECK-NEXT:     (local.get $0)
+  ;; CHECK-NEXT:     (i32.const 104)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 30)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (block
+  ;; CHECK-NEXT:   (global.set $__mem_segment_drop_state
+  ;; CHECK-NEXT:    (i32.const 1)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (data.drop 0)
+  ;; CHECK-NEXT:   (data.drop 1)
+  ;; CHECK-NEXT:   (data.drop 2)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $nonconst-dest
+    (memory.init 0
+      (global.get $param)
+      (i32.const 0)
+      (i32.const 134)
+    )
+    (data.drop 0)
+  )
+
+  (data "\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00even\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00more\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00zeroes\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00") ;; 1
+
+  ;; CHECK:      (func $nonconst-offset (type $none_=>_none)
+  ;; CHECK-NEXT:  (memory.init 3
+  ;; CHECK-NEXT:   (i32.const 0)
+  ;; CHECK-NEXT:   (global.get $param)
+  ;; CHECK-NEXT:   (i32.const 134)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (data.drop 3)
+  ;; CHECK-NEXT: )
+  (func $nonconst-offset
+    (memory.init 1
+      (i32.const 0)
+      (global.get $param)
+      (i32.const 134)
+    )
+    (data.drop 1)
+  )
+
+  (data "\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00even\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00more\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00zeroes\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00") ;; 2
+
+  ;; CHECK:      (func $nonconst-size (type $none_=>_none)
+  ;; CHECK-NEXT:  (memory.init 4
+  ;; CHECK-NEXT:   (i32.const 0)
+  ;; CHECK-NEXT:   (i32.const 0)
+  ;; CHECK-NEXT:   (global.get $param)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (data.drop 4)
+  ;; CHECK-NEXT: )
+  (func $nonconst-size
+    (memory.init 2
+      (i32.const 0)
+      (i32.const 0)
+      (global.get $param)
+    )
+    (data.drop 2)
+  )
+
+  (data "\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00even\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00more\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00zeroes\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00") ;; 3
+
+  ;; CHECK:      (func $partial-skip-start (type $none_=>_none)
+  ;; CHECK-NEXT:  (block
+  ;; CHECK-NEXT:   (if
+  ;; CHECK-NEXT:    (global.get $__mem_segment_drop_state_0)
+  ;; CHECK-NEXT:    (unreachable)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.fill
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 20)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.init 5
+  ;; CHECK-NEXT:    (i32.const 20)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 4)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.fill
+  ;; CHECK-NEXT:    (i32.const 24)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 30)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.init 6
+  ;; CHECK-NEXT:    (i32.const 54)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 4)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.fill
+  ;; CHECK-NEXT:    (i32.const 58)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 30)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.init 7
+  ;; CHECK-NEXT:    (i32.const 88)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 6)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.fill
+  ;; CHECK-NEXT:    (i32.const 94)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 30)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (block
+  ;; CHECK-NEXT:   (global.set $__mem_segment_drop_state_0
+  ;; CHECK-NEXT:    (i32.const 1)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (data.drop 5)
+  ;; CHECK-NEXT:   (data.drop 6)
+  ;; CHECK-NEXT:   (data.drop 7)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $partial-skip-start
+    (memory.init 3
+      (i32.const 0)
+      (i32.const 10)
+      (i32.const 124)
+    )
+    (data.drop 3)
+  )
+
+  (data "\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00even\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00more\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00zeroes\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00") ;; 4
+
+  ;; CHECK:      (func $full-skip-start (type $none_=>_none)
+  ;; CHECK-NEXT:  (block
+  ;; CHECK-NEXT:   (memory.init 8
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 2)
+  ;; CHECK-NEXT:    (i32.const 2)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.fill
+  ;; CHECK-NEXT:    (i32.const 2)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 30)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.init 9
+  ;; CHECK-NEXT:    (i32.const 32)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 4)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.fill
+  ;; CHECK-NEXT:    (i32.const 36)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 30)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.init 10
+  ;; CHECK-NEXT:    (i32.const 66)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 6)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.fill
+  ;; CHECK-NEXT:    (i32.const 72)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 30)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (block
+ 
