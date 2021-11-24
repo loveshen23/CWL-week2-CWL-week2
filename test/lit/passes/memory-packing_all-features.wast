@@ -1939,4 +1939,361 @@
   ;; CHECK-NEXT:    (i32.const 30)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:   (memory.init 30
-  ;; CHECK-NEXT:
+  ;; CHECK-NEXT:    (i32.const 930)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 1)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.fill
+  ;; CHECK-NEXT:    (i32.const 931)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 30)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.init 31
+  ;; CHECK-NEXT:    (i32.const 961)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 1)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.fill
+  ;; CHECK-NEXT:    (i32.const 962)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 30)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.init 32
+  ;; CHECK-NEXT:    (i32.const 992)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 1)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.fill
+  ;; CHECK-NEXT:    (i32.const 993)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 30)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.init 33
+  ;; CHECK-NEXT:    (i32.const 1023)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 1)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.fill
+  ;; CHECK-NEXT:    (i32.const 1024)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 30)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.init 34
+  ;; CHECK-NEXT:    (i32.const 1054)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 1)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.fill
+  ;; CHECK-NEXT:    (i32.const 1055)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 30)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.init 35
+  ;; CHECK-NEXT:    (i32.const 1085)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 1)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.fill
+  ;; CHECK-NEXT:    (i32.const 1086)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 30)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.init 36
+  ;; CHECK-NEXT:    (i32.const 1116)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 1)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.fill
+  ;; CHECK-NEXT:    (i32.const 1117)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 30)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.init 37
+  ;; CHECK-NEXT:    (i32.const 1147)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 1)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.fill
+  ;; CHECK-NEXT:    (i32.const 1148)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 30)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.init 38
+  ;; CHECK-NEXT:    (i32.const 1178)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 1)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.fill
+  ;; CHECK-NEXT:    (i32.const 1179)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 30)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.init 39
+  ;; CHECK-NEXT:    (i32.const 1209)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 1)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.fill
+  ;; CHECK-NEXT:    (i32.const 1210)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 30)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.init 40
+  ;; CHECK-NEXT:    (i32.const 1240)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 1)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.fill
+  ;; CHECK-NEXT:    (i32.const 1241)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 30)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.init 41
+  ;; CHECK-NEXT:    (i32.const 1271)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 1)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.fill
+  ;; CHECK-NEXT:    (i32.const 1272)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 30)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.init 42
+  ;; CHECK-NEXT:    (i32.const 1302)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 1)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.fill
+  ;; CHECK-NEXT:    (i32.const 1303)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 30)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.init 43
+  ;; CHECK-NEXT:    (i32.const 1333)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 1)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (memory.fill
+  ;; CHECK-NEXT:    (i32.const 1334)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 11)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (block
+  ;; CHECK-NEXT:   (data.drop 0)
+  ;; CHECK-NEXT:   (data.drop 1)
+  ;; CHECK-NEXT:   (data.drop 2)
+  ;; CHECK-NEXT:   (data.drop 3)
+  ;; CHECK-NEXT:   (data.drop 4)
+  ;; CHECK-NEXT:   (data.drop 5)
+  ;; CHECK-NEXT:   (data.drop 6)
+  ;; CHECK-NEXT:   (data.drop 7)
+  ;; CHECK-NEXT:   (data.drop 8)
+  ;; CHECK-NEXT:   (data.drop 9)
+  ;; CHECK-NEXT:   (data.drop 10)
+  ;; CHECK-NEXT:   (data.drop 11)
+  ;; CHECK-NEXT:   (data.drop 12)
+  ;; CHECK-NEXT:   (data.drop 13)
+  ;; CHECK-NEXT:   (data.drop 14)
+  ;; CHECK-NEXT:   (data.drop 15)
+  ;; CHECK-NEXT:   (data.drop 16)
+  ;; CHECK-NEXT:   (data.drop 17)
+  ;; CHECK-NEXT:   (data.drop 18)
+  ;; CHECK-NEXT:   (data.drop 19)
+  ;; CHECK-NEXT:   (data.drop 20)
+  ;; CHECK-NEXT:   (data.drop 21)
+  ;; CHECK-NEXT:   (data.drop 22)
+  ;; CHECK-NEXT:   (data.drop 23)
+  ;; CHECK-NEXT:   (data.drop 24)
+  ;; CHECK-NEXT:   (data.drop 25)
+  ;; CHECK-NEXT:   (data.drop 26)
+  ;; CHECK-NEXT:   (data.drop 27)
+  ;; CHECK-NEXT:   (data.drop 28)
+  ;; CHECK-NEXT:   (data.drop 29)
+  ;; CHECK-NEXT:   (data.drop 30)
+  ;; CHECK-NEXT:   (data.drop 31)
+  ;; CHECK-NEXT:   (data.drop 32)
+  ;; CHECK-NEXT:   (data.drop 33)
+  ;; CHECK-NEXT:   (data.drop 34)
+  ;; CHECK-NEXT:   (data.drop 35)
+  ;; CHECK-NEXT:   (data.drop 36)
+  ;; CHECK-NEXT:   (data.drop 37)
+  ;; CHECK-NEXT:   (data.drop 38)
+  ;; CHECK-NEXT:   (data.drop 39)
+  ;; CHECK-NEXT:   (data.drop 40)
+  ;; CHECK-NEXT:   (data.drop 41)
+  ;; CHECK-NEXT:   (data.drop 42)
+  ;; CHECK-NEXT:   (data.drop 43)
+  ;; CHECK-NEXT:   (data.drop 44)
+  ;; CHECK-NEXT:   (data.drop 45)
+  ;; CHECK-NEXT:   (data.drop 46)
+  ;; CHECK-NEXT:   (data.drop 47)
+  ;; CHECK-NEXT:   (data.drop 48)
+  ;; CHECK-NEXT:   (data.drop 49)
+  ;; CHECK-NEXT:   (data.drop 50)
+  ;; CHECK-NEXT:   (data.drop 51)
+  ;; CHECK-NEXT:   (data.drop 52)
+  ;; CHECK-NEXT:   (data.drop 53)
+  ;; CHECK-NEXT:   (data.drop 54)
+  ;; CHECK-NEXT:   (data.drop 55)
+  ;; CHECK-NEXT:   (data.drop 56)
+  ;; CHECK-NEXT:   (data.drop 57)
+  ;; CHECK-NEXT:   (data.drop 58)
+  ;; CHECK-NEXT:   (data.drop 59)
+  ;; CHECK-NEXT:   (data.drop 60)
+  ;; CHECK-NEXT:   (data.drop 61)
+  ;; CHECK-NEXT:   (data.drop 62)
+  ;; CHECK-NEXT:   (data.drop 63)
+  ;; CHECK-NEXT:   (data.drop 64)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $init-lots
+    (memory.init 0
+      (i32.const 0)
+      (i32.const 0)
+      (i32.const 1345)
+    )
+    (data.drop 0)
+  )
+)
+(module
+ ;; CHECK:      (memory $0 1 1)
+ (memory $0 1 1)
+ (data (i32.const 1024) "x")
+ (data (i32.const 1024) "\00") ;; this tramples the "x", and so must be kept.
+)
+;; CHECK:      (data (i32.const 1024) "x")
+
+;; CHECK:      (data (i32.const 1024) "\00")
+(module
+ ;; CHECK:      (memory $0 1 1)
+ (memory $0 1 1)
+ (data (i32.const 1024) "x")
+ (data (i32.const 1025) "\00")
+)
+;; CHECK:      (data (i32.const 1024) "x")
+(module
+ ;; CHECK:      (memory $0 1 1)
+ (memory $0 1 1)
+ (data (i32.const 1024) "x")
+ (data (i32.const 1023) "\00")
+)
+;; CHECK:      (data (i32.const 1024) "x")
+(module
+ ;; CHECK:      (memory $0 1 1)
+ (memory $0 1 1)
+ (data (i32.const 1024) "x")
+ (data (i32.const 1024) "\00") ;; when we see one bad thing, we give up
+ (data (i32.const 4096) "\00")
+)
+;; CHECK:      (data (i32.const 1024) "x")
+
+;; CHECK:      (data (i32.const 1024) "\00")
+
+;; CHECK:      (data (i32.const 4096) "\00")
+(module
+ ;; CHECK:      (import "env" "memoryBase" (global $memoryBase i32))
+
+ ;; CHECK:      (memory $0 1 1)
+ (memory $0 1 1)
+ (import "env" "memoryBase" (global $memoryBase i32))
+ (data (i32.const 1024) "x")
+ (data (global.get $memoryBase) "\00") ;; this could trample, or not
+)
+;; CHECK:      (data (i32.const 1024) "x")
+
+;; CHECK:      (data (global.get $memoryBase) "\00")
+(module
+ ;; CHECK:      (import "env" "memoryBase" (global $memoryBase i32))
+
+ ;; CHECK:      (memory $0 1 1)
+ (memory $0 1 1)
+ (import "env" "memoryBase" (global $memoryBase i32))
+ (data (i32.const 1024) "\00") ;; this could trample, or not
+ (data (global.get $memoryBase) "x")
+)
+;; CHECK:      (data (i32.const 1024) "\00")
+
+;; CHECK:      (data (global.get $memoryBase) "x")
+(module
+ ;; CHECK:      (type $none_=>_none (func))
+
+ ;; CHECK:      (global $__mem_segment_drop_state (mut i32) (i32.const 0))
+
+ ;; CHECK:      (memory $0 1 1)
+ (memory $0 1 1)
+ (data "skipped\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00included")
+ ;; CHECK:      (data "skipped")
+
+ ;; CHECK:      (data "included")
+
+ ;; CHECK:      (export "func_54" (func $0))
+ (export "func_54" (func $0))
+ ;; CHECK:      (func $0 (type $none_=>_none)
+ ;; CHECK-NEXT:  (if
+ ;; CHECK-NEXT:   (global.get $__mem_segment_drop_state)
+ ;; CHECK-NEXT:   (unreachable)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (memory.fill
+ ;; CHECK-NEXT:   (i32.const 0)
+ ;; CHECK-NEXT:   (i32.const 0)
+ ;; CHECK-NEXT:   (i32.const 30)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (memory.init 1
+ ;; CHECK-NEXT:   (i32.const 30)
+ ;; CHECK-NEXT:   (i32.const 0)
+ ;; CHECK-NEXT:   (i32.const 8)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT: )
+ (func $0
+  (memory.init 0
+   (i32.const 0)
+   (i32.const 7)
+   (i32.const 38)
+  )
+ )
+)
+(module
+ ;; we can't optimize on an imported memory without zeroFilledMemory being set.
+ ;; CHECK:      (import "env" "memory" (memory $0 1 1))
+ (import "env" "memory" (memory $0 1 1))
+ (data (i32.const 1024) "x")
+ (data (i32.const 2048) "\00")
+)
+;; CHECK:      (data (i32.const 1024) "x")
+
+;; CHECK:      (data (i32.const 2048) "\00")
+(module
+ ;; we can when not imported
+ ;; CHECK:      (memory $0 1 1)
+ (memory $0 1 1)
+ (data (i32.const 1024) "x")
+ (data (i32.const 2048) "\00")
+)
+
+;; CHECK:      (data (i32.const 1024) "x")
+(module
+ ;; Regression test for a bug where referrers were accidentally associated with
+ ;; the wrong segments in the presence of unreferenced segments.
+ ;; CHECK:      (type $none_=>_none (func))
+
+ ;; CHECK:      (memory $0 (shared 1 1))
+ (memory $0 (shared 1 1))
+ (data (i32.const 0) "")
+ ;; CHECK:      (data "foo")
+ (data "foo")
+ ;; CHECK:      (func $0 (type $none_=>_none)
+ ;; CHECK-NEXT:  (memory.init 0
+ ;; CHECK-NEXT:   (i32.const 0)
+ ;; CHECK-NEXT:   (i32.const 1)
+ ;; CHECK-NEXT:   (i32.const 1)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT: )
+ (func $0
+  (memory.init 1
+   (i32.const 0)
+   (i32.const 1)
+   (i32.const 1)
+  )
+ )
+)
