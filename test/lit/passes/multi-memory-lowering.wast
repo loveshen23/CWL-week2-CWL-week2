@@ -186,4 +186,375 @@
   ;; CHECK-NEXT:  (i32.store
   ;; CHECK-NEXT:   (i32.add
   ;; CHECK-NEXT:    (global.get $memory2_byte_offset)
-  ;; CHECK-NE
+  ;; CHECK-NEXT:    (i32.const 11)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (i32.const 115)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (i32.store
+  ;; CHECK-NEXT:   (i32.add
+  ;; CHECK-NEXT:    (global.get $memory3_byte_offset)
+  ;; CHECK-NEXT:    (i32.const 12)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (i32.const 115)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  ;; BOUNDS:      (func $stores
+  ;; BOUNDS-NEXT:  (local $0 i32)
+  ;; BOUNDS-NEXT:  (local $1 i32)
+  ;; BOUNDS-NEXT:  (local $2 i32)
+  ;; BOUNDS-NEXT:  (i32.store
+  ;; BOUNDS-NEXT:   (block (result i32)
+  ;; BOUNDS-NEXT:    (local.set $0
+  ;; BOUNDS-NEXT:     (i32.const 10)
+  ;; BOUNDS-NEXT:    )
+  ;; BOUNDS-NEXT:    (if
+  ;; BOUNDS-NEXT:     (i32.gt_u
+  ;; BOUNDS-NEXT:      (i32.add
+  ;; BOUNDS-NEXT:       (i32.add
+  ;; BOUNDS-NEXT:        (local.get $0)
+  ;; BOUNDS-NEXT:        (i32.const 0)
+  ;; BOUNDS-NEXT:       )
+  ;; BOUNDS-NEXT:       (i32.const 4)
+  ;; BOUNDS-NEXT:      )
+  ;; BOUNDS-NEXT:      (call $memory1_size)
+  ;; BOUNDS-NEXT:     )
+  ;; BOUNDS-NEXT:     (unreachable)
+  ;; BOUNDS-NEXT:    )
+  ;; BOUNDS-NEXT:    (local.get $0)
+  ;; BOUNDS-NEXT:   )
+  ;; BOUNDS-NEXT:   (i32.const 115)
+  ;; BOUNDS-NEXT:  )
+  ;; BOUNDS-NEXT:  (i32.store
+  ;; BOUNDS-NEXT:   (block (result i32)
+  ;; BOUNDS-NEXT:    (local.set $1
+  ;; BOUNDS-NEXT:     (i32.add
+  ;; BOUNDS-NEXT:      (global.get $memory2_byte_offset)
+  ;; BOUNDS-NEXT:      (i32.const 11)
+  ;; BOUNDS-NEXT:     )
+  ;; BOUNDS-NEXT:    )
+  ;; BOUNDS-NEXT:    (if
+  ;; BOUNDS-NEXT:     (i32.gt_u
+  ;; BOUNDS-NEXT:      (i32.add
+  ;; BOUNDS-NEXT:       (i32.add
+  ;; BOUNDS-NEXT:        (local.get $1)
+  ;; BOUNDS-NEXT:        (i32.const 0)
+  ;; BOUNDS-NEXT:       )
+  ;; BOUNDS-NEXT:       (i32.const 4)
+  ;; BOUNDS-NEXT:      )
+  ;; BOUNDS-NEXT:      (call $memory2_size)
+  ;; BOUNDS-NEXT:     )
+  ;; BOUNDS-NEXT:     (unreachable)
+  ;; BOUNDS-NEXT:    )
+  ;; BOUNDS-NEXT:    (local.get $1)
+  ;; BOUNDS-NEXT:   )
+  ;; BOUNDS-NEXT:   (i32.const 115)
+  ;; BOUNDS-NEXT:  )
+  ;; BOUNDS-NEXT:  (i32.store
+  ;; BOUNDS-NEXT:   (block (result i32)
+  ;; BOUNDS-NEXT:    (local.set $2
+  ;; BOUNDS-NEXT:     (i32.add
+  ;; BOUNDS-NEXT:      (global.get $memory3_byte_offset)
+  ;; BOUNDS-NEXT:      (i32.const 12)
+  ;; BOUNDS-NEXT:     )
+  ;; BOUNDS-NEXT:    )
+  ;; BOUNDS-NEXT:    (if
+  ;; BOUNDS-NEXT:     (i32.gt_u
+  ;; BOUNDS-NEXT:      (i32.add
+  ;; BOUNDS-NEXT:       (i32.add
+  ;; BOUNDS-NEXT:        (local.get $2)
+  ;; BOUNDS-NEXT:        (i32.const 0)
+  ;; BOUNDS-NEXT:       )
+  ;; BOUNDS-NEXT:       (i32.const 4)
+  ;; BOUNDS-NEXT:      )
+  ;; BOUNDS-NEXT:      (call $memory3_size)
+  ;; BOUNDS-NEXT:     )
+  ;; BOUNDS-NEXT:     (unreachable)
+  ;; BOUNDS-NEXT:    )
+  ;; BOUNDS-NEXT:    (local.get $2)
+  ;; BOUNDS-NEXT:   )
+  ;; BOUNDS-NEXT:   (i32.const 115)
+  ;; BOUNDS-NEXT:  )
+  ;; BOUNDS-NEXT: )
+  (func $stores
+  (i32.store $memory1
+   (i32.const 10)
+   (i32.const 115)
+  )
+  (i32.store $memory2
+   (i32.const 11)
+   (i32.const 115)
+  )
+  (i32.store $memory3
+   (i32.const 12)
+   (i32.const 115)
+  )
+  )
+
+  ;; CHECK:      (func $v128.load8_splat (param $0 i32) (result v128)
+  ;; CHECK-NEXT:  (v128.load8_splat
+  ;; CHECK-NEXT:   (local.get $0)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  ;; BOUNDS:      (func $v128.load8_splat (param $0 i32) (result v128)
+  ;; BOUNDS-NEXT:  (local $1 i32)
+  ;; BOUNDS-NEXT:  (v128.load8_splat
+  ;; BOUNDS-NEXT:   (block (result i32)
+  ;; BOUNDS-NEXT:    (local.set $1
+  ;; BOUNDS-NEXT:     (local.get $0)
+  ;; BOUNDS-NEXT:    )
+  ;; BOUNDS-NEXT:    (if
+  ;; BOUNDS-NEXT:     (i32.gt_u
+  ;; BOUNDS-NEXT:      (i32.add
+  ;; BOUNDS-NEXT:       (i32.add
+  ;; BOUNDS-NEXT:        (local.get $1)
+  ;; BOUNDS-NEXT:        (i32.const 0)
+  ;; BOUNDS-NEXT:       )
+  ;; BOUNDS-NEXT:       (i32.const 1)
+  ;; BOUNDS-NEXT:      )
+  ;; BOUNDS-NEXT:      (call $memory1_size)
+  ;; BOUNDS-NEXT:     )
+  ;; BOUNDS-NEXT:     (unreachable)
+  ;; BOUNDS-NEXT:    )
+  ;; BOUNDS-NEXT:    (local.get $1)
+  ;; BOUNDS-NEXT:   )
+  ;; BOUNDS-NEXT:  )
+  ;; BOUNDS-NEXT: )
+  (func $v128.load8_splat (param $0 i32) (result v128)
+  (v128.load8_splat $memory1
+   (local.get $0)
+  )
+ )
+
+  ;; CHECK:      (func $v128.load16_lane (param $0 i32) (param $1 v128) (result v128)
+  ;; CHECK-NEXT:  (v128.load16_lane offset=32 align=1 0
+  ;; CHECK-NEXT:   (i32.add
+  ;; CHECK-NEXT:    (global.get $memory2_byte_offset)
+  ;; CHECK-NEXT:    (local.get $0)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (local.get $1)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  ;; BOUNDS:      (func $v128.load16_lane (param $0 i32) (param $1 v128) (result v128)
+  ;; BOUNDS-NEXT:  (local $2 i32)
+  ;; BOUNDS-NEXT:  (v128.load16_lane offset=32 align=1 0
+  ;; BOUNDS-NEXT:   (block (result i32)
+  ;; BOUNDS-NEXT:    (local.set $2
+  ;; BOUNDS-NEXT:     (i32.add
+  ;; BOUNDS-NEXT:      (global.get $memory2_byte_offset)
+  ;; BOUNDS-NEXT:      (local.get $0)
+  ;; BOUNDS-NEXT:     )
+  ;; BOUNDS-NEXT:    )
+  ;; BOUNDS-NEXT:    (if
+  ;; BOUNDS-NEXT:     (i32.gt_u
+  ;; BOUNDS-NEXT:      (i32.add
+  ;; BOUNDS-NEXT:       (i32.add
+  ;; BOUNDS-NEXT:        (local.get $2)
+  ;; BOUNDS-NEXT:        (i32.const 32)
+  ;; BOUNDS-NEXT:       )
+  ;; BOUNDS-NEXT:       (i32.const 2)
+  ;; BOUNDS-NEXT:      )
+  ;; BOUNDS-NEXT:      (call $memory2_size)
+  ;; BOUNDS-NEXT:     )
+  ;; BOUNDS-NEXT:     (unreachable)
+  ;; BOUNDS-NEXT:    )
+  ;; BOUNDS-NEXT:    (local.get $2)
+  ;; BOUNDS-NEXT:   )
+  ;; BOUNDS-NEXT:   (local.get $1)
+  ;; BOUNDS-NEXT:  )
+  ;; BOUNDS-NEXT: )
+  (func $v128.load16_lane (param $0 i32) (param $1 v128) (result v128)
+  (v128.load16_lane $memory2 align=1 offset=32 0
+   (local.get $0)
+   (local.get $1)
+  )
+ )
+
+  ;; CHECK:      (func $v128.load32_zero (param $0 i32) (result v128)
+  ;; CHECK-NEXT:  (v128.load32_zero offset=16 align=1
+  ;; CHECK-NEXT:   (i32.add
+  ;; CHECK-NEXT:    (global.get $memory3_byte_offset)
+  ;; CHECK-NEXT:    (local.get $0)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  ;; BOUNDS:      (func $v128.load32_zero (param $0 i32) (result v128)
+  ;; BOUNDS-NEXT:  (local $1 i32)
+  ;; BOUNDS-NEXT:  (v128.load32_zero offset=16 align=1
+  ;; BOUNDS-NEXT:   (block (result i32)
+  ;; BOUNDS-NEXT:    (local.set $1
+  ;; BOUNDS-NEXT:     (i32.add
+  ;; BOUNDS-NEXT:      (global.get $memory3_byte_offset)
+  ;; BOUNDS-NEXT:      (local.get $0)
+  ;; BOUNDS-NEXT:     )
+  ;; BOUNDS-NEXT:    )
+  ;; BOUNDS-NEXT:    (if
+  ;; BOUNDS-NEXT:     (i32.gt_u
+  ;; BOUNDS-NEXT:      (i32.add
+  ;; BOUNDS-NEXT:       (i32.add
+  ;; BOUNDS-NEXT:        (local.get $1)
+  ;; BOUNDS-NEXT:        (i32.const 16)
+  ;; BOUNDS-NEXT:       )
+  ;; BOUNDS-NEXT:       (i32.const 4)
+  ;; BOUNDS-NEXT:      )
+  ;; BOUNDS-NEXT:      (call $memory3_size)
+  ;; BOUNDS-NEXT:     )
+  ;; BOUNDS-NEXT:     (unreachable)
+  ;; BOUNDS-NEXT:    )
+  ;; BOUNDS-NEXT:    (local.get $1)
+  ;; BOUNDS-NEXT:   )
+  ;; BOUNDS-NEXT:  )
+  ;; BOUNDS-NEXT: )
+  (func $v128.load32_zero (param $0 i32) (result v128)
+  (v128.load32_zero $memory3 align=1 offset=16
+   (local.get $0)
+  )
+ )
+  ;; CHECK:      (func $v128.load32x2_s (param $0 i32) (result v128)
+  ;; CHECK-NEXT:  (v128.load32x2_s
+  ;; CHECK-NEXT:   (i32.add
+  ;; CHECK-NEXT:    (global.get $memory2_byte_offset)
+  ;; CHECK-NEXT:    (local.get $0)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  ;; BOUNDS:      (func $v128.load32x2_s (param $0 i32) (result v128)
+  ;; BOUNDS-NEXT:  (local $1 i32)
+  ;; BOUNDS-NEXT:  (v128.load32x2_s
+  ;; BOUNDS-NEXT:   (block (result i32)
+  ;; BOUNDS-NEXT:    (local.set $1
+  ;; BOUNDS-NEXT:     (i32.add
+  ;; BOUNDS-NEXT:      (global.get $memory2_byte_offset)
+  ;; BOUNDS-NEXT:      (local.get $0)
+  ;; BOUNDS-NEXT:     )
+  ;; BOUNDS-NEXT:    )
+  ;; BOUNDS-NEXT:    (if
+  ;; BOUNDS-NEXT:     (i32.gt_u
+  ;; BOUNDS-NEXT:      (i32.add
+  ;; BOUNDS-NEXT:       (i32.add
+  ;; BOUNDS-NEXT:        (local.get $1)
+  ;; BOUNDS-NEXT:        (i32.const 0)
+  ;; BOUNDS-NEXT:       )
+  ;; BOUNDS-NEXT:       (i32.const 8)
+  ;; BOUNDS-NEXT:      )
+  ;; BOUNDS-NEXT:      (call $memory2_size)
+  ;; BOUNDS-NEXT:     )
+  ;; BOUNDS-NEXT:     (unreachable)
+  ;; BOUNDS-NEXT:    )
+  ;; BOUNDS-NEXT:    (local.get $1)
+  ;; BOUNDS-NEXT:   )
+  ;; BOUNDS-NEXT:  )
+  ;; BOUNDS-NEXT: )
+  (func $v128.load32x2_s (param $0 i32) (result v128)
+  (v128.load32x2_s $memory2
+   (local.get $0)
+  )
+ )
+
+  ;; CHECK:      (func $atomics (param $0 i32) (param $1 i64)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i32.atomic.rmw.add offset=4
+  ;; CHECK-NEXT:    (i32.add
+  ;; CHECK-NEXT:     (global.get $memory3_byte_offset)
+  ;; CHECK-NEXT:     (local.get $0)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (local.get $0)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i64.atomic.rmw32.cmpxchg_u offset=48
+  ;; CHECK-NEXT:    (i32.add
+  ;; CHECK-NEXT:     (global.get $memory2_byte_offset)
+  ;; CHECK-NEXT:     (local.get $0)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (local.get $1)
+  ;; CHECK-NEXT:    (local.get $1)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (memory.atomic.wait32 offset=16
+  ;; CHECK-NEXT:    (local.get $0)
+  ;; CHECK-NEXT:    (local.get $0)
+  ;; CHECK-NEXT:    (local.get $1)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (memory.atomic.notify offset=24
+  ;; CHECK-NEXT:    (i32.add
+  ;; CHECK-NEXT:     (global.get $memory2_byte_offset)
+  ;; CHECK-NEXT:     (local.get $0)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (local.get $0)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  ;; BOUNDS:      (func $atomics (param $0 i32) (param $1 i64)
+  ;; BOUNDS-NEXT:  (local $2 i32)
+  ;; BOUNDS-NEXT:  (local $3 i32)
+  ;; BOUNDS-NEXT:  (local $4 i32)
+  ;; BOUNDS-NEXT:  (local $5 i32)
+  ;; BOUNDS-NEXT:  (drop
+  ;; BOUNDS-NEXT:   (i32.atomic.rmw.add offset=4
+  ;; BOUNDS-NEXT:    (block (result i32)
+  ;; BOUNDS-NEXT:     (local.set $2
+  ;; BOUNDS-NEXT:      (i32.add
+  ;; BOUNDS-NEXT:       (global.get $memory3_byte_offset)
+  ;; BOUNDS-NEXT:       (local.get $0)
+  ;; BOUNDS-NEXT:      )
+  ;; BOUNDS-NEXT:     )
+  ;; BOUNDS-NEXT:     (if
+  ;; BOUNDS-NEXT:      (i32.gt_u
+  ;; BOUNDS-NEXT:       (i32.add
+  ;; BOUNDS-NEXT:        (i32.add
+  ;; BOUNDS-NEXT:         (local.get $2)
+  ;; BOUNDS-NEXT:         (i32.const 4)
+  ;; BOUNDS-NEXT:        )
+  ;; BOUNDS-NEXT:        (i32.const 4)
+  ;; BOUNDS-NEXT:       )
+  ;; BOUNDS-NEXT:       (call $memory3_size)
+  ;; BOUNDS-NEXT:      )
+  ;; BOUNDS-NEXT:      (unreachable)
+  ;; BOUNDS-NEXT:     )
+  ;; BOUNDS-NEXT:     (local.get $2)
+  ;; BOUNDS-NEXT:    )
+  ;; BOUNDS-NEXT:    (local.get $0)
+  ;; BOUNDS-NEXT:   )
+  ;; BOUNDS-NEXT:  )
+  ;; BOUNDS-NEXT:  (drop
+  ;; BOUNDS-NEXT:   (i64.atomic.rmw32.cmpxchg_u offset=48
+  ;; BOUNDS-NEXT:    (block (result i32)
+  ;; BOUNDS-NEXT:     (local.set $3
+  ;; BOUNDS-NEXT:      (i32.add
+  ;; BOUNDS-NEXT:       (global.get $memory2_byte_offset)
+  ;; BOUNDS-NEXT:       (local.get $0)
+  ;; BOUNDS-NEXT:      )
+  ;; BOUNDS-NEXT:     )
+  ;; BOUNDS-NEXT:     (if
+  ;; BOUNDS-NEXT:      (i32.gt_u
+  ;; BOUNDS-NEXT:       (i32.add
+  ;; BOUNDS-NEXT:        (i32.add
+  ;; BOUNDS-NEXT:         (local.get $3)
+  ;; BOUNDS-NEXT:         (i32.const 48)
+  ;; BOUNDS-NEXT:        )
+  ;; BOUNDS-NEXT:        (i32.const 4)
+  ;; BOUNDS-NEXT:       )
+  ;; BOUNDS-NEXT:       (call $memory2_size)
+  ;; BOUNDS-NEXT:      )
+  ;; BOUNDS-NEXT:      (unreachable)
+  ;; BOUNDS-NEXT:     )
+  ;; BOUNDS-NEXT:     (local.get $3)
+  ;; BOUNDS-NEXT:    )
+  ;; BOUNDS-NEXT:    (local.get $1)
+  ;; BOUNDS-NEXT:    (local.get $1)
+  ;; BOUNDS-NEXT:   )
+  ;; BOUNDS-NEXT:  )
+  ;; BOUNDS-NEXT:  (drop
+  ;; BOUNDS-NEXT:   (memory.atomic.wait32 offset=16
+  ;; BOUNDS-NEXT:    (block (result i32)
+  ;; BOUNDS-NEXT:     (local.set $4
+  ;; BOUNDS-NEXT:      (local.get $0)
+  ;; BOUNDS-NEXT:     )
+  ;; BOUNDS-NEXT:     (if
+  ;; BOUNDS-NEXT:      (i32.gt_u
+  ;; BOUNDS-NEXT:       (i32.add
+  ;; BOUNDS-NEXT:        (i32.add
+  ;; BOU
