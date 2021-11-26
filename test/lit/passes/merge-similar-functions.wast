@@ -412,4 +412,86 @@
 (module
   ;; CHECK:      (type $i32_i32_=>_none (func (param i32 i32)))
 
-  ;; CHECK:      (type $i32_i32_i32_=>_none (func (param i32 i3
+  ;; CHECK:      (type $i32_i32_i32_=>_none (func (param i32 i32 i32)))
+
+  ;; CHECK:      (func $yes-offset-local-indices-1 (type $i32_i32_=>_none) (param $a i32) (param $b i32)
+  ;; CHECK-NEXT:  (call $byn$mgfn-shared$yes-offset-local-indices-1
+  ;; CHECK-NEXT:   (local.get $a)
+  ;; CHECK-NEXT:   (local.get $b)
+  ;; CHECK-NEXT:   (i32.const 1)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $yes-offset-local-indices-1 (param $a i32) (param $b i32)
+    (local $x i32)
+    (local $y i32)
+    (drop (local.get $a))
+    (drop (local.get $b))
+    (drop (local.get $x))
+    (drop (local.get $y))
+    (drop (local.tee $x (local.get $x)))
+    (drop (local.tee $y (local.get $y)))
+    (drop (local.tee $a (local.get $a)))
+    (drop (local.tee $b (local.get $b)))
+    (drop (i32.const 1))
+  )
+  ;; CHECK:      (func $yes-offset-local-indices-2 (type $i32_i32_=>_none) (param $a i32) (param $b i32)
+  ;; CHECK-NEXT:  (call $byn$mgfn-shared$yes-offset-local-indices-1
+  ;; CHECK-NEXT:   (local.get $a)
+  ;; CHECK-NEXT:   (local.get $b)
+  ;; CHECK-NEXT:   (i32.const 2)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $yes-offset-local-indices-2 (param $a i32) (param $b i32)
+    (local $x i32)
+    (local $y i32)
+    (drop (local.get $a))
+    (drop (local.get $b))
+    (drop (local.get $x))
+    (drop (local.get $y))
+    (drop (local.tee $x (local.get $x)))
+    (drop (local.tee $y (local.get $y)))
+    (drop (local.tee $a (local.get $a)))
+    (drop (local.tee $b (local.get $b)))
+    (drop (i32.const 2))
+  )
+
+)
+;; CHECK:      (func $byn$mgfn-shared$yes-offset-local-indices-1 (type $i32_i32_i32_=>_none) (param $0 i32) (param $1 i32) (param $2 i32)
+;; CHECK-NEXT:  (local $3 i32)
+;; CHECK-NEXT:  (local $4 i32)
+;; CHECK-NEXT:  (drop
+;; CHECK-NEXT:   (local.get $0)
+;; CHECK-NEXT:  )
+;; CHECK-NEXT:  (drop
+;; CHECK-NEXT:   (local.get $1)
+;; CHECK-NEXT:  )
+;; CHECK-NEXT:  (drop
+;; CHECK-NEXT:   (local.get $3)
+;; CHECK-NEXT:  )
+;; CHECK-NEXT:  (drop
+;; CHECK-NEXT:   (local.get $4)
+;; CHECK-NEXT:  )
+;; CHECK-NEXT:  (drop
+;; CHECK-NEXT:   (local.tee $3
+;; CHECK-NEXT:    (local.get $3)
+;; CHECK-NEXT:   )
+;; CHECK-NEXT:  )
+;; CHECK-NEXT:  (drop
+;; CHECK-NEXT:   (local.tee $4
+;; CHECK-NEXT:    (local.get $4)
+;; CHECK-NEXT:   )
+;; CHECK-NEXT:  )
+;; CHECK-NEXT:  (drop
+;; CHECK-NEXT:   (local.tee $0
+;; CHECK-NEXT:    (local.get $0)
+;; CHECK-NEXT:   )
+;; CHECK-NEXT:  )
+;; CHECK-NEXT:  (drop
+;; CHECK-NEXT:   (local.tee $1
+;; CHECK-NEXT:    (local.get $1)
+;; CHECK-NEXT:   )
+;; CHECK-NEXT:  )
+;; CHECK-NEXT:  (drop
+;; CHECK-NEXT:   (local.get $2)
+;; CHECK-NEXT:  )
+;; CHECK-NEXT: )
