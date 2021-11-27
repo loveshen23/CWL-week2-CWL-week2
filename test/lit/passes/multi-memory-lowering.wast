@@ -962,4 +962,169 @@
 ;; CHECK-NEXT:   )
 ;; CHECK-NEXT:   (return
 ;; CHECK-NEXT:    (i32.const -1)
-;; C
+;; CHECK-NEXT:   )
+;; CHECK-NEXT:  )
+;; CHECK-NEXT:  (local.get $return_size)
+;; CHECK-NEXT: )
+
+;; BOUNDS:      (func $memory1_size (result i32)
+;; BOUNDS-NEXT:  (return
+;; BOUNDS-NEXT:   (i32.div_u
+;; BOUNDS-NEXT:    (global.get $memory2_byte_offset)
+;; BOUNDS-NEXT:    (i32.const 65536)
+;; BOUNDS-NEXT:   )
+;; BOUNDS-NEXT:  )
+;; BOUNDS-NEXT: )
+
+;; BOUNDS:      (func $memory2_size (result i32)
+;; BOUNDS-NEXT:  (return
+;; BOUNDS-NEXT:   (i32.sub
+;; BOUNDS-NEXT:    (i32.div_u
+;; BOUNDS-NEXT:     (global.get $memory3_byte_offset)
+;; BOUNDS-NEXT:     (i32.const 65536)
+;; BOUNDS-NEXT:    )
+;; BOUNDS-NEXT:    (i32.div_u
+;; BOUNDS-NEXT:     (global.get $memory2_byte_offset)
+;; BOUNDS-NEXT:     (i32.const 65536)
+;; BOUNDS-NEXT:    )
+;; BOUNDS-NEXT:   )
+;; BOUNDS-NEXT:  )
+;; BOUNDS-NEXT: )
+
+;; BOUNDS:      (func $memory3_size (result i32)
+;; BOUNDS-NEXT:  (return
+;; BOUNDS-NEXT:   (i32.sub
+;; BOUNDS-NEXT:    (memory.size)
+;; BOUNDS-NEXT:    (i32.div_u
+;; BOUNDS-NEXT:     (global.get $memory3_byte_offset)
+;; BOUNDS-NEXT:     (i32.const 65536)
+;; BOUNDS-NEXT:    )
+;; BOUNDS-NEXT:   )
+;; BOUNDS-NEXT:  )
+;; BOUNDS-NEXT: )
+
+;; BOUNDS:      (func $memory1_grow (param $page_delta i32) (result i32)
+;; BOUNDS-NEXT:  (local $return_size i32)
+;; BOUNDS-NEXT:  (local $memory_size i32)
+;; BOUNDS-NEXT:  (local.set $return_size
+;; BOUNDS-NEXT:   (call $memory1_size)
+;; BOUNDS-NEXT:  )
+;; BOUNDS-NEXT:  (local.set $memory_size
+;; BOUNDS-NEXT:   (memory.size)
+;; BOUNDS-NEXT:  )
+;; BOUNDS-NEXT:  (if
+;; BOUNDS-NEXT:   (i32.eq
+;; BOUNDS-NEXT:    (memory.grow
+;; BOUNDS-NEXT:     (local.get $page_delta)
+;; BOUNDS-NEXT:    )
+;; BOUNDS-NEXT:    (i32.const -1)
+;; BOUNDS-NEXT:   )
+;; BOUNDS-NEXT:   (return
+;; BOUNDS-NEXT:    (i32.const -1)
+;; BOUNDS-NEXT:   )
+;; BOUNDS-NEXT:  )
+;; BOUNDS-NEXT:  (memory.copy
+;; BOUNDS-NEXT:   (i32.add
+;; BOUNDS-NEXT:    (global.get $memory2_byte_offset)
+;; BOUNDS-NEXT:    (i32.mul
+;; BOUNDS-NEXT:     (local.get $page_delta)
+;; BOUNDS-NEXT:     (i32.const 65536)
+;; BOUNDS-NEXT:    )
+;; BOUNDS-NEXT:   )
+;; BOUNDS-NEXT:   (global.get $memory2_byte_offset)
+;; BOUNDS-NEXT:   (i32.sub
+;; BOUNDS-NEXT:    (i32.mul
+;; BOUNDS-NEXT:     (local.get $memory_size)
+;; BOUNDS-NEXT:     (i32.const 65536)
+;; BOUNDS-NEXT:    )
+;; BOUNDS-NEXT:    (global.get $memory2_byte_offset)
+;; BOUNDS-NEXT:   )
+;; BOUNDS-NEXT:  )
+;; BOUNDS-NEXT:  (global.set $memory2_byte_offset
+;; BOUNDS-NEXT:   (i32.add
+;; BOUNDS-NEXT:    (global.get $memory2_byte_offset)
+;; BOUNDS-NEXT:    (i32.mul
+;; BOUNDS-NEXT:     (local.get $page_delta)
+;; BOUNDS-NEXT:     (i32.const 65536)
+;; BOUNDS-NEXT:    )
+;; BOUNDS-NEXT:   )
+;; BOUNDS-NEXT:  )
+;; BOUNDS-NEXT:  (global.set $memory3_byte_offset
+;; BOUNDS-NEXT:   (i32.add
+;; BOUNDS-NEXT:    (global.get $memory3_byte_offset)
+;; BOUNDS-NEXT:    (i32.mul
+;; BOUNDS-NEXT:     (local.get $page_delta)
+;; BOUNDS-NEXT:     (i32.const 65536)
+;; BOUNDS-NEXT:    )
+;; BOUNDS-NEXT:   )
+;; BOUNDS-NEXT:  )
+;; BOUNDS-NEXT:  (local.get $return_size)
+;; BOUNDS-NEXT: )
+
+;; BOUNDS:      (func $memory2_grow (param $page_delta i32) (result i32)
+;; BOUNDS-NEXT:  (local $return_size i32)
+;; BOUNDS-NEXT:  (local $memory_size i32)
+;; BOUNDS-NEXT:  (local.set $return_size
+;; BOUNDS-NEXT:   (call $memory2_size)
+;; BOUNDS-NEXT:  )
+;; BOUNDS-NEXT:  (local.set $memory_size
+;; BOUNDS-NEXT:   (memory.size)
+;; BOUNDS-NEXT:  )
+;; BOUNDS-NEXT:  (if
+;; BOUNDS-NEXT:   (i32.eq
+;; BOUNDS-NEXT:    (memory.grow
+;; BOUNDS-NEXT:     (local.get $page_delta)
+;; BOUNDS-NEXT:    )
+;; BOUNDS-NEXT:    (i32.const -1)
+;; BOUNDS-NEXT:   )
+;; BOUNDS-NEXT:   (return
+;; BOUNDS-NEXT:    (i32.const -1)
+;; BOUNDS-NEXT:   )
+;; BOUNDS-NEXT:  )
+;; BOUNDS-NEXT:  (memory.copy
+;; BOUNDS-NEXT:   (i32.add
+;; BOUNDS-NEXT:    (global.get $memory3_byte_offset)
+;; BOUNDS-NEXT:    (i32.mul
+;; BOUNDS-NEXT:     (local.get $page_delta)
+;; BOUNDS-NEXT:     (i32.const 65536)
+;; BOUNDS-NEXT:    )
+;; BOUNDS-NEXT:   )
+;; BOUNDS-NEXT:   (global.get $memory3_byte_offset)
+;; BOUNDS-NEXT:   (i32.sub
+;; BOUNDS-NEXT:    (i32.mul
+;; BOUNDS-NEXT:     (local.get $memory_size)
+;; BOUNDS-NEXT:     (i32.const 65536)
+;; BOUNDS-NEXT:    )
+;; BOUNDS-NEXT:    (global.get $memory3_byte_offset)
+;; BOUNDS-NEXT:   )
+;; BOUNDS-NEXT:  )
+;; BOUNDS-NEXT:  (global.set $memory3_byte_offset
+;; BOUNDS-NEXT:   (i32.add
+;; BOUNDS-NEXT:    (global.get $memory3_byte_offset)
+;; BOUNDS-NEXT:    (i32.mul
+;; BOUNDS-NEXT:     (local.get $page_delta)
+;; BOUNDS-NEXT:     (i32.const 65536)
+;; BOUNDS-NEXT:    )
+;; BOUNDS-NEXT:   )
+;; BOUNDS-NEXT:  )
+;; BOUNDS-NEXT:  (local.get $return_size)
+;; BOUNDS-NEXT: )
+
+;; BOUNDS:      (func $memory3_grow (param $page_delta i32) (result i32)
+;; BOUNDS-NEXT:  (local $return_size i32)
+;; BOUNDS-NEXT:  (local.set $return_size
+;; BOUNDS-NEXT:   (call $memory3_size)
+;; BOUNDS-NEXT:  )
+;; BOUNDS-NEXT:  (if
+;; BOUNDS-NEXT:   (i32.eq
+;; BOUNDS-NEXT:    (memory.grow
+;; BOUNDS-NEXT:     (local.get $page_delta)
+;; BOUNDS-NEXT:    )
+;; BOUNDS-NEXT:    (i32.const -1)
+;; BOUNDS-NEXT:   )
+;; BOUNDS-NEXT:   (return
+;; BOUNDS-NEXT:    (i32.const -1)
+;; BOUNDS-NEXT:   )
+;; BOUNDS-NEXT:  )
+;; BOUNDS-NEXT:  (local.get $return_size)
+;; BOUNDS-NEXT: )
