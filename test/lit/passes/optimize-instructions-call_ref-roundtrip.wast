@@ -30,4 +30,59 @@
  ;; CHECK:      (table $table-3 10 (ref null $v3))
  (table $table-3 10 (ref null $v3))
 
- ;; CHECK:      (elem $elem-1 (table $table-1) (i32.const 0) (ref
+ ;; CHECK:      (elem $elem-1 (table $table-1) (i32.const 0) (ref null $v1) (ref.func $helper-1))
+ (elem $elem-1 (table $table-1) (i32.const 0) (ref null $v1)
+  (ref.func $helper-1))
+
+ ;; CHECK:      (elem $elem-2 (table $table-2) (i32.const 0) (ref null $v2) (ref.func $helper-2))
+ (elem $elem-2 (table $table-2) (i32.const 0) (ref null $v2)
+  (ref.func $helper-2))
+
+ ;; CHECK:      (elem $elem-3 (table $table-3) (i32.const 0) (ref null $v3) (ref.func $helper-3))
+ (elem $elem-3 (table $table-3) (i32.const 0) (ref null $v3)
+  (ref.func $helper-3))
+
+ ;; CHECK:      (func $helper-1 (type $v1)
+ ;; CHECK-NEXT:  (nop)
+ ;; CHECK-NEXT: )
+ (func $helper-1 (type $v1))
+ ;; CHECK:      (func $helper-2 (type $v2)
+ ;; CHECK-NEXT:  (nop)
+ ;; CHECK-NEXT: )
+ (func $helper-2 (type $v2))
+ ;; CHECK:      (func $helper-3 (type $v3)
+ ;; CHECK-NEXT:  (nop)
+ ;; CHECK-NEXT: )
+ (func $helper-3 (type $v3))
+
+ ;; CHECK:      (func $call-table-get (type $i32_=>_none) (param $x i32)
+ ;; CHECK-NEXT:  (call_indirect $table-1 (type $v1)
+ ;; CHECK-NEXT:   (local.get $x)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (call_indirect $table-2 (type $v2)
+ ;; CHECK-NEXT:   (local.get $x)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (call_indirect $table-3 (type $v3)
+ ;; CHECK-NEXT:   (local.get $x)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT: )
+ (func $call-table-get (param $x i32)
+  ;; The heap type of the call_indirects that we emit here should be the
+  ;; identical one as on the table that they correspond to.
+  (call_ref $v1
+   (table.get $table-1
+    (local.get $x)
+   )
+  )
+  (call_ref $v2
+   (table.get $table-2
+    (local.get $x)
+   )
+  )
+  (call_ref $v3
+   (table.get $table-3
+    (local.get $x)
+   )
+  )
+ )
+)
