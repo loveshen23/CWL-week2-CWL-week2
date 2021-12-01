@@ -338,3 +338,432 @@
   ;; CHECK-NEXT:  (struct.set $struct 0
   ;; CHECK-NEXT:   (local.tee $ref
   ;; CHECK-NEXT:    (struct.new $struct
+  ;; CHECK-NEXT:     (i32.const 10)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (block (result i32)
+  ;; CHECK-NEXT:    (local.set $ref
+  ;; CHECK-NEXT:     (ref.null none)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (i32.const 20)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $ref-local-write-tee
+    (local $ref (ref null $struct))
+    (struct.set $struct 0
+      (local.tee $ref
+        (struct.new $struct
+          (i32.const 10)
+        )
+      )
+      (block (result i32)
+        ;; As above, but now in a tee.
+        (local.set $ref
+          (ref.null $struct)
+        )
+        (i32.const 20)
+      )
+    )
+  )
+
+  ;; CHECK:      (func $other-local-write (type $none_=>_none)
+  ;; CHECK-NEXT:  (local $ref (ref null $struct))
+  ;; CHECK-NEXT:  (local $other (ref null $struct))
+  ;; CHECK-NEXT:  (local.set $ref
+  ;; CHECK-NEXT:   (struct.new $struct
+  ;; CHECK-NEXT:    (block (result i32)
+  ;; CHECK-NEXT:     (local.set $other
+  ;; CHECK-NEXT:      (ref.null none)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (i32.const 20)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (nop)
+  ;; CHECK-NEXT: )
+  (func $other-local-write
+    (local $ref (ref null $struct))
+    (local $other (ref null $struct))
+    (local.set $ref
+      (struct.new $struct
+        (i32.const 10)
+      )
+    )
+    (struct.set $struct 0
+      (local.get $ref)
+      (block (result i32)
+        ;; A write to another local is fine.
+        (local.set $other
+          (ref.null $struct)
+        )
+        (i32.const 20)
+      )
+    )
+  )
+
+  ;; CHECK:      (func $ref-local-read (type $none_=>_none)
+  ;; CHECK-NEXT:  (local $ref (ref null $struct))
+  ;; CHECK-NEXT:  (local.set $ref
+  ;; CHECK-NEXT:   (struct.new $struct
+  ;; CHECK-NEXT:    (i32.const 10)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (struct.set $struct 0
+  ;; CHECK-NEXT:   (local.get $ref)
+  ;; CHECK-NEXT:   (block (result i32)
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (local.get $ref)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (i32.const 20)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $ref-local-read
+    (local $ref (ref null $struct))
+    (local.set $ref
+      (struct.new $struct
+        (i32.const 10)
+      )
+    )
+    (struct.set $struct 0
+      (local.get $ref)
+      (block (result i32)
+        ;; A read of the ref local prevents us from optimizing.
+        (drop
+          (local.get $ref)
+        )
+        (i32.const 20)
+      )
+    )
+  )
+
+  ;; CHECK:      (func $ref-local-read-tee (type $none_=>_none)
+  ;; CHECK-NEXT:  (local $ref (ref null $struct))
+  ;; CHECK-NEXT:  (struct.set $struct 0
+  ;; CHECK-NEXT:   (local.tee $ref
+  ;; CHECK-NEXT:    (struct.new $struct
+  ;; CHECK-NEXT:     (i32.const 10)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (block (result i32)
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (local.get $ref)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (i32.const 20)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $ref-local-read-tee
+    (local $ref (ref null $struct))
+    (struct.set $struct 0
+      (local.tee $ref
+        (struct.new $struct
+          (i32.const 10)
+        )
+      )
+      (block (result i32)
+        ;; As above, but now in a tee.
+        (drop
+          (local.get $ref)
+        )
+        (i32.const 20)
+      )
+    )
+  )
+
+  ;; CHECK:      (func $ref-other-read (type $none_=>_none)
+  ;; CHECK-NEXT:  (local $ref (ref null $struct))
+  ;; CHECK-NEXT:  (local $other (ref null $struct))
+  ;; CHECK-NEXT:  (local.set $ref
+  ;; CHECK-NEXT:   (struct.new $struct
+  ;; CHECK-NEXT:    (block (result i32)
+  ;; CHECK-NEXT:     (drop
+  ;; CHECK-NEXT:      (local.get $other)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (i32.const 20)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (nop)
+  ;; CHECK-NEXT: )
+  (func $ref-other-read
+    (local $ref (ref null $struct))
+    (local $other (ref null $struct))
+    (local.set $ref
+      (struct.new $struct
+        (i32.const 10)
+      )
+    )
+    (struct.set $struct 0
+      (local.get $ref)
+      (block (result i32)
+        ;; A read of another local is fine.
+        (drop
+          (local.get $other)
+        )
+        (i32.const 20)
+      )
+    )
+  )
+
+  ;; CHECK:      (func $tee-and-subsequent (type $none_=>_none)
+  ;; CHECK-NEXT:  (local $ref (ref null $struct3))
+  ;; CHECK-NEXT:  (local.set $ref
+  ;; CHECK-NEXT:   (struct.new $struct3
+  ;; CHECK-NEXT:    (i32.const 40)
+  ;; CHECK-NEXT:    (i32.const 50)
+  ;; CHECK-NEXT:    (i32.const 60)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (nop)
+  ;; CHECK-NEXT:  (nop)
+  ;; CHECK-NEXT: )
+  (func $tee-and-subsequent
+    (local $ref (ref null $struct3))
+    ;; Test the common pattern of several subsequent sets, one of which is
+    ;; using a tee.
+    (struct.set $struct3 0
+      (local.tee $ref
+        (struct.new $struct3
+          (i32.const 10)
+          (i32.const 20)
+          (i32.const 30)
+        )
+      )
+      (i32.const 40)
+    )
+    (struct.set $struct3 1
+      (local.get $ref)
+      (i32.const 50)
+    )
+    (struct.set $struct3 2
+      (local.get $ref)
+      (i32.const 60)
+    )
+  )
+
+  ;; CHECK:      (func $side-effect-subsequent-ok (type $none_=>_none)
+  ;; CHECK-NEXT:  (local $ref (ref null $struct2))
+  ;; CHECK-NEXT:  (local.set $ref
+  ;; CHECK-NEXT:   (struct.new $struct2
+  ;; CHECK-NEXT:    (call $helper-i32
+  ;; CHECK-NEXT:     (i32.const 0)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (call $helper-i32
+  ;; CHECK-NEXT:     (i32.const 1)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (nop)
+  ;; CHECK-NEXT: )
+  (func $side-effect-subsequent-ok
+    (local $ref (ref null $struct2))
+    (local.set $ref
+      (struct.new $struct2
+        ;; The first field has side effects, but the second does not.
+        (call $helper-i32 (i32.const 0))
+        (i32.const 10)
+      )
+    )
+    ;; Replace the second field with something with side effects.
+    (struct.set $struct2 1
+      (local.get $ref)
+      (call $helper-i32 (i32.const 1))
+    )
+  )
+
+  ;; CHECK:      (func $default (type $none_=>_none)
+  ;; CHECK-NEXT:  (local $ref (ref null $struct))
+  ;; CHECK-NEXT:  (struct.set $struct 0
+  ;; CHECK-NEXT:   (local.tee $ref
+  ;; CHECK-NEXT:    (struct.new_default $struct)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (i32.const 20)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $default
+    (local $ref (ref null $struct))
+    (struct.set $struct 0
+      (local.tee $ref
+        ;; Ignore a new_default for now. If the fields are defaultable then we
+        ;; could add them, in principle, but that might increase code size.
+        (struct.new_default $struct)
+      )
+      (i32.const 20)
+    )
+  )
+
+  ;; CHECK:      (func $many-news (type $none_=>_none)
+  ;; CHECK-NEXT:  (local $ref (ref null $struct3))
+  ;; CHECK-NEXT:  (local $ref2 (ref null $struct3))
+  ;; CHECK-NEXT:  (local.set $ref
+  ;; CHECK-NEXT:   (struct.new $struct3
+  ;; CHECK-NEXT:    (i32.const 40)
+  ;; CHECK-NEXT:    (i32.const 50)
+  ;; CHECK-NEXT:    (i32.const 30)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (nop)
+  ;; CHECK-NEXT:  (nop)
+  ;; CHECK-NEXT:  (struct.set $struct3 2
+  ;; CHECK-NEXT:   (local.get $ref)
+  ;; CHECK-NEXT:   (i32.const 60)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (nop)
+  ;; CHECK-NEXT:  (local.set $ref
+  ;; CHECK-NEXT:   (struct.new $struct3
+  ;; CHECK-NEXT:    (i32.const 400)
+  ;; CHECK-NEXT:    (i32.const 200)
+  ;; CHECK-NEXT:    (i32.const 500)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (nop)
+  ;; CHECK-NEXT:  (block
+  ;; CHECK-NEXT:   (local.set $ref
+  ;; CHECK-NEXT:    (struct.new $struct3
+  ;; CHECK-NEXT:     (i32.const 40)
+  ;; CHECK-NEXT:     (i32.const 20)
+  ;; CHECK-NEXT:     (i32.const 30)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (local.set $ref2
+  ;; CHECK-NEXT:    (struct.new $struct3
+  ;; CHECK-NEXT:     (i32.const 400)
+  ;; CHECK-NEXT:     (i32.const 600)
+  ;; CHECK-NEXT:     (i32.const 500)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (nop)
+  ;; CHECK-NEXT:   (nop)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $many-news
+    (local $ref (ref null $struct3))
+    (local $ref2 (ref null $struct3))
+    ;; Test that we optimize for multiple struct.news in the same function.
+    (struct.set $struct3 0
+      (local.tee $ref
+        (struct.new $struct3
+          (i32.const 10)
+          (i32.const 20)
+          (i32.const 30)
+        )
+      )
+      (i32.const 40)
+    )
+    (struct.set $struct3 1
+      (local.get $ref)
+      (i32.const 50)
+    )
+    (nop)
+    (struct.set $struct3 2
+      (local.get $ref)
+      (i32.const 60)
+    )
+    (nop)
+    (struct.set $struct3 0
+      (local.tee $ref
+        (struct.new $struct3
+          (i32.const 100)
+          (i32.const 200)
+          (i32.const 300)
+        )
+      )
+      (i32.const 400)
+    )
+    (struct.set $struct3 2
+      (local.get $ref)
+      (i32.const 500)
+    )
+    ;; Test inside an inner block.
+    (block $inner
+      (struct.set $struct3 0
+        (local.tee $ref
+          (struct.new $struct3
+            (i32.const 10)
+            (i32.const 20)
+            (i32.const 30)
+          )
+        )
+        (i32.const 40)
+      )
+      ;; Use a different ref local here.
+      (struct.set $struct3 0
+        (local.tee $ref2
+          (struct.new $struct3
+            (i32.const 100)
+            (i32.const 200)
+            (i32.const 300)
+          )
+        )
+        (i32.const 400)
+      )
+      (struct.set $struct3 2
+        (local.get $ref2)
+        (i32.const 500)
+      )
+      (struct.set $struct3 1
+        (local.get $ref2)
+        (i32.const 600)
+      )
+    )
+  )
+
+  ;; CHECK:      (func $unreachable (type $none_=>_none)
+  ;; CHECK-NEXT:  (local $ref (ref null $struct))
+  ;; CHECK-NEXT:  (local.tee $ref
+  ;; CHECK-NEXT:   (block ;; (replaces something unreachable we can't emit)
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (unreachable)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (unreachable)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (struct.set $struct 0
+  ;; CHECK-NEXT:   (local.get $ref)
+  ;; CHECK-NEXT:   (i32.const 10)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (nop)
+  ;; CHECK-NEXT:  (local.set $ref
+  ;; CHECK-NEXT:   (struct.new $struct
+  ;; CHECK-NEXT:    (i32.const 20)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (struct.set $struct 0
+  ;; CHECK-NEXT:   (local.get $ref)
+  ;; CHECK-NEXT:   (unreachable)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $unreachable
+    (local $ref (ref null $struct))
+    ;; Do not optimize unreachable code, either in the new (first pair) or the
+    ;; set (second pair)
+    (local.set $ref
+      (struct.new $struct
+        (unreachable)
+      )
+    )
+    (struct.set $struct 0
+      (local.get $ref)
+      (i32.const 10)
+    )
+    (nop)
+    (local.set $ref
+      (struct.new $struct
+        (i32.const 20)
+      )
+    )
+    (struct.set $struct 0
+      (local.get $ref)
+      (unreachable)
+    )
+  )
+
+  ;; CHECK:      (func $helper-i32 (type $i32_=>_i32) (param $x i32) (result i32)
+  ;; CHECK-NEXT:  (i32.const 42)
+  ;; CHECK-NEXT: )
+  (func $helper-i32 (param $x i32) (result i32)
+    (i32.const 42)
+  )
+)
