@@ -725,4 +725,80 @@
   ;; NO_TNH-NEXT:  (struct.set $struct 0
   ;; NO_TNH-NEXT:   (ref.as_non_null
   ;; NO_TNH-NEXT:    (local.get $x)
-  ;; NO_TNH-NE
+  ;; NO_TNH-NEXT:   )
+  ;; NO_TNH-NEXT:   (call $import)
+  ;; NO_TNH-NEXT:  )
+  ;; NO_TNH-NEXT:  (struct.set $struct 0
+  ;; NO_TNH-NEXT:   (local.get $x)
+  ;; NO_TNH-NEXT:   (i32.const 10)
+  ;; NO_TNH-NEXT:  )
+  ;; NO_TNH-NEXT:  (struct.set $struct 0
+  ;; NO_TNH-NEXT:   (local.get $x)
+  ;; NO_TNH-NEXT:   (local.tee $i
+  ;; NO_TNH-NEXT:    (i32.const 10)
+  ;; NO_TNH-NEXT:   )
+  ;; NO_TNH-NEXT:  )
+  ;; NO_TNH-NEXT: )
+  (func $null.cast-other.effects (param $x (ref null $struct))
+    (local $i i32)
+    (struct.set $struct 0
+      ;; We cannot remove this ref.as_non_null, even though the struct.set will
+      ;; trap if the ref is null, because that would move the trap from before
+      ;; the call to the import to be after it. But in TNH we can assume it does
+      ;; not trap, and remove it.
+      (ref.as_non_null
+        (local.get $x)
+      )
+      (call $import)
+    )
+    (struct.set $struct 0
+      ;; This one can be removed even without TNH, as there are no effects after
+      ;; it.
+      (ref.as_non_null
+        (local.get $x)
+      )
+      (i32.const 10)
+    )
+    (struct.set $struct 0
+      ;; This one can be removed even without TNH, even though there are effects
+      ;; in it. A tee only has local effects, which do not interfere with a
+      ;; trap.
+      (ref.as_non_null
+        (local.get $x)
+      )
+      (local.tee $i
+        (i32.const 10)
+      )
+    )
+  )
+
+  ;; Helper functions.
+
+  ;; TNH:      (func $get-i32 (type $none_=>_i32) (result i32)
+  ;; TNH-NEXT:  (unreachable)
+  ;; TNH-NEXT: )
+  ;; NO_TNH:      (func $get-i32 (type $none_=>_i32) (result i32)
+  ;; NO_TNH-NEXT:  (unreachable)
+  ;; NO_TNH-NEXT: )
+  (func $get-i32 (result i32)
+    (unreachable)
+  )
+  ;; TNH:      (func $get-ref (type $none_=>_ref|$struct|) (result (ref $struct))
+  ;; TNH-NEXT:  (unreachable)
+  ;; TNH-NEXT: )
+  ;; NO_TNH:      (func $get-ref (type $none_=>_ref|$struct|) (result (ref $struct))
+  ;; NO_TNH-NEXT:  (unreachable)
+  ;; NO_TNH-NEXT: )
+  (func $get-ref (result (ref $struct))
+    (unreachable)
+  )
+  ;; TNH:      (func $get-null (type $none_=>_nullref) (result nullref)
+  ;; TNH-NEXT:  (unreachable)
+  ;; TNH-NEXT: )
+  ;; NO_TNH:      (func $get-null (type $none_=>_nullref) (result nullref)
+  ;; NO_TNH-NEXT:  (unreachable)
+  ;; NO_TNH-NEXT: )
+  (func $get-null (result (ref null none))
+    (unreachable)
+  )
+)
