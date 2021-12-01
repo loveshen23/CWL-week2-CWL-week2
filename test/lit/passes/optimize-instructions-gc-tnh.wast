@@ -345,4 +345,384 @@
   ;; TNH-NEXT:    )
   ;; TNH-NEXT:    (block (result (ref $struct))
   ;; TNH-NEXT:     (local.set $1
-  ;; TNH-NEXT:      (call $get-r
+  ;; TNH-NEXT:      (call $get-ref)
+  ;; TNH-NEXT:     )
+  ;; TNH-NEXT:     (drop
+  ;; TNH-NEXT:      (call $get-i32)
+  ;; TNH-NEXT:     )
+  ;; TNH-NEXT:     (local.get $1)
+  ;; TNH-NEXT:    )
+  ;; TNH-NEXT:   )
+  ;; TNH-NEXT:   (i32.const 2)
+  ;; TNH-NEXT:  )
+  ;; TNH-NEXT: )
+  ;; NO_TNH:      (func $select.arm.null.effects (type $void)
+  ;; NO_TNH-NEXT:  (struct.set $struct 0
+  ;; NO_TNH-NEXT:   (select (result (ref null $struct))
+  ;; NO_TNH-NEXT:    (call $get-ref)
+  ;; NO_TNH-NEXT:    (call $get-null)
+  ;; NO_TNH-NEXT:    (call $get-i32)
+  ;; NO_TNH-NEXT:   )
+  ;; NO_TNH-NEXT:   (i32.const 1)
+  ;; NO_TNH-NEXT:  )
+  ;; NO_TNH-NEXT:  (struct.set $struct 0
+  ;; NO_TNH-NEXT:   (select (result (ref null $struct))
+  ;; NO_TNH-NEXT:    (call $get-null)
+  ;; NO_TNH-NEXT:    (call $get-ref)
+  ;; NO_TNH-NEXT:    (call $get-i32)
+  ;; NO_TNH-NEXT:   )
+  ;; NO_TNH-NEXT:   (i32.const 2)
+  ;; NO_TNH-NEXT:  )
+  ;; NO_TNH-NEXT: )
+  (func $select.arm.null.effects
+    ;; As above but there are conflicting effects and we must add a local when
+    ;; we optimize.
+    (struct.set $struct 0
+      (select (result (ref null $struct))
+        (call $get-ref)
+        (call $get-null)
+        (call $get-i32)
+      )
+      (i32.const 1)
+    )
+    (struct.set $struct 0
+      (select (result (ref null $struct))
+        (call $get-null)
+        (call $get-ref)
+        (call $get-i32)
+      )
+      (i32.const 2)
+    )
+  )
+
+  ;; TNH:      (func $null.arm.null.effects (type $void)
+  ;; TNH-NEXT:  (block ;; (replaces something unreachable we can't emit)
+  ;; TNH-NEXT:   (drop
+  ;; TNH-NEXT:    (block (result nullref)
+  ;; TNH-NEXT:     (drop
+  ;; TNH-NEXT:      (ref.as_non_null
+  ;; TNH-NEXT:       (ref.null none)
+  ;; TNH-NEXT:      )
+  ;; TNH-NEXT:     )
+  ;; TNH-NEXT:     (block (result nullref)
+  ;; TNH-NEXT:      (drop
+  ;; TNH-NEXT:       (call $get-i32)
+  ;; TNH-NEXT:      )
+  ;; TNH-NEXT:      (ref.null none)
+  ;; TNH-NEXT:     )
+  ;; TNH-NEXT:    )
+  ;; TNH-NEXT:   )
+  ;; TNH-NEXT:   (drop
+  ;; TNH-NEXT:    (i32.const 1)
+  ;; TNH-NEXT:   )
+  ;; TNH-NEXT:   (unreachable)
+  ;; TNH-NEXT:  )
+  ;; TNH-NEXT: )
+  ;; NO_TNH:      (func $null.arm.null.effects (type $void)
+  ;; NO_TNH-NEXT:  (struct.set $struct 0
+  ;; NO_TNH-NEXT:   (select (result (ref null $struct))
+  ;; NO_TNH-NEXT:    (ref.as_non_null
+  ;; NO_TNH-NEXT:     (ref.null none)
+  ;; NO_TNH-NEXT:    )
+  ;; NO_TNH-NEXT:    (ref.null none)
+  ;; NO_TNH-NEXT:    (call $get-i32)
+  ;; NO_TNH-NEXT:   )
+  ;; NO_TNH-NEXT:   (i32.const 1)
+  ;; NO_TNH-NEXT:  )
+  ;; NO_TNH-NEXT: )
+  (func $null.arm.null.effects
+    ;; Verify we do not error on a null reference in a select, even if cast to
+    ;; non-null.
+    (struct.set $struct 0
+      (select (result (ref null $struct))
+        (ref.as_non_null
+          (ref.null none)
+        )
+        (ref.null none)
+        (call $get-i32)
+      )
+      (i32.const 1)
+    )
+  )
+
+  ;; TNH:      (func $set-get-cast (type $structref_=>_none) (param $ref structref)
+  ;; TNH-NEXT:  (drop
+  ;; TNH-NEXT:   (struct.get $struct 0
+  ;; TNH-NEXT:    (ref.cast $struct
+  ;; TNH-NEXT:     (local.get $ref)
+  ;; TNH-NEXT:    )
+  ;; TNH-NEXT:   )
+  ;; TNH-NEXT:  )
+  ;; TNH-NEXT:  (struct.set $struct 0
+  ;; TNH-NEXT:   (ref.cast $struct
+  ;; TNH-NEXT:    (local.get $ref)
+  ;; TNH-NEXT:   )
+  ;; TNH-NEXT:   (i32.const 1)
+  ;; TNH-NEXT:  )
+  ;; TNH-NEXT:  (struct.set $struct 0
+  ;; TNH-NEXT:   (ref.cast null $struct
+  ;; TNH-NEXT:    (local.get $ref)
+  ;; TNH-NEXT:   )
+  ;; TNH-NEXT:   (block (result i32)
+  ;; TNH-NEXT:    (return)
+  ;; TNH-NEXT:    (i32.const 1)
+  ;; TNH-NEXT:   )
+  ;; TNH-NEXT:  )
+  ;; TNH-NEXT: )
+  ;; NO_TNH:      (func $set-get-cast (type $structref_=>_none) (param $ref structref)
+  ;; NO_TNH-NEXT:  (drop
+  ;; NO_TNH-NEXT:   (struct.get $struct 0
+  ;; NO_TNH-NEXT:    (ref.cast $struct
+  ;; NO_TNH-NEXT:     (local.get $ref)
+  ;; NO_TNH-NEXT:    )
+  ;; NO_TNH-NEXT:   )
+  ;; NO_TNH-NEXT:  )
+  ;; NO_TNH-NEXT:  (struct.set $struct 0
+  ;; NO_TNH-NEXT:   (ref.cast null $struct
+  ;; NO_TNH-NEXT:    (local.get $ref)
+  ;; NO_TNH-NEXT:   )
+  ;; NO_TNH-NEXT:   (i32.const 1)
+  ;; NO_TNH-NEXT:  )
+  ;; NO_TNH-NEXT:  (struct.set $struct 0
+  ;; NO_TNH-NEXT:   (ref.cast null $struct
+  ;; NO_TNH-NEXT:    (local.get $ref)
+  ;; NO_TNH-NEXT:   )
+  ;; NO_TNH-NEXT:   (block (result i32)
+  ;; NO_TNH-NEXT:    (return)
+  ;; NO_TNH-NEXT:    (i32.const 1)
+  ;; NO_TNH-NEXT:   )
+  ;; NO_TNH-NEXT:  )
+  ;; NO_TNH-NEXT: )
+  (func $set-get-cast (param $ref (ref null struct))
+    ;; A nullable cast flowing into a place that traps on null can become a
+    ;; non-nullable cast.
+    (drop
+      (struct.get $struct 0
+        (ref.cast null $struct
+          (local.get $ref)
+        )
+      )
+    )
+    ;; Ditto for a set, at least in traps-happen mode.
+    ;; TODO handle non-TNH as well, but we need to be careful of effects in
+    ;;      other children.
+    (struct.set $struct 0
+      (ref.cast null $struct
+        (local.get $ref)
+      )
+      (i32.const 1)
+    )
+    ;; Even in TNH mode, a child with an effect of control flow transfer
+    ;; prevents us from optimizing - if the parent is not necessarily reached,
+    ;; we cannot infer the child won't trap.
+    (struct.set $struct 0
+      (ref.cast null $struct
+        (local.get $ref)
+      )
+      (block (result i32)
+        ;; This block has type i32, to check that we don't just look for
+        ;; unreachable. We must scan for any transfer of control flow in the
+        ;; child of the struct.set.
+        (return)
+        (i32.const 1)
+      )
+    )
+  )
+
+  ;; TNH:      (func $cast-if-null (type $none_=>_ref|$struct|) (result (ref $struct))
+  ;; TNH-NEXT:  (block ;; (replaces something unreachable we can't emit)
+  ;; TNH-NEXT:   (drop
+  ;; TNH-NEXT:    (block
+  ;; TNH-NEXT:     (drop
+  ;; TNH-NEXT:      (i32.const 1)
+  ;; TNH-NEXT:     )
+  ;; TNH-NEXT:     (unreachable)
+  ;; TNH-NEXT:    )
+  ;; TNH-NEXT:   )
+  ;; TNH-NEXT:   (unreachable)
+  ;; TNH-NEXT:  )
+  ;; TNH-NEXT: )
+  ;; NO_TNH:      (func $cast-if-null (type $none_=>_ref|$struct|) (result (ref $struct))
+  ;; NO_TNH-NEXT:  (drop
+  ;; NO_TNH-NEXT:   (if (result (ref none))
+  ;; NO_TNH-NEXT:    (i32.const 1)
+  ;; NO_TNH-NEXT:    (unreachable)
+  ;; NO_TNH-NEXT:    (ref.as_non_null
+  ;; NO_TNH-NEXT:     (ref.null none)
+  ;; NO_TNH-NEXT:    )
+  ;; NO_TNH-NEXT:   )
+  ;; NO_TNH-NEXT:  )
+  ;; NO_TNH-NEXT:  (unreachable)
+  ;; NO_TNH-NEXT: )
+  (func $cast-if-null (result (ref $struct))
+    ;; We can remove the unreachable arm of the if here in TNH mode. While doing
+    ;; so we must refinalize properly or else we'll hit an error in pass-debug
+    ;; mode.
+    (ref.cast $struct
+      (if (result (ref none))
+       (i32.const 1)
+       (unreachable)
+       (ref.as_non_null
+         (ref.null none)
+       )
+      )
+    )
+  )
+
+  ;; TNH:      (func $cast-if-null-flip (type $none_=>_ref|$struct|) (result (ref $struct))
+  ;; TNH-NEXT:  (block ;; (replaces something unreachable we can't emit)
+  ;; TNH-NEXT:   (drop
+  ;; TNH-NEXT:    (block
+  ;; TNH-NEXT:     (drop
+  ;; TNH-NEXT:      (i32.const 1)
+  ;; TNH-NEXT:     )
+  ;; TNH-NEXT:     (unreachable)
+  ;; TNH-NEXT:    )
+  ;; TNH-NEXT:   )
+  ;; TNH-NEXT:   (unreachable)
+  ;; TNH-NEXT:  )
+  ;; TNH-NEXT: )
+  ;; NO_TNH:      (func $cast-if-null-flip (type $none_=>_ref|$struct|) (result (ref $struct))
+  ;; NO_TNH-NEXT:  (drop
+  ;; NO_TNH-NEXT:   (if (result (ref none))
+  ;; NO_TNH-NEXT:    (i32.const 1)
+  ;; NO_TNH-NEXT:    (ref.as_non_null
+  ;; NO_TNH-NEXT:     (ref.null none)
+  ;; NO_TNH-NEXT:    )
+  ;; NO_TNH-NEXT:    (unreachable)
+  ;; NO_TNH-NEXT:   )
+  ;; NO_TNH-NEXT:  )
+  ;; NO_TNH-NEXT:  (unreachable)
+  ;; NO_TNH-NEXT: )
+  (func $cast-if-null-flip (result (ref $struct))
+    ;; As above but with arms flipped.
+    (ref.cast $struct
+      (if (result (ref none))
+       (i32.const 1)
+       (ref.as_non_null
+         (ref.null none)
+       )
+       (unreachable)
+      )
+    )
+  )
+
+  ;; TNH:      (func $cast-to-bottom (type $ref|any|_anyref_=>_none) (param $ref (ref any)) (param $nullable-ref anyref)
+  ;; TNH-NEXT:  (drop
+  ;; TNH-NEXT:   (block (result (ref none))
+  ;; TNH-NEXT:    (drop
+  ;; TNH-NEXT:     (local.get $ref)
+  ;; TNH-NEXT:    )
+  ;; TNH-NEXT:    (unreachable)
+  ;; TNH-NEXT:   )
+  ;; TNH-NEXT:  )
+  ;; TNH-NEXT:  (drop
+  ;; TNH-NEXT:   (block (result (ref none))
+  ;; TNH-NEXT:    (drop
+  ;; TNH-NEXT:     (local.get $nullable-ref)
+  ;; TNH-NEXT:    )
+  ;; TNH-NEXT:    (unreachable)
+  ;; TNH-NEXT:   )
+  ;; TNH-NEXT:  )
+  ;; TNH-NEXT:  (drop
+  ;; TNH-NEXT:   (block (result (ref none))
+  ;; TNH-NEXT:    (drop
+  ;; TNH-NEXT:     (local.get $ref)
+  ;; TNH-NEXT:    )
+  ;; TNH-NEXT:    (unreachable)
+  ;; TNH-NEXT:   )
+  ;; TNH-NEXT:  )
+  ;; TNH-NEXT:  (drop
+  ;; TNH-NEXT:   (block (result nullref)
+  ;; TNH-NEXT:    (drop
+  ;; TNH-NEXT:     (local.get $nullable-ref)
+  ;; TNH-NEXT:    )
+  ;; TNH-NEXT:    (ref.null none)
+  ;; TNH-NEXT:   )
+  ;; TNH-NEXT:  )
+  ;; TNH-NEXT: )
+  ;; NO_TNH:      (func $cast-to-bottom (type $ref|any|_anyref_=>_none) (param $ref (ref any)) (param $nullable-ref anyref)
+  ;; NO_TNH-NEXT:  (drop
+  ;; NO_TNH-NEXT:   (block (result (ref none))
+  ;; NO_TNH-NEXT:    (drop
+  ;; NO_TNH-NEXT:     (local.get $ref)
+  ;; NO_TNH-NEXT:    )
+  ;; NO_TNH-NEXT:    (unreachable)
+  ;; NO_TNH-NEXT:   )
+  ;; NO_TNH-NEXT:  )
+  ;; NO_TNH-NEXT:  (drop
+  ;; NO_TNH-NEXT:   (block (result (ref none))
+  ;; NO_TNH-NEXT:    (drop
+  ;; NO_TNH-NEXT:     (local.get $nullable-ref)
+  ;; NO_TNH-NEXT:    )
+  ;; NO_TNH-NEXT:    (unreachable)
+  ;; NO_TNH-NEXT:   )
+  ;; NO_TNH-NEXT:  )
+  ;; NO_TNH-NEXT:  (drop
+  ;; NO_TNH-NEXT:   (block (result (ref none))
+  ;; NO_TNH-NEXT:    (drop
+  ;; NO_TNH-NEXT:     (local.get $ref)
+  ;; NO_TNH-NEXT:    )
+  ;; NO_TNH-NEXT:    (unreachable)
+  ;; NO_TNH-NEXT:   )
+  ;; NO_TNH-NEXT:  )
+  ;; NO_TNH-NEXT:  (drop
+  ;; NO_TNH-NEXT:   (ref.cast null none
+  ;; NO_TNH-NEXT:    (local.get $nullable-ref)
+  ;; NO_TNH-NEXT:   )
+  ;; NO_TNH-NEXT:  )
+  ;; NO_TNH-NEXT: )
+  (func $cast-to-bottom (param $ref (ref any)) (param $nullable-ref anyref)
+    ;; Non-nullable casts to none must trap (regardless of whether the input is
+    ;; nullable or not, the output is an impossible type).
+    (drop
+      (ref.cast none
+        (local.get $ref)
+      )
+    )
+    (drop
+      (ref.cast none
+        (local.get $nullable-ref)
+      )
+    )
+    ;; Nullable casts to null have more possibilities. First, if the input is
+    ;; non-nullable then we trap.
+    (drop
+      (ref.cast null none
+        (local.get $ref)
+      )
+    )
+    ;; Second, if the value may be a null, then we either return a null or we
+    ;; trap. In TNH mode we dismiss the possibility of a trap and so we can just
+    ;; return a null here. (In non-TNH mode we could do a check for null etc.,
+    ;; but we'd be increasing code size.)
+    (drop
+      (ref.cast null none
+        (local.get $nullable-ref)
+      )
+    )
+  )
+
+  ;; TNH:      (func $null.cast-other.effects (type $ref?|$struct|_=>_none) (param $x (ref null $struct))
+  ;; TNH-NEXT:  (local $i i32)
+  ;; TNH-NEXT:  (struct.set $struct 0
+  ;; TNH-NEXT:   (local.get $x)
+  ;; TNH-NEXT:   (call $import)
+  ;; TNH-NEXT:  )
+  ;; TNH-NEXT:  (struct.set $struct 0
+  ;; TNH-NEXT:   (local.get $x)
+  ;; TNH-NEXT:   (i32.const 10)
+  ;; TNH-NEXT:  )
+  ;; TNH-NEXT:  (struct.set $struct 0
+  ;; TNH-NEXT:   (local.get $x)
+  ;; TNH-NEXT:   (local.tee $i
+  ;; TNH-NEXT:    (i32.const 10)
+  ;; TNH-NEXT:   )
+  ;; TNH-NEXT:  )
+  ;; TNH-NEXT: )
+  ;; NO_TNH:      (func $null.cast-other.effects (type $ref?|$struct|_=>_none) (param $x (ref null $struct))
+  ;; NO_TNH-NEXT:  (local $i i32)
+  ;; NO_TNH-NEXT:  (struct.set $struct 0
+  ;; NO_TNH-NEXT:   (ref.as_non_null
+  ;; NO_TNH-NEXT:    (local.get $x)
+  ;; NO_TNH-NE
