@@ -527,4 +527,16 @@
   ;; CHECK-NEXT: )
   (func $if-of-if-but-outer-else
     (local $x i32)
-    ;; The outer if has an else. For now, leave this unopt
+    ;; The outer if has an else. For now, leave this unoptimized.
+    (if
+      (local.tee $x
+        (i32.const 1)
+      )
+      (if
+        (local.get $x)
+        (call $if-of-if-but-outer-else)
+      )
+      (call $if-of-if)
+    )
+  )
+)
