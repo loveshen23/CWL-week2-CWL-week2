@@ -54,4 +54,38 @@
  ;; CHECK-NEXT:  )
  ;; CHECK-NEXT:  (drop
  ;; CHECK-NEXT:   (i32.const 33)
- ;; CHECK
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT: )
+ (func $test
+  (global.set $A
+   (i32.const 11)
+  )
+  (global.set $C
+   (i32.const 33)
+  )
+  ;; We can infer $A here since we see the write to it, above.
+  (drop
+   (global.get $A)
+  )
+  ;; We can infer $B since we'll prove it is immutable.
+  (drop
+   (global.get $B)
+  )
+  ;; We can infer $C here since we see the write to it, above.
+  (drop
+   (global.get $C)
+  )
+  ;; This call sets $A. After the call we can no longer infer $A, but we can
+  ;; still infer the others.
+  (call $set)
+  (drop
+   (global.get $A)
+  )
+  (drop
+   (global.get $B)
+  )
+  (drop
+   (global.get $C)
+  )
+ )
+)
