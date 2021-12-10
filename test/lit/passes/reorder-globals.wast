@@ -247,4 +247,48 @@
     (drop
       (global.get $c)
     )
-    
+    (drop
+      (global.get $c)
+    )
+  )
+)
+
+;; $b has more uses, but $a is an import and must remain first.
+(module
+  ;; CHECK:      (import "a" "b" (global $a i32))
+  (import "a" "b" (global $a i32))
+  ;; CHECK:      (global $b i32 (i32.const 10))
+  (global $b i32 (i32.const 10))
+
+  ;; CHECK:      (func $uses
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (global.get $b)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $uses
+    (drop
+      (global.get $b)
+    )
+  )
+)
+
+;; As above, but with a and b's names flipped, to check that the names do not
+;; matter, and we keep imports first.
+(module
+  ;; CHECK:      (import "a" "b" (global $b i32))
+  (import "a" "b" (global $b i32))
+
+  ;; CHECK:      (global $a i32 (i32.const 10))
+  (global $a i32 (i32.const 10))
+
+  ;; CHECK:      (func $uses
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (global.get $a)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $uses
+    (drop
+      (global.get $a)
+    )
+  )
+)
