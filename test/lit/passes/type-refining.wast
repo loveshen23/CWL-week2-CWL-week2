@@ -220,4 +220,380 @@
   ;; CHECK:      (func $work (type $ref|$struct|_ref|$child|_=>_none) (param $struct (ref $struct)) (param $child (ref $child))
   ;; CHECK-NEXT:  (struct.set $struct 0
   ;; CHECK-NEXT:   (local.get $struct)
-  ;; CHECK-NEXT:   (local.get $ch
+  ;; CHECK-NEXT:   (local.get $child)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (struct.set $child 0
+  ;; CHECK-NEXT:   (local.get $child)
+  ;; CHECK-NEXT:   (local.get $child)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $work (param $struct (ref $struct)) (param $child (ref $child))
+    (struct.set $struct 0
+      (local.get $struct)
+      (local.get $child)
+    )
+    (struct.set $child 0
+      (local.get $child)
+      (local.get $child)
+    )
+  )
+)
+
+(module
+  ;; As in 2 testcases ago, write to the parent a child, and to the child a
+  ;; parent, but now the writes happen in struct.new. Even with that precise
+  ;; info, however, we can't make the parent field more specific than the
+  ;; child's.
+
+  ;; CHECK:      (type $struct (struct (field (mut (ref $struct)))))
+  (type $struct (struct_subtype (field (mut structref)) data))
+
+  ;; CHECK:      (type $child (struct_subtype (field (mut (ref $struct))) $struct))
+  (type $child (struct_subtype (field (mut structref)) $struct))
+
+  ;; CHECK:      (type $ref|$struct|_ref|$child|_=>_none (func (param (ref $struct) (ref $child))))
+
+  ;; CHECK:      (func $work (type $ref|$struct|_ref|$child|_=>_none) (param $struct (ref $struct)) (param $child (ref $child))
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.new $struct
+  ;; CHECK-NEXT:    (local.get $child)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.new $child
+  ;; CHECK-NEXT:    (local.get $struct)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $work (param $struct (ref $struct)) (param $child (ref $child))
+    (drop
+      (struct.new $struct
+        (local.get $child)
+      )
+    )
+    (drop
+      (struct.new $child
+        (local.get $struct)
+      )
+    )
+  )
+)
+
+(module
+  ;; Write a parent to the parent and a child to the child. We can specialize
+  ;; each of them to contain their own type. This tests that we are aware that
+  ;; a struct.new is of a precise type, which means that seeing a type written
+  ;; to a parent does not limit specialization in a child.
+  ;;
+  ;; (Note that we can't do a similar test with struct.set, as that would
+  ;; imply the fields are mutable, which limits optimization, see the next
+  ;; testcase after this.)
+
+  ;; CHECK:      (type $struct (struct (field (ref $struct))))
+  (type $struct (struct_subtype (field structref) data))
+
+  ;; CHECK:      (type $child (struct_subtype (field (ref $child)) $struct))
+  (type $child (struct_subtype (field structref) $struct))
+
+  ;; CHECK:      (type $ref|$struct|_ref|$child|_=>_none (func (param (ref $struct) (ref $child))))
+
+  ;; CHECK:      (func $work (type $ref|$struct|_ref|$child|_=>_none) (param $struct (ref $struct)) (param $child (ref $child))
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.new $struct
+  ;; CHECK-NEXT:    (local.get $struct)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.new $child
+  ;; CHECK-NEXT:    (local.get $child)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $work (param $struct (ref $struct)) (param $child (ref $child))
+    (drop
+      (struct.new $struct
+        (local.get $struct)
+      )
+    )
+    (drop
+      (struct.new $child
+        (local.get $child)
+      )
+    )
+  )
+)
+
+(module
+  ;; As above, but the fields are mutable. We cannot specialize them to
+  ;; different types in this case, and both will become $struct (still an
+  ;; improvement!)
+
+  ;; CHECK:      (type $struct (struct (field (mut (ref $struct)))))
+  (type $struct (struct_subtype (field (mut structref)) data))
+
+  ;; CHECK:      (type $child (struct_subtype (field (mut (ref $struct))) $struct))
+  (type $child (struct_subtype (field (mut structref)) $struct))
+
+  ;; CHECK:      (type $ref|$struct|_ref|$child|_=>_none (func (param (ref $struct) (ref $child))))
+
+  ;; CHECK:      (func $work (type $ref|$struct|_ref|$child|_=>_none) (param $struct (ref $struct)) (param $child (ref $child))
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.new $struct
+  ;; CHECK-NEXT:    (local.get $struct)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.new $child
+  ;; CHECK-NEXT:    (local.get $child)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $work (param $struct (ref $struct)) (param $child (ref $child))
+    (drop
+      (struct.new $struct
+        (local.get $struct)
+      )
+    )
+    (drop
+      (struct.new $child
+        (local.get $child)
+      )
+    )
+  )
+)
+
+(module
+  ;; As above, but the child also has a new field that is not in the parent. In
+  ;; that case there is nothing stopping us from specializing that new field
+  ;; to $child.
+
+  ;; CHECK:      (type $struct (struct (field (mut (ref $struct)))))
+  (type $struct (struct_subtype (field (mut structref)) data))
+
+  ;; CHECK:      (type $child (struct_subtype (field (mut (ref $struct))) (field (mut (ref $child))) $struct))
+  (type $child (struct_subtype (field (mut structref)) (field (mut structref)) $struct))
+
+  ;; CHECK:      (type $ref|$struct|_ref|$child|_=>_none (func (param (ref $struct) (ref $child))))
+
+  ;; CHECK:      (func $work (type $ref|$struct|_ref|$child|_=>_none) (param $struct (ref $struct)) (param $child (ref $child))
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.new $struct
+  ;; CHECK-NEXT:    (local.get $struct)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.new $child
+  ;; CHECK-NEXT:    (local.get $child)
+  ;; CHECK-NEXT:    (local.get $child)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $work (param $struct (ref $struct)) (param $child (ref $child))
+    (drop
+      (struct.new $struct
+        (local.get $struct)
+      )
+    )
+    (drop
+      (struct.new $child
+        (local.get $child)
+        (local.get $child)
+      )
+    )
+  )
+)
+
+(module
+  ;; A copy of a field does not prevent optimization (even though it assigns
+  ;; the old type).
+
+  ;; CHECK:      (type $struct (struct (field (mut (ref $struct)))))
+  (type $struct (struct_subtype (field (mut structref)) data))
+
+  ;; CHECK:      (type $ref|$struct|_=>_none (func (param (ref $struct))))
+
+  ;; CHECK:      (func $work (type $ref|$struct|_=>_none) (param $struct (ref $struct))
+  ;; CHECK-NEXT:  (struct.set $struct 0
+  ;; CHECK-NEXT:   (local.get $struct)
+  ;; CHECK-NEXT:   (local.get $struct)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (struct.set $struct 0
+  ;; CHECK-NEXT:   (local.get $struct)
+  ;; CHECK-NEXT:   (struct.get $struct 0
+  ;; CHECK-NEXT:    (local.get $struct)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $work (param $struct (ref $struct))
+    (struct.set $struct 0
+      (local.get $struct)
+      (local.get $struct)
+    )
+    (struct.set $struct 0
+      (local.get $struct)
+      (struct.get $struct 0
+        (local.get $struct)
+      )
+    )
+  )
+)
+
+(module
+  ;; CHECK:      (type $X (struct ))
+
+  ;; CHECK:      (type $Y (struct_subtype  $X))
+  (type $Y (struct_subtype $X))
+
+  ;; CHECK:      (type $none_=>_none (func))
+
+  ;; CHECK:      (type $A (struct (field (ref $Y))))
+
+  ;; CHECK:      (type $C (struct_subtype (field (ref $Y)) $A))
+  (type $C (struct_subtype (field (ref $X)) $A))
+
+  ;; CHECK:      (type $B (struct_subtype (field (ref $Y)) $A))
+  (type $B (struct_subtype (field (ref $X)) $A))
+
+  (type $A (struct_subtype (field (ref $X)) data))
+
+  (type $X (struct))
+
+  ;; CHECK:      (func $foo (type $none_=>_none)
+  ;; CHECK-NEXT:  (local $unused (ref null $C))
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.new $B
+  ;; CHECK-NEXT:    (struct.new_default $Y)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $foo
+    ;; A use of type $C without ever creating an instance of it. We do still need
+    ;; to update the type if we update the parent type, and we will in fact update
+    ;; the parent $A's field from $X to $Y (see below), so we must do the same in
+    ;; $C. As a result, all the fields with $X in them in all of $A, $B, $C will
+    ;; be improved to contain $Y.
+    (local $unused (ref null $C))
+
+    (drop
+      (struct.new $B
+        (struct.new $Y) ;; This value is more specific than the field, which is an
+                        ;; opportunity to subtype, which we do for $B. As $A, our
+                        ;; parent, has no writes at all, we can propagate this
+                        ;; info to there as well, which means we can perform the
+                        ;; same optimization in $A as well.
+      )
+    )
+  )
+)
+
+(module
+  ;; As above, but remove the struct.new to $B, which means $A, $B, $C all have
+  ;; no writes to them. There are no optimizations to do here.
+
+  ;; CHECK:      (type $X (struct ))
+  (type $X (struct))
+
+  ;; CHECK:      (type $none_=>_none (func))
+
+  ;; CHECK:      (type $A (struct (field (ref $X))))
+
+  ;; CHECK:      (type $C (struct_subtype (field (ref $X)) $A))
+  (type $C (struct_subtype (field (ref $X)) $A))
+
+  ;; CHECK:      (type $B (struct_subtype (field (ref $X)) $A))
+  (type $B (struct_subtype (field (ref $X)) $A))
+
+  ;; CHECK:      (type $Y (struct_subtype  $X))
+  (type $Y (struct_subtype $X))
+
+  (type $A (struct_subtype (field (ref $X)) data))
+
+  ;; CHECK:      (func $foo (type $none_=>_none)
+  ;; CHECK-NEXT:  (local $unused1 (ref null $C))
+  ;; CHECK-NEXT:  (local $unused2 (ref null $B))
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.new_default $Y)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $foo
+    (local $unused1 (ref null $C))
+    (local $unused2 (ref null $B))
+    (drop (struct.new $Y))
+  )
+)
+
+(module
+  ;; CHECK:      (type $X (struct ))
+  (type $X (struct))
+  ;; CHECK:      (type $none_=>_none (func))
+
+  ;; CHECK:      (type $A (struct (field (ref $X))))
+
+  ;; CHECK:      (type $B (struct_subtype (field (ref $Y)) $A))
+  (type $B (struct_subtype (field (ref $Y)) $A))
+
+  (type $A (struct_subtype (field (ref $X)) data))
+
+  ;; CHECK:      (type $Y (struct_subtype  $X))
+  (type $Y (struct_subtype $X))
+
+  ;; CHECK:      (func $foo (type $none_=>_none)
+  ;; CHECK-NEXT:  (local $unused2 (ref null $B))
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.new $A
+  ;; CHECK-NEXT:    (struct.new_default $X)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $foo
+    ;; $B begins with its field of type $Y, which is more specific than the
+    ;; field is in the supertype $A. There are no writes to $B, and so we end
+    ;; up looking in the parent to see what to do; we should still emit a
+    ;; reasonable type for $B, and there is no reason to make it *less*
+    ;; specific, so leave things as they are.
+    (local $unused2 (ref null $B))
+    (drop
+      (struct.new $A
+        (struct.new $X)
+      )
+    )
+  )
+)
+
+(module
+  ;; CHECK:      (type $struct (struct (field (mut (ref null $struct)))))
+  (type $struct (struct_subtype (field (mut (ref null struct))) data))
+
+  ;; CHECK:      (type $ref|$struct|_=>_none (func (param (ref $struct))))
+
+  ;; CHECK:      (func $update-null (type $ref|$struct|_=>_none) (param $struct (ref $struct))
+  ;; CHECK-NEXT:  (struct.set $struct 0
+  ;; CHECK-NEXT:   (local.get $struct)
+  ;; CHECK-NEXT:   (local.get $struct)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (struct.set $struct 0
+  ;; CHECK-NEXT:   (local.get $struct)
+  ;; CHECK-NEXT:   (ref.null none)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $update-null (param $struct (ref $struct))
+    (struct.set $struct 0
+      (local.get $struct)
+      ;; Write a $struct to the field.
+      (local.get $struct)
+    )
+    (struct.set $struct 0
+      (local.get $struct)
+      ;; This null does not prevent refinement.
+      (ref.null none)
+    )
+  )
+)
+
+(module
+  ;; As above, but now the null is in a child. The result should be the same:
+  ;; refine the field to nullable $struct.
+
+  ;; CHECK:      (type $struct (struct (field (mut (ref null $struct)))))
+  (type $struct (struct_subtype (field (mut (ref null struct))) data))
+  ;; CHECK
