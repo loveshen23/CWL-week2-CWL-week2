@@ -1,0 +1,7 @@
+(module
+ (type $i32_f32_f64_=>_f32 (func (param i32 f32 f64) (result f32)))
+ (type $i32_f64_f64_=>_f32 (func (param i32 f64 f64) (result f32)))
+ (type $0 (func (param i32) (result i32)))
+ (type $1 (func (result i32)))
+ (type $2 (func))
+ (type $f32_f64_=>_f32 (func (param f32 f64) (r
