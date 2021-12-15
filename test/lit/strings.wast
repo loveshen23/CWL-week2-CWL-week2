@@ -617,4 +617,29 @@
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
   (func $string.new_try (param $array (ref $array))
-    (
+    (drop
+      (string.new_utf8_try
+        (i32.const 1)
+        (i32.const 2)
+      )
+    )
+    (drop
+      (string.new_utf8_array_try
+        (local.get $array)
+        (i32.const 3)
+        (i32.const 4)
+      )
+    )
+  )
+
+  ;; CHECK:      (func $string.hash (type $stringref_=>_i32) (param $ref stringref) (result i32)
+  ;; CHECK-NEXT:  (string.hash
+  ;; CHECK-NEXT:   (local.get $ref)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $string.hash (param $ref stringref) (result i32)
+    (string.hash
+      (local.get $ref)
+    )
+  )
+)
