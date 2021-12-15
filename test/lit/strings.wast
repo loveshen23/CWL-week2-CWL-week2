@@ -186,4 +186,435 @@
   ;; CHECK-NEXT:  (drop
   ;; CHECK-NEXT:   (string.encode_wtf8 utf8
   ;; CHECK-NEXT:    (local.get $ref)
-  ;; CHECK-
+  ;; CHECK-NEXT:    (i32.const 20)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (string.encode_wtf16
+  ;; CHECK-NEXT:    (local.get $ref)
+  ;; CHECK-NEXT:    (i32.const 30)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $string.encode (param $ref stringref)
+    (drop
+      (i32.eqz ;; validate the output is i32
+        (string.encode_wtf8 wtf8
+          (local.get $ref)
+          (i32.const 10)
+        )
+      )
+    )
+    (drop
+      (string.encode_wtf8 utf8
+        (local.get $ref)
+        (i32.const 20)
+      )
+    )
+    (drop
+      (string.encode_wtf16
+        (local.get $ref)
+        (i32.const 30)
+      )
+    )
+  )
+
+  ;; CHECK:      (func $string.concat (type $stringref_stringref_=>_none) (param $a stringref) (param $b stringref)
+  ;; CHECK-NEXT:  (local.set $a
+  ;; CHECK-NEXT:   (string.concat
+  ;; CHECK-NEXT:    (local.get $a)
+  ;; CHECK-NEXT:    (local.get $b)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $string.concat (param $a stringref) (param $b stringref)
+    (local.set $a ;; validate the output is a stringref
+      (string.concat
+        (local.get $a)
+        (local.get $b)
+      )
+    )
+  )
+
+  ;; CHECK:      (func $string.eq (type $stringref_stringref_=>_none) (param $a stringref) (param $b stringref)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i32.eqz
+  ;; CHECK-NEXT:    (string.eq
+  ;; CHECK-NEXT:     (local.get $a)
+  ;; CHECK-NEXT:     (local.get $b)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $string.eq (param $a stringref) (param $b stringref)
+    (drop
+      (i32.eqz ;; validate the output is an i32
+        (string.eq
+          (local.get $a)
+          (local.get $b)
+        )
+      )
+    )
+  )
+
+  ;; CHECK:      (func $string.compare (type $stringref_stringref_=>_none) (param $a stringref) (param $b stringref)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i32.eqz
+  ;; CHECK-NEXT:    (string.compare
+  ;; CHECK-NEXT:     (local.get $a)
+  ;; CHECK-NEXT:     (local.get $b)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $string.compare (param $a stringref) (param $b stringref)
+    (drop
+      (i32.eqz ;; validate the output is an i32
+        (string.compare
+          (local.get $a)
+          (local.get $b)
+        )
+      )
+    )
+  )
+
+  ;; CHECK:      (func $string.is_usv_sequence (type $stringref_=>_none) (param $ref stringref)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i32.eqz
+  ;; CHECK-NEXT:    (string.is_usv_sequence
+  ;; CHECK-NEXT:     (local.get $ref)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $string.is_usv_sequence (param $ref stringref)
+    (drop
+      (i32.eqz ;; validate the output is i32
+        (string.is_usv_sequence
+          (local.get $ref)
+        )
+      )
+    )
+  )
+
+  ;; CHECK:      (func $string.as (type $stringref_stringview_wtf8_stringview_wtf16_stringview_iter_=>_none) (param $a stringref) (param $b stringview_wtf8) (param $c stringview_wtf16) (param $d stringview_iter)
+  ;; CHECK-NEXT:  (local.set $b
+  ;; CHECK-NEXT:   (string.as_wtf8
+  ;; CHECK-NEXT:    (local.get $a)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (local.set $c
+  ;; CHECK-NEXT:   (string.as_wtf16
+  ;; CHECK-NEXT:    (local.get $a)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (local.set $d
+  ;; CHECK-NEXT:   (string.as_iter
+  ;; CHECK-NEXT:    (local.get $a)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $string.as
+    (param $a stringref)
+    (param $b stringview_wtf8)
+    (param $c stringview_wtf16)
+    (param $d stringview_iter)
+    (local.set $b ;; validate the output type
+      (string.as_wtf8
+        (local.get $a)
+      )
+    )
+    (local.set $c
+      (string.as_wtf16
+        (local.get $a)
+      )
+    )
+    (local.set $d
+      (string.as_iter
+        (local.get $a)
+      )
+    )
+  )
+
+  ;; CHECK:      (func $stringview-access (type $stringref_stringview_wtf8_stringview_wtf16_stringview_iter_=>_none) (param $a stringref) (param $b stringview_wtf8) (param $c stringview_wtf16) (param $d stringview_iter)
+  ;; CHECK-NEXT:  (local $i32 i32)
+  ;; CHECK-NEXT:  (local.set $i32
+  ;; CHECK-NEXT:   (stringview_wtf8.advance
+  ;; CHECK-NEXT:    (local.get $b)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 1)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (local.set $i32
+  ;; CHECK-NEXT:   (stringview_wtf16.get_codeunit
+  ;; CHECK-NEXT:    (local.get $c)
+  ;; CHECK-NEXT:    (i32.const 2)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (local.set $i32
+  ;; CHECK-NEXT:   (stringview_iter.next
+  ;; CHECK-NEXT:    (local.get $d)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (local.set $i32
+  ;; CHECK-NEXT:   (stringview_iter.advance
+  ;; CHECK-NEXT:    (local.get $d)
+  ;; CHECK-NEXT:    (i32.const 3)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (local.set $i32
+  ;; CHECK-NEXT:   (stringview_iter.rewind
+  ;; CHECK-NEXT:    (local.get $d)
+  ;; CHECK-NEXT:    (i32.const 4)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $stringview-access
+    (param $a stringref)
+    (param $b stringview_wtf8)
+    (param $c stringview_wtf16)
+    (param $d stringview_iter)
+    (local $i32 i32)
+    (local.set $i32 ;; validate the output type
+      (stringview_wtf8.advance
+        (local.get $b)
+        (i32.const 0)
+        (i32.const 1)
+      )
+    )
+    (local.set $i32
+      (stringview_wtf16.get_codeunit
+        (local.get $c)
+        (i32.const 2)
+      )
+    )
+    (local.set $i32
+      (stringview_iter.next
+        (local.get $d)
+      )
+    )
+    (local.set $i32
+      (stringview_iter.advance
+        (local.get $d)
+        (i32.const 3)
+      )
+    )
+    (local.set $i32
+      (stringview_iter.rewind
+        (local.get $d)
+        (i32.const 4)
+      )
+    )
+  )
+  ;; CHECK:      (func $stringview-slice (type $stringref_stringview_wtf8_stringview_wtf16_stringview_iter_=>_none) (param $a stringref) (param $b stringview_wtf8) (param $c stringview_wtf16) (param $d stringview_iter)
+  ;; CHECK-NEXT:  (local.set $a
+  ;; CHECK-NEXT:   (stringview_wtf8.slice
+  ;; CHECK-NEXT:    (local.get $b)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 1)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (local.set $a
+  ;; CHECK-NEXT:   (stringview_wtf16.slice
+  ;; CHECK-NEXT:    (local.get $c)
+  ;; CHECK-NEXT:    (i32.const 2)
+  ;; CHECK-NEXT:    (i32.const 3)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (local.set $a
+  ;; CHECK-NEXT:   (stringview_iter.slice
+  ;; CHECK-NEXT:    (local.get $d)
+  ;; CHECK-NEXT:    (i32.const 4)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $stringview-slice
+    (param $a stringref)
+    (param $b stringview_wtf8)
+    (param $c stringview_wtf16)
+    (param $d stringview_iter)
+    (local.set $a ;; validate the output type
+      (stringview_wtf8.slice
+        (local.get $b)
+        (i32.const 0)
+        (i32.const 1)
+      )
+    )
+    (local.set $a
+      (stringview_wtf16.slice
+        (local.get $c)
+        (i32.const 2)
+        (i32.const 3)
+      )
+    )
+    (local.set $a
+      (stringview_iter.slice
+        (local.get $d)
+        (i32.const 4)
+      )
+    )
+  )
+
+  ;; CHECK:      (func $string.length (type $stringview_wtf16_=>_none) (param $ref stringview_wtf16)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i32.eqz
+  ;; CHECK-NEXT:    (stringview_wtf16.length
+  ;; CHECK-NEXT:     (local.get $ref)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $string.length (param $ref stringview_wtf16)
+    (drop
+      (i32.eqz ;; validate the output is i32
+        (stringview_wtf16.length
+          (local.get $ref)
+        )
+      )
+    )
+  )
+
+  ;; CHECK:      (func $string.new.gc (type $ref|$array|_ref|$array16|_=>_none) (param $array (ref $array)) (param $array16 (ref $array16))
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (string.new_wtf8_array utf8
+  ;; CHECK-NEXT:    (local.get $array)
+  ;; CHECK-NEXT:    (i32.const 1)
+  ;; CHECK-NEXT:    (i32.const 2)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (string.new_wtf8_array wtf8
+  ;; CHECK-NEXT:    (local.get $array)
+  ;; CHECK-NEXT:    (i32.const 3)
+  ;; CHECK-NEXT:    (i32.const 4)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (string.new_wtf8_array replace
+  ;; CHECK-NEXT:    (local.get $array)
+  ;; CHECK-NEXT:    (i32.const 5)
+  ;; CHECK-NEXT:    (i32.const 6)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (string.new_wtf16_array
+  ;; CHECK-NEXT:    (local.get $array16)
+  ;; CHECK-NEXT:    (i32.const 7)
+  ;; CHECK-NEXT:    (i32.const 8)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $string.new.gc (param $array (ref $array)) (param $array16 (ref $array16))
+    (drop
+      (string.new_wtf8_array utf8
+        (local.get $array)
+        (i32.const 1)
+        (i32.const 2)
+      )
+    )
+    (drop
+      (string.new_wtf8_array wtf8
+        (local.get $array)
+        (i32.const 3)
+        (i32.const 4)
+      )
+    )
+    (drop
+      (string.new_wtf8_array replace
+        (local.get $array)
+        (i32.const 5)
+        (i32.const 6)
+      )
+    )
+    (drop
+      (string.new_wtf16_array
+        (local.get $array16)
+        (i32.const 7)
+        (i32.const 8)
+      )
+    )
+  )
+
+  ;; CHECK:      (func $string.encode.gc (type $stringref_ref|$array|_ref|$array16|_=>_none) (param $ref stringref) (param $array (ref $array)) (param $array16 (ref $array16))
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i32.eqz
+  ;; CHECK-NEXT:    (string.encode_wtf8_array wtf8
+  ;; CHECK-NEXT:     (local.get $ref)
+  ;; CHECK-NEXT:     (local.get $array)
+  ;; CHECK-NEXT:     (i32.const 10)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (string.encode_wtf8_array utf8
+  ;; CHECK-NEXT:    (local.get $ref)
+  ;; CHECK-NEXT:    (local.get $array)
+  ;; CHECK-NEXT:    (i32.const 20)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (string.encode_wtf16_array
+  ;; CHECK-NEXT:    (local.get $ref)
+  ;; CHECK-NEXT:    (local.get $array16)
+  ;; CHECK-NEXT:    (i32.const 30)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $string.encode.gc (param $ref stringref) (param $array (ref $array)) (param $array16 (ref $array16))
+    (drop
+      (i32.eqz ;; validate the output is i32
+        (string.encode_wtf8_array wtf8
+          (local.get $ref)
+          (local.get $array)
+          (i32.const 10)
+        )
+      )
+    )
+    (drop
+      (string.encode_wtf8_array utf8
+        (local.get $ref)
+        (local.get $array)
+        (i32.const 20)
+      )
+    )
+    (drop
+      (string.encode_wtf16_array
+        (local.get $ref)
+        (local.get $array16)
+        (i32.const 30)
+      )
+    )
+  )
+
+  ;; CHECK:      (func $string.from_code_point (type $none_=>_none)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (string.from_code_point
+  ;; CHECK-NEXT:    (i32.const 1)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $string.from_code_point
+    (drop
+      (string.from_code_point
+        (i32.const 1)
+      )
+    )
+  )
+
+  ;; CHECK:      (func $string.new_try (type $ref|$array|_=>_none) (param $array (ref $array))
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (string.new_utf8_try
+  ;; CHECK-NEXT:    (i32.const 1)
+  ;; CHECK-NEXT:    (i32.const 2)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (string.new_utf8_array_try
+  ;; CHECK-NEXT:    (local.get $array)
+  ;; CHECK-NEXT:    (i32.const 3)
+  ;; CHECK-NEXT:    (i32.const 4)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $string.new_try (param $array (ref $array))
+    (
