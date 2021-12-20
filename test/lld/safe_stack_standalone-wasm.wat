@@ -82,4 +82,8 @@
   )
   (i32.const 0)
  )
- (func $main (; 4 ;) (type $0) (param $0 i32) (p
+ (func $main (; 4 ;) (type $0) (param $0 i32) (param $1 i32) (result i32)
+  (call $__original_main)
+ )
+)
+
