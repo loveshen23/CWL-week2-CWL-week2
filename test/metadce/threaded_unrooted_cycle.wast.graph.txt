@@ -24,3 +24,16 @@
   {
     "name": "outside_js_function2",
     "reaches": ["wasm_export2"],
+    "import": ["env", "js_func2"]
+  },
+  {
+    "name": "outside_js_function3",
+    "reaches": ["wasm_export3"],
+    "import": ["env", "js_func3"]
+  },
+  {
+    "name": "outside_js_function4",
+    "reaches": ["wasm_export4"],
+    "import": ["env", "js_func4"]
+  }
+]
