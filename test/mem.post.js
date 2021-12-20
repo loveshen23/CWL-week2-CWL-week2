@@ -38,3 +38,16 @@ function test(name) {
   HEAPU8[6] = 125;
   HEAPU8[7] = 250;
   Module.print('  post ==> ' + Module['_load' + name](0));
+}
+
+test('i8');
+test('i16');
+test('i32');
+test('u8');
+test('u16');
+test('u32');
+test('f32');
+test('f64');
+
+Module.print('stack: ' + (Module['_get_stack']() > 8));
+
