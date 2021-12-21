@@ -1,3 +1,4 @@
+
 (module
  (type $i32_=>_v128 (func (param i32) (result v128)))
  (type $i32_v128_=>_none (func (param i32 v128)))
