@@ -3047,4 +3047,276 @@
       (i32.add
        (local.tee $1
         (i32.load offset=20
-         (local
+         (local.get $3)
+        )
+       )
+       (i32.const 1)
+      )
+     )
+     (i32.store8
+      (i32.add
+       (local.get $1)
+       (i32.load offset=8
+        (local.get $3)
+       )
+      )
+      (local.get $2)
+     )
+     (local.set $2
+      (i32.load8_u
+       (i32.add
+        (local.get $0)
+        (i32.const 11)
+       )
+      )
+     )
+     (i32.store offset=20
+      (local.get $3)
+      (i32.add
+       (local.tee $1
+        (i32.load offset=20
+         (local.get $3)
+        )
+       )
+       (i32.const 1)
+      )
+     )
+     (local.set $1
+      (i32.add
+       (local.get $1)
+       (i32.load offset=8
+        (local.get $3)
+       )
+      )
+     )
+     (br $label$68)
+    )
+    (i32.store offset=20
+     (local.get $3)
+     (i32.add
+      (local.tee $1
+       (i32.load offset=20
+        (local.get $3)
+       )
+      )
+      (i32.const 1)
+     )
+    )
+    (i32.store8
+     (i32.add
+      (local.get $1)
+      (i32.load offset=8
+       (local.get $3)
+      )
+     )
+     (i32.shr_u
+      (local.get $2)
+      (i32.const 24)
+     )
+    )
+    (i32.store offset=20
+     (local.get $3)
+     (i32.add
+      (local.tee $1
+       (i32.load offset=20
+        (local.get $3)
+       )
+      )
+      (i32.const 1)
+     )
+    )
+    (i32.store8
+     (i32.add
+      (local.get $1)
+      (i32.load offset=8
+       (local.get $3)
+      )
+     )
+     (i32.shr_u
+      (local.get $2)
+      (i32.const 16)
+     )
+    )
+    (local.set $2
+     (i32.load offset=48
+      (local.get $0)
+     )
+    )
+    (i32.store offset=20
+     (local.get $3)
+     (i32.add
+      (local.tee $1
+       (i32.load offset=20
+        (local.get $3)
+       )
+      )
+      (i32.const 1)
+     )
+    )
+    (i32.store8
+     (i32.add
+      (local.get $1)
+      (i32.load offset=8
+       (local.get $3)
+      )
+     )
+     (i32.shr_u
+      (local.get $2)
+      (i32.const 8)
+     )
+    )
+    (i32.store offset=20
+     (local.get $3)
+     (i32.add
+      (local.tee $1
+       (i32.load offset=20
+        (local.get $3)
+       )
+      )
+      (i32.const 1)
+     )
+    )
+    (local.set $1
+     (i32.add
+      (local.get $1)
+      (i32.load offset=8
+       (local.get $3)
+      )
+     )
+    )
+   )
+   (i32.store8
+    (local.get $1)
+    (local.get $2)
+   )
+   (block $label$70
+    (br_if $label$70
+     (i32.eqz
+      (local.tee $2
+       (select
+        (local.tee $2
+         (i32.load offset=16
+          (local.get $0)
+         )
+        )
+        (local.tee $1
+         (i32.load offset=20
+          (local.tee $5
+           (i32.load offset=28
+            (local.get $0)
+           )
+          )
+         )
+        )
+        (i32.gt_u
+         (local.get $1)
+         (local.get $2)
+        )
+       )
+      )
+     )
+    )
+    (drop
+     (call $fimport$98
+      (i32.load offset=12
+       (local.get $0)
+      )
+      (i32.load offset=16
+       (local.get $5)
+      )
+      (local.get $2)
+     )
+    )
+    (i32.store offset=12
+     (local.get $0)
+     (i32.add
+      (i32.load offset=12
+       (local.get $0)
+      )
+      (local.get $2)
+     )
+    )
+    (i32.store offset=16
+     (local.tee $1
+      (i32.load offset=28
+       (local.get $0)
+      )
+     )
+     (i32.add
+      (i32.load offset=16
+       (local.get $1)
+      )
+      (local.get $2)
+     )
+    )
+    (i32.store offset=20
+     (local.get $0)
+     (i32.add
+      (i32.load offset=20
+       (local.get $0)
+      )
+      (local.get $2)
+     )
+    )
+    (i32.store offset=16
+     (local.get $0)
+     (i32.sub
+      (i32.load offset=16
+       (local.get $0)
+      )
+      (local.get $2)
+     )
+    )
+    (i32.store offset=20
+     (local.get $1)
+     (local.tee $0
+      (i32.sub
+       (i32.load offset=20
+        (local.get $1)
+       )
+       (local.get $2)
+      )
+     )
+    )
+    (br_if $label$70
+     (local.get $0)
+    )
+    (i32.store offset=16
+     (local.get $1)
+     (i32.load offset=8
+      (local.get $1)
+     )
+    )
+   )
+   (block $label$71
+    (br_if $label$71
+     (i32.lt_s
+      (local.tee $0
+       (i32.load offset=24
+        (local.get $3)
+       )
+      )
+      (i32.const 1)
+     )
+    )
+    (i32.store offset=24
+     (local.get $3)
+     (i32.sub
+      (i32.const 0)
+      (local.get $0)
+     )
+    )
+   )
+   (local.set $2
+    (i32.eqz
+     (i32.load offset=20
+      (local.get $3)
+     )
+    )
+   )
+  )
+  (local.get $2)
+ )
+ ;; custom section "producers", size 183
+)
+
