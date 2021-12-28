@@ -447,4 +447,98 @@ file_names[  1]:
     ;; code offset: 0x10
     (call $foo\28\29)
    )
-   ;; code offset:
+   ;; code offset: 0x12
+   (catch $tag$0
+    ;; code offset: 0x14
+    (local.set $1
+     (pop i32)
+    )
+    ;; code offset: 0x18
+    (global.set $__stack_pointer
+     ;; code offset: 0x16
+     (local.get $0)
+    )
+    ;; code offset: 0x1e
+    (drop
+     ;; code offset: 0x1c
+     (call $__cxa_begin_catch
+      ;; code offset: 0x1a
+      (local.get $1)
+     )
+    )
+    ;; code offset: 0x1f
+    (try $label$8
+     (do
+      ;; code offset: 0x21
+      (call $foo\28\29)
+      ;; code offset: 0x25
+      (global.set $__stack_pointer
+       ;; code offset: 0x23
+       (local.get $0)
+      )
+     )
+     ;; code offset: 0x27
+     (catch_all
+      ;; code offset: 0x28
+      (try $label$7
+       (do
+        ;; code offset: 0x2a
+        (call $__cxa_end_catch)
+       )
+       ;; code offset: 0x2c
+       (catch $tag$0
+        ;; code offset: 0x2e
+        (local.set $1
+         (pop i32)
+        )
+        ;; code offset: 0x32
+        (global.set $__stack_pointer
+         ;; code offset: 0x30
+         (local.get $0)
+        )
+        ;; code offset: 0x36
+        (call $__clang_call_terminate
+         ;; code offset: 0x34
+         (local.get $1)
+        )
+        ;; code offset: 0x38
+        (unreachable)
+       )
+       ;; code offset: 0x39
+       (catch_all
+        ;; code offset: 0x3a
+        (call $std::terminate\28\29)
+        ;; code offset: 0x3c
+        (unreachable)
+       )
+      )
+      ;; code offset: 0x3e
+      (rethrow $label$8)
+     )
+    )
+    ;; code offset: 0x41
+    (call $__cxa_end_catch)
+   )
+  )
+ )
+ (func $__clang_call_terminate (param $0 i32)
+  ;; code offset: 0x4b
+  (drop
+   ;; code offset: 0x49
+   (call $__cxa_begin_catch
+    ;; code offset: 0x47
+    (local.get $0)
+   )
+  )
+  ;; code offset: 0x4c
+  (call $std::terminate\28\29)
+  ;; code offset: 0x4e
+  (unreachable)
+ )
+ ;; custom section ".debug_info", size 63
+ ;; custom section ".debug_abbrev", size 41
+ ;; custom section ".debug_line", size 162
+ ;; custom section ".debug_str", size 178
+ ;; custom section "producers", size 134
+ ;; features section: mutable-globals, sign-ext, exception-handling
+)
