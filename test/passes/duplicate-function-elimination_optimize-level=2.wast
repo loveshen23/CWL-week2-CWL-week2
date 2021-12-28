@@ -1,3 +1,4 @@
+
 (module
   (memory 0)
   (type $0 (func))

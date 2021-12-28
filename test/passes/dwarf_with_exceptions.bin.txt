@@ -1,0 +1,137 @@
+(module
+ (type $none_=>_none (func))
+ (type $i32_=>_none (func (param i32)))
+ (type $i32_=>_i32 (func (param i32) (result i32)))
+ (import "env" "_Z3foov" (func $foo\28\29))
+ (import "env" "__cxa_begin_catch" (func $__cxa_begin_catch (param i32) (result i32)))
+ (import "env" "__cxa_end_catch" (func $__cxa_end_catch))
+ (import "env" "_ZSt9terminatev" (func $std::terminate\28\29))
+ (global $__stack_pointer (mut i32) (i32.const 66560))
+ (memory $0 2)
+ (tag $tag$0 (param i32))
+ (export "memory" (memory $0))
+ (func $__wasm_call_ctors
+ )
+ (func $dwarf_with_exceptions\28\29
+  (local $0 i32)
+  (local $1 i32)
+  ;; code offset: 0xe
+  (local.set $0
+   ;; code offset: 0x8
+   (global.get $__stack_pointer)
+  )
+  ;; code offset: 0x10
+  (try $label$9
+   (do
+    ;; code offset: 0x12
+    (call $foo\28\29)
+   )
+   ;; code offset: 0x18
+   (catch $tag$0
+    ;; code offset: 0x1e
+    (local.set $1
+     (pop i32)
+    )
+    ;; code offset: 0x22
+    (global.set $__stack_pointer
+     ;; code offset: 0x20
+     (local.get $0)
+    )
+    ;; code offset: 0x30
+    (drop
+     ;; code offset: 0x2a
+     (call $__cxa_begin_catch
+      ;; code offset: 0x28
+      (local.get $1)
+     )
+    )
+    ;; code offset: 0x31
+    (try $label$8
+     (do
+      ;; code offset: 0x33
+      (call $foo\28\29)
+      ;; code offset: 0x3b
+      (global.set $__stack_pointer
+       ;; code offset: 0x39
+       (local.get $0)
+      )
+     )
+     ;; code offset: 0x41
+     (catch_all
+      ;; code offset: 0x42
+      (try $label$7
+       (do
+        ;; code offset: 0x44
+        (call $__cxa_end_catch)
+       )
+       ;; code offset: 0x4a
+       (catch $tag$0
+        ;; code offset: 0x50
+        (local.set $1
+         (pop i32)
+        )
+        ;; code offset: 0x54
+        (global.set $__stack_pointer
+         ;; code offset: 0x52
+         (local.get $0)
+        )
+        ;; code offset: 0x5c
+        (call $__clang_call_terminate
+         ;; code offset: 0x5a
+         (local.get $1)
+        )
+        ;; code offset: 0x62
+        (unreachable)
+       )
+       ;; code offset: 0x63
+       (catch_all
+        ;; code offset: 0x64
+        (call $std::terminate\28\29)
+        ;; code offset: 0x6a
+        (unreachable)
+       )
+      )
+      ;; code offset: 0x6c
+      (rethrow $label$8)
+     )
+    )
+    ;; code offset: 0x6f
+    (call $__cxa_end_catch)
+   )
+  )
+ )
+ (func $__clang_call_terminate (param $0 i32)
+  ;; code offset: 0x81
+  (drop
+   ;; code offset: 0x7b
+   (call $__cxa_begin_catch
+    ;; code offset: 0x79
+    (local.get $0)
+   )
+  )
+  ;; code offset: 0x82
+  (call $std::terminate\28\29)
+  ;; code offset: 0x88
+  (unreachable)
+ )
+ ;; custom section ".debug_info", size 63
+ ;; custom section ".debug_abbrev", size 41
+ ;; custom section ".debug_line", size 109
+ ;; custom section ".debug_str", size 178
+ ;; custom section "producers", size 134
+ ;; features section: mutable-globals, sign-ext, exception-handling
+)
+DWARF debug info
+================
+
+Contains section .debug_info (63 bytes)
+Contains section .debug_abbrev (41 bytes)
+Contains section .debug_line (109 bytes)
+Contains section .debug_str (178 bytes)
+
+.debug_abbrev contents:
+Abbrev table for offset: 0x00000000
+[1] DW_TAG_compile_unit	DW_CHILDREN_yes
+	DW_AT_producer	DW_FORM_strp
+	DW_AT_language	DW_FORM_data2
+	DW_
