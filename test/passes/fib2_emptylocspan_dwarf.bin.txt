@@ -1,0 +1,110 @@
+DWARF debug info
+================
+
+Contains section .debug_info (168 bytes)
+Contains section .debug_loc (143 bytes)
+Contains section .debug_ranges (24 bytes)
+Contains section .debug_abbrev (131 bytes)
+Contains section .debug_line (106 bytes)
+Contains section .debug_str (180 bytes)
+
+.debug_abbrev contents:
+Abbrev table for offset: 0x00000000
+[1] DW_TAG_compile_unit	DW_CHILDREN_yes
+	DW_AT_producer	DW_FORM_strp
+	DW_AT_language	DW_FORM_data2
+	DW_AT_name	DW_FORM_strp
+	DW_AT_stmt_list	DW_FORM_sec_offset
+	DW_AT_comp_dir	DW_FORM_strp
+	DW_AT_low_pc	DW_FORM_addr
+	DW_AT_ranges	DW_FORM_sec_offset
+
+[2] DW_TAG_subprogram	DW_CHILDREN_yes
+	DW_AT_low_pc	DW_FORM_addr
+	DW_AT_high_pc	DW_FORM_data4
+	DW_AT_frame_base	DW_FORM_exprloc
+	DW_AT_GNU_all_call_sites	DW_FORM_flag_present
+	DW_AT_name	DW_FORM_strp
+	DW_AT_decl_file	DW_FORM_data1
+	DW_AT_decl_line	DW_FORM_data1
+	DW_AT_prototyped	DW_FORM_flag_present
+	DW_AT_type	DW_FORM_ref4
+	DW_AT_external	DW_FORM_flag_present
+
+[3] DW_TAG_formal_parameter	DW_CHILDREN_no
+	DW_AT_name	DW_FORM_strp
+	DW_AT_decl_file	DW_FORM_data1
+	DW_AT_decl_line	DW_FORM_data1
+	DW_AT_type	DW_FORM_ref4
+
+[4] DW_TAG_variable	DW_CHILDREN_no
+	DW_AT_location	DW_FORM_sec_offset
+	DW_AT_name	DW_FORM_strp
+	DW_AT_decl_file	DW_FORM_data1
+	DW_AT_decl_line	DW_FORM_data1
+	DW_AT_type	DW_FORM_ref4
+
+[5] DW_TAG_variable	DW_CHILDREN_no
+	DW_AT_name	DW_FORM_strp
+	DW_AT_decl_file	DW_FORM_data1
+	DW_AT_decl_line	DW_FORM_data1
+	DW_AT_type	DW_FORM_ref4
+
+[6] DW_TAG_subprogram	DW_CHILDREN_yes
+	DW_AT_low_pc	DW_FORM_addr
+	DW_AT_high_pc	DW_FORM_data4
+	DW_AT_frame_base	DW_FORM_exprloc
+	DW_AT_GNU_all_call_sites	DW_FORM_flag_present
+	DW_AT_name	DW_FORM_strp
+	DW_AT_decl_file	DW_FORM_data1
+	DW_AT_decl_line	DW_FORM_data1
+	DW_AT_type	DW_FORM_ref4
+	DW_AT_external	DW_FORM_flag_present
+
+[7] DW_TAG_GNU_call_site	DW_CHILDREN_no
+	DW_AT_low_pc	DW_FORM_addr
+
+[8] DW_TAG_base_type	DW_CHILDREN_no
+	DW_AT_name	DW_FORM_strp
+	DW_AT_encoding	DW_FORM_data1
+	DW_AT_byte_size	DW_FORM_data1
+
+
+.debug_info contents:
+0x00000000: Compile Unit: length = 0x000000a4 version = 0x0004 abbr_offset = 0x0000 addr_size = 0x04 (next unit at 0x000000a8)
+
+0x0000000b: DW_TAG_compile_unit [1] *
+              DW_AT_producer [DW_FORM_strp]	( .debug_str[0x00000000] = "clang version 11.0.0 (https://github.com/llvm/llvm-project.git 313d89724ce3ccf66c1c51849903e1e6d184dd85)")
+              DW_AT_language [DW_FORM_data2]	(DW_LANG_C99)
+              DW_AT_name [DW_FORM_strp]	( .debug_str[0x00000069] = "fib2.c")
+              DW_AT_stmt_list [DW_FORM_sec_offset]	(0x00000000)
+              DW_AT_comp_dir [DW_FORM_strp]	( .debug_str[0x00000070] = "/usr/local/google/home/azakai/Dev/2-binaryen")
+              DW_AT_low_pc [DW_FORM_addr]	(0x0000000000000000)
+              DW_AT_ranges [DW_FORM_sec_offset]	(0x00000000
+                 [0x00000005, 0x0000003d)
+                 [0x0000003e, 0x00000048))
+
+0x00000026:   DW_TAG_subprogram [2] *
+                DW_AT_low_pc [DW_FORM_addr]	(0x0000000000000005)
+                DW_AT_high_pc [DW_FORM_data4]	(0x00000038)
+                DW_AT_frame_base [DW_FORM_exprloc]	(DW_OP_WASM_location 0x1 +0, DW_OP_stack_value)
+                DW_AT_GNU_all_call_sites [DW_FORM_flag_present]	(true)
+                DW_AT_name [DW_FORM_strp]	( .debug_str[0x0000009d] = "fib")
+                DW_AT_decl_file [DW_FORM_data1]	("/usr/local/google/home/azakai/Dev/2-binaryen/fib2.c")
+                DW_AT_decl_line [DW_FORM_data1]	(1)
+                DW_AT_prototyped [DW_FORM_flag_present]	(true)
+                DW_AT_type [DW_FORM_ref4]	(cu + 0x00a0 => {0x000000a0} "int")
+                DW_AT_external [DW_FORM_flag_present]	(true)
+
+0x0000003e:     DW_TAG_formal_parameter [3]  
+                  DW_AT_name [DW_FORM_strp]	( .debug_str[0x000000aa] = "n")
+                  DW_AT_decl_file [DW_FORM_data1]	("/usr/local/google/home/azakai/Dev/2-binaryen/fib2.c")
+                  DW_AT_decl_line [DW_FORM_data1]	(1)
+                  DW_AT_type [DW_FORM_ref4]	(cu + 0x00a0 => {0x000000a0} "int")
+
+0x00000049:     DW_TAG_variable [4]  
+                  DW_AT_location [DW_FORM_sec_offset]	(0x00000000: 
+                     [0xffffffff,  0x00000005): 
+                     [0x00000007,  0x00000007): DW_OP_consts +0, DW_OP_stack_value
+                     [0x0000001e,  0x0000001e): DW_OP_WASM_location 0x0 +4, DW_OP_stack_value)
+                  DW_AT_name [DW_FORM_strp]	( .debug_str[0
