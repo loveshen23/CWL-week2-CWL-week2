@@ -1,0 +1,269 @@
+
+DWARF debug info
+================
+
+Contains section .debug_info (851 bytes)
+Contains section .debug_loc (1073 bytes)
+Contains section .debug_ranges (88 bytes)
+Contains section .debug_abbrev (333 bytes)
+Contains section .debug_line (1477 bytes)
+Contains section .debug_str (434 bytes)
+
+.debug_abbrev contents:
+Abbrev table for offset: 0x00000000
+[1] DW_TAG_compile_unit	DW_CHILDREN_yes
+	DW_AT_producer	DW_FORM_strp
+	DW_AT_language	DW_FORM_data2
+	DW_AT_name	DW_FORM_strp
+	DW_AT_stmt_list	DW_FORM_sec_offset
+	DW_AT_comp_dir	DW_FORM_strp
+	DW_AT_low_pc	DW_FORM_addr
+	DW_AT_ranges	DW_FORM_sec_offset
+
+[2] DW_TAG_pointer_type	DW_CHILDREN_no
+	DW_AT_type	DW_FORM_ref4
+
+[3] DW_TAG_structure_type	DW_CHILDREN_yes
+	DW_AT_calling_convention	DW_FORM_data1
+	DW_AT_name	DW_FORM_strp
+	DW_AT_byte_size	DW_FORM_data1
+	DW_AT_decl_file	DW_FORM_data1
+	DW_AT_decl_line	DW_FORM_data1
+
+[4] DW_TAG_member	DW_CHILDREN_no
+	DW_AT_name	DW_FORM_strp
+	DW_AT_type	DW_FORM_ref4
+	DW_AT_decl_file	DW_FORM_data1
+	DW_AT_decl_line	DW_FORM_data1
+	DW_AT_data_member_location	DW_FORM_data1
+
+[5] DW_TAG_base_type	DW_CHILDREN_no
+	DW_AT_name	DW_FORM_strp
+	DW_AT_encoding	DW_FORM_data1
+	DW_AT_byte_size	DW_FORM_data1
+
+[6] DW_TAG_namespace	DW_CHILDREN_yes
+	DW_AT_name	DW_FORM_strp
+
+[7] DW_TAG_typedef	DW_CHILDREN_no
+	DW_AT_type	DW_FORM_ref4
+	DW_AT_name	DW_FORM_strp
+	DW_AT_decl_file	DW_FORM_data1
+	DW_AT_decl_line	DW_FORM_data1
+
+[8] DW_TAG_unspecified_type	DW_CHILDREN_no
+	DW_AT_name	DW_FORM_strp
+
+[9] DW_TAG_imported_declaration	DW_CHILDREN_no
+	DW_AT_decl_file	DW_FORM_data1
+	DW_AT_decl_line	DW_FORM_data1
+	DW_AT_import	DW_FORM_ref4
+
+[10] DW_TAG_subprogram	DW_CHILDREN_yes
+	DW_AT_low_pc	DW_FORM_addr
+	DW_AT_high_pc	DW_FORM_data4
+	DW_AT_frame_base	DW_FORM_exprloc
+	DW_AT_GNU_all_call_sites	DW_FORM_flag_present
+	DW_AT_linkage_name	DW_FORM_strp
+	DW_AT_name	DW_FORM_strp
+	DW_AT_decl_file	DW_FORM_data1
+	DW_AT_decl_line	DW_FORM_data1
+	DW_AT_type	DW_FORM_ref4
+	DW_AT_external	DW_FORM_flag_present
+
+[11] DW_TAG_formal_parameter	DW_CHILDREN_no
+	DW_AT_name	DW_FORM_strp
+	DW_AT_decl_file	DW_FORM_data1
+	DW_AT_decl_line	DW_FORM_data1
+	DW_AT_type	DW_FORM_ref4
+
+[12] DW_TAG_variable	DW_CHILDREN_no
+	DW_AT_name	DW_FORM_strp
+	DW_AT_decl_file	DW_FORM_data1
+	DW_AT_decl_line	DW_FORM_data1
+	DW_AT_type	DW_FORM_ref4
+
+[13] DW_TAG_variable	DW_CHILDREN_no
+	DW_AT_location	DW_FORM_sec_offset
+	DW_AT_name	DW_FORM_strp
+	DW_AT_decl_file	DW_FORM_data1
+	DW_AT_decl_line	DW_FORM_data1
+	DW_AT_type	DW_FORM_ref4
+
+[14] DW_TAG_lexical_block	DW_CHILDREN_yes
+	DW_AT_ranges	DW_FORM_sec_offset
+
+[15] DW_TAG_GNU_call_site	DW_CHILDREN_no
+	DW_AT_low_pc	DW_FORM_addr
+
+[16] DW_TAG_GNU_call_site	DW_CHILDREN_no
+	DW_AT_abstract_origin	DW_FORM_ref4
+	DW_AT_low_pc	DW_FORM_addr
+
+[17] DW_TAG_subprogram	DW_CHILDREN_yes
+	DW_AT_name	DW_FORM_strp
+	DW_AT_decl_file	DW_FORM_data1
+	DW_AT_decl_line	DW_FORM_data1
+	DW_AT_declaration	DW_FORM_flag_present
+	DW_AT_external	DW_FORM_flag_present
+
+[18] DW_TAG_formal_parameter	DW_CHILDREN_no
+	DW_AT_type	DW_FORM_ref4
+
+[19] DW_TAG_pointer_type	DW_CHILDREN_no
+
+[20] DW_TAG_subprogram	DW_CHILDREN_yes
+	DW_AT_linkage_name	DW_FORM_strp
+	DW_AT_name	DW_FORM_strp
+	DW_AT_decl_file	DW_FORM_data1
+	DW_AT_decl_line	DW_FORM_data1
+	DW_AT_type	DW_FORM_ref4
+	DW_AT_inline	DW_FORM_data1
+
+[21] DW_TAG_label	DW_CHILDREN_no
+	DW_AT_name	DW_FORM_strp
+	DW_AT_decl_file	DW_FORM_data1
+	DW_AT_decl_line	DW_FORM_data1
+
+[22] DW_TAG_lexical_block	DW_CHILDREN_yes
+
+[23] DW_TAG_subprogram	DW_CHILDREN_yes
+	DW_AT_low_pc	DW_FORM_addr
+	DW_AT_high_pc	DW_FORM_data4
+	DW_AT_frame_base	DW_FORM_exprloc
+	DW_AT_GNU_all_call_sites	DW_FORM_flag_present
+	DW_AT_name	DW_FORM_strp
+	DW_AT_decl_file	DW_FORM_data1
+	DW_AT_decl_line	DW_FORM_data1
+	DW_AT_type	DW_FORM_ref4
+	DW_AT_external	DW_FORM_flag_present
+
+[24] DW_TAG_inlined_subroutine	DW_CHILDREN_yes
+	DW_AT_abstract_origin	DW_FORM_ref4
+	DW_AT_low_pc	DW_FORM_addr
+	DW_AT_high_pc	DW_FORM_data4
+	DW_AT_call_file	DW_FORM_data1
+	DW_AT_call_line	DW_FORM_data1
+	DW_AT_call_column	DW_FORM_data1
+
+[25] DW_TAG_formal_parameter	DW_CHILDREN_no
+	DW_AT_abstract_origin	DW_FORM_ref4
+
+[26] DW_TAG_variable	DW_CHILDREN_no
+	DW_AT_location	DW_FORM_sec_offset
+	DW_AT_abstract_origin	DW_FORM_ref4
+
+[27] DW_TAG_variable	DW_CHILDREN_no
+	DW_AT_abstract_origin	DW_FORM_ref4
+
+[28] DW_TAG_label	DW_CHILDREN_no
+	DW_AT_abstract_origin	DW_FORM_ref4
+	DW_AT_low_pc	DW_FORM_addr
+
+
+.debug_info contents:
+0x00000000: Compile Unit: length = 0x0000034f version = 0x0004 abbr_offset = 0x0000 addr_size = 0x04 (next unit at 0x00000353)
+
+0x0000000b: DW_TAG_compile_unit [1] *
+              DW_AT_producer [DW_FORM_strp]	( .debug_str[0x00000000] = "clang version 11.0.0 (https://github.com/llvm/llvm-project.git 313d89724ce3ccf66c1c51849903e1e6d184dd85)")
+              DW_AT_language [DW_FORM_data2]	(DW_LANG_C_plus_plus)
+              DW_AT_name [DW_FORM_strp]	( .debug_str[0x00000069] = "/usr/local/google/home/azakai/Dev/emscripten/tests/fannkuch.cpp")
+              DW_AT_stmt_list [DW_FORM_sec_offset]	(0x00000000)
+              DW_AT_comp_dir [DW_FORM_strp]	( .debug_str[0x000000a9] = "/usr/local/google/home/azakai/Dev/2-binaryen")
+              DW_AT_low_pc [DW_FORM_addr]	(0x0000000000000000)
+              DW_AT_ranges [DW_FORM_sec_offset]	(0x00000040
+                 [0x00000006, 0x0000039d)
+                 [0x0000039f, 0x000006e1))
+
+0x00000026:   DW_TAG_pointer_type [2]  
+                DW_AT_type [DW_FORM_ref4]	(cu + 0x002b => {0x0000002b} "worker_args")
+
+0x0000002b:   DW_TAG_structure_type [3] *
+                DW_AT_calling_convention [DW_FORM_data1]	(DW_CC_pass_by_value)
+                DW_AT_name [DW_FORM_strp]	( .debug_str[0x000000e3] = "worker_args")
+                DW_AT_byte_size [DW_FORM_data1]	(0x0c)
+                DW_AT_decl_file [DW_FORM_data1]	("/usr/local/google/home/azakai/Dev/emscripten/tests/fannkuch.cpp")
+                DW_AT_decl_line [DW_FORM_data1]	(20)
+
+0x00000034:     DW_TAG_member [4]  
+                  DW_AT_name [DW_FORM_strp]	( .debug_str[0x000000d6] = "i")
+                  DW_AT_type [DW_FORM_ref4]	(cu + 0x0059 => {0x00000059} "int")
+                  DW_AT_decl_file [DW_FORM_data1]	("/usr/local/google/home/azakai/Dev/emscripten/tests/fannkuch.cpp")
+                  DW_AT_decl_line [DW_FORM_data1]	(21)
+                  DW_AT_data_member_location [DW_FORM_data1]	(0x00)
+
+0x00000040:     DW_TAG_member [4]  
+                  DW_AT_name [DW_FORM_strp]	( .debug_str[0x000000dc] = "n")
+                  DW_AT_type [DW_FORM_ref4]	(cu + 0x0059 => {0x00000059} "int")
+                  DW_AT_decl_file [DW_FORM_data1]	("/usr/local/google/home/azakai/Dev/emscripten/tests/fannkuch.cpp")
+                  DW_AT_decl_line [DW_FORM_data1]	(21)
+                  DW_AT_data_member_location [DW_FORM_data1]	(0x04)
+
+0x0000004c:     DW_TAG_member [4]  
+                  DW_AT_name [DW_FORM_strp]	( .debug_str[0x000000de] = "next")
+                  DW_AT_type [DW_FORM_ref4]	(cu + 0x0026 => {0x00000026} "worker_args*")
+                  DW_AT_decl_file [DW_FORM_data1]	("/usr/local/google/home/azakai/Dev/emscripten/tests/fannkuch.cpp")
+                  DW_AT_decl_line [DW_FORM_data1]	(22)
+                  DW_AT_data_member_location [DW_FORM_data1]	(0x08)
+
+0x00000058:     NULL
+
+0x00000059:   DW_TAG_base_type [5]  
+                DW_AT_name [DW_FORM_strp]	( .debug_str[0x000000d8] = "int")
+                DW_AT_encoding [DW_FORM_data1]	(DW_ATE_signed)
+                DW_AT_byte_size [DW_FORM_data1]	(0x04)
+
+0x00000060:   DW_TAG_pointer_type [2]  
+                DW_AT_type [DW_FORM_ref4]	(cu + 0x0059 => {0x00000059} "int")
+
+0x00000065:   DW_TAG_namespace [6] *
+                DW_AT_name [DW_FORM_strp]	( .debug_str[0x000000ef] = "std")
+
+0x0000006a:     DW_TAG_typedef [7]  
+                  DW_AT_type [DW_FORM_ref4]	(cu + 0x0076 => {0x00000076} "decltype(nullptr)")
+                  DW_AT_name [DW_FORM_strp]	( .debug_str[0x00000105] = "nullptr_t")
+                  DW_AT_decl_file [DW_FORM_data1]	("/usr/local/google/home/azakai/Dev/emscripten/system/include/libcxx/__nullptr")
+                  DW_AT_decl_line [DW_FORM_data1]	(57)
+
+0x00000075:     NULL
+
+0x00000076:   DW_TAG_unspecified_type [8]  
+                DW_AT_name [DW_FORM_strp]	( .debug_str[0x000000f3] = "decltype(nullptr)")
+
+0x0000007b:   DW_TAG_imported_declaration [9]  
+                DW_AT_decl_file [DW_FORM_data1]	("/usr/local/google/home/azakai/Dev/emscripten/system/include/libcxx/stddef.h")
+                DW_AT_decl_line [DW_FORM_data1]	(52)
+                DW_AT_import [DW_FORM_ref4]	(cu + 0x006a => {0x0000006a})
+
+0x00000082:   DW_TAG_subprogram [10] *
+                DW_AT_low_pc [DW_FORM_addr]	(0x0000000000000006)
+                DW_AT_high_pc [DW_FORM_data4]	(0x00000397)
+                DW_AT_frame_base [DW_FORM_exprloc]	(DW_OP_WASM_location 0x1 +0, DW_OP_stack_value)
+                DW_AT_GNU_all_call_sites [DW_FORM_flag_present]	(true)
+                DW_AT_linkage_name [DW_FORM_strp]	( .debug_str[0x00000166] = "_Z15fannkuch_workerPv")
+                DW_AT_name [DW_FORM_strp]	( .debug_str[0x0000017c] = "fannkuch_worker")
+                DW_AT_decl_file [DW_FORM_data1]	("/usr/local/google/home/azakai/Dev/emscripten/tests/fannkuch.cpp")
+                DW_AT_decl_line [DW_FORM_data1]	(26)
+                DW_AT_type [DW_FORM_ref4]	(cu + 0x0059 => {0x00000059} "int")
+                DW_AT_external [DW_FORM_flag_present]	(true)
+
+0x0000009e:     DW_TAG_formal_parameter [11]  
+                  DW_AT_name [DW_FORM_strp]	( .debug_str[0x00000191] = "_arg")
+                  DW_AT_decl_file [DW_FORM_data1]	("/usr/local/google/home/azakai/Dev/emscripten/tests/fannkuch.cpp")
+                  DW_AT_decl_line [DW_FORM_data1]	(26)
+                  DW_AT_type [DW_FORM_ref4]	(cu + 0x01a7 => {0x000001a7} "*")
+
+0x000000a9:     DW_TAG_variable [12]  
+                  DW_AT_name [DW_FORM_strp]	( .debug_str[0x00000133] = "args")
+                  DW_AT_decl_file [DW_FORM_data1]	("/usr/local/google/home/azakai/Dev/emscripten/tests/fannkuch.cpp")
+                  DW_AT_decl_line [DW_FORM_data1]	(28)
+                  DW_AT_type [DW_FORM_ref4]	(cu + 0x0026 => {0x00000026} "worker_args*")
+
+0x000000b4:     DW_TAG_variable [13]  
+                  DW_AT_location [DW_FORM_sec_offset]	(0x00000000: 
+                     [0xffffffff,  0x00000006): 
+                     [0x00000000,  0x0000003c): DW_OP_consts +0, DW_OP_stack_value)
+                  DW_AT_name [DW_FORM_strp]	( .debug_str[0x0000014c] = "maxflips")
+                  DW_AT_decl_file [DW_FORM_data1]	("/usr/local/google/home/azakai/Dev/emscripten/tests/fannkuch.cpp")
+                  DW_AT_decl_line [DW_FORM_data1]	(30)
+                  DW_AT_type [DW_FORM_ref4]	(cu + 0x0059 => {0x00000059} "int")
