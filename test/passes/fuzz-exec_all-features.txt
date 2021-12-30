@@ -1,0 +1,69 @@
+[fuzz-exec] calling a
+[fuzz-exec] note result: a => -69
+[fuzz-exec] calling b
+[fuzz-exec] note result: b => -31768
+[fuzz-exec] calling c
+[fuzz-exec] note result: c => -69
+[fuzz-exec] calling d
+[fuzz-exec] note result: d => -31768
+[fuzz-exec] calling e
+[fuzz-exec] note result: e => -2146649112
+(module
+ (type $none_=>_i64 (func (result i64)))
+ (type $none_=>_i32 (func (result i32)))
+ (export "a" (func $a))
+ (export "b" (func $b))
+ (export "c" (func $c))
+ (export "d" (func $d))
+ (export "e" (func $e))
+ (func $a (type $none_=>_i32) (result i32)
+  (i32.extend8_s
+   (i32.const 187)
+  )
+ )
+ (func $b (type $none_=>_i32) (result i32)
+  (i32.extend16_s
+   (i32.const 33768)
+  )
+ )
+ (func $c (type $none_=>_i64) (result i64)
+  (i64.extend8_s
+   (i64.const 187)
+  )
+ )
+ (func $d (type $none_=>_i64) (result i64)
+  (i64.extend16_s
+   (i64.const 33768)
+  )
+ )
+ (func $e (type $none_=>_i64) (result i64)
+  (i64.extend32_s
+   (i64.const 2148318184)
+  )
+ )
+)
+[fuzz-exec] calling a
+[fuzz-exec] note result: a => -69
+[fuzz-exec] calling b
+[fuzz-exec] note result: b => -31768
+[fuzz-exec] calling c
+[fuzz-exec] note result: c => -69
+[fuzz-exec] calling d
+[fuzz-exec] note result: d => -31768
+[fuzz-exec] calling e
+[fuzz-exec] note result: e => -2146649112
+[fuzz-exec] comparing a
+[fuzz-exec] comparing b
+[fuzz-exec] comparing c
+[fuzz-exec] comparing d
+[fuzz-exec] comparing e
+[fuzz-exec] calling unaligned_load
+[trap unaligned atomic operation]
+[fuzz-exec] calling unaligned_load_offset
+[trap unaligned atomic operation]
+[fuzz-exec] calling aligned_for_size
+[fuzz-exec] note result: aligned_for_size => 0
+[fuzz-exec] calling unaligned_notify
+[trap unaligned atomic operation]
+[fuzz-exec] calling wrap_cmpxchg
+[Lo
