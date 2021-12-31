@@ -153,3 +153,83 @@
   )
   (if
    (local.get $0)
+   (call $before-and-after
+    (i32.const 16)
+   )
+  )
+  (call $before-and-after
+   (i32.const 17)
+  )
+  (call $before-and-after
+   (i32.const 18)
+  )
+  (call $before-and-after
+   (i32.const 19)
+  )
+  (call $before-and-after
+   (i32.const 20)
+  )
+  (call $before-and-after
+   (i32.const 21)
+  )
+  (call $before-and-after
+   (i32.const 22)
+  )
+  (call $before-and-after
+   (i32.const 23)
+  )
+  (call $before-and-after
+   (i32.const 24)
+  )
+  (call $before-and-after
+   (i32.const 25)
+  )
+ )
+ (func $switch (param $0 i32)
+  (call $switch
+   (i32.const 1)
+  )
+  (block $block$7$break
+   (block $switch$3$default
+    (block $switch$3$case$7
+     (br_table $switch$3$case$7 $switch$3$case$7 $switch$3$case$7 $switch$3$default
+      (local.get $0)
+     )
+    )
+    (br $block$7$break)
+   )
+   (call $switch
+    (i32.const 2)
+   )
+  )
+  (call $switch
+   (i32.const 3)
+  )
+ )
+ (func $no-return
+  (nop)
+ )
+ (func $if-br-wat (param $0 i32)
+  (call $if-br-wat
+   (i32.const 0)
+  )
+  (block $block$2$break
+   (if
+    (local.get $0)
+    (call $if-br-wat
+     (i32.const 1)
+    )
+    (if
+     (local.get $0)
+     (br $block$2$break)
+    )
+   )
+   (call $if-br-wat
+    (i32.const 2)
+   )
+  )
+  (call $if-br-wat
+   (i32.const 3)
+  )
+ )
+)
