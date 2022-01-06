@@ -67,4 +67,14 @@ total
  )
 )
 total
- [exports]      : 0   
+ [exports]      : 0       
+ [funcs]        : 0       
+ [globals]      : 0       
+ [imports]      : 0       
+ [memories]     : 0       
+ [tables]       : 0       
+ [tags]         : 0       
+ [total]        : 0       
+ [vars]         : 0       
+(module
+)
