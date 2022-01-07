@@ -374,3 +374,106 @@ max_ops_per_inst: 1
  default_is_stmt: 1
        line_base: -5
       line_range: 14
+     opcode_base: 13
+standard_opcode_lengths[DW_LNS_copy] = 0
+standard_opcode_lengths[DW_LNS_advance_pc] = 1
+standard_opcode_lengths[DW_LNS_advance_line] = 1
+standard_opcode_lengths[DW_LNS_set_file] = 1
+standard_opcode_lengths[DW_LNS_set_column] = 1
+standard_opcode_lengths[DW_LNS_negate_stmt] = 0
+standard_opcode_lengths[DW_LNS_set_basic_block] = 0
+standard_opcode_lengths[DW_LNS_const_add_pc] = 0
+standard_opcode_lengths[DW_LNS_fixed_advance_pc] = 1
+standard_opcode_lengths[DW_LNS_set_prologue_end] = 0
+standard_opcode_lengths[DW_LNS_set_epilogue_begin] = 0
+standard_opcode_lengths[DW_LNS_set_isa] = 1
+file_names[  1]:
+           name: "third.cpp"
+      dir_index: 0
+       mod_time: 0x00000000
+         length: 0x00000000
+0x00000074: 00 DW_LNE_set_address (0x0000000000000016)
+0x0000007b: 01 DW_LNS_copy
+            0x0000000000000016      1      0      1   0             0  is_stmt
+
+
+0x0000007c: 00 DW_LNE_set_address (0x000000000000001d)
+0x00000083: 05 DW_LNS_set_column (26)
+0x00000085: 0a DW_LNS_set_prologue_end
+0x00000086: 01 DW_LNS_copy
+            0x000000000000001d      1     26      1   0             0  is_stmt prologue_end
+
+
+0x00000087: 00 DW_LNE_set_address (0x0000000000000021)
+0x0000008e: 00 DW_LNE_end_sequence
+            0x0000000000000021      1     26      1   0             0  is_stmt end_sequence
+
+
+.debug_str contents:
+0x00000000: "clang version 10.0.0 (/b/s/w/ir/cache/git/chromium.googlesource.com-external-github.com-llvm-llvm--project 7fcd9e3f70830a9c4bf631a602c2764180b5c3a8)"
+0x00000095: "fourth.cpp"
+0x000000a0: "/tmp/emscripten_test_wasm0_xkAHBX"
+0x000000c2: "sideg"
+0x000000c8: "int"
+0x000000cc: "clang version 10.0.0 (/b/s/w/ir/cache/git/chromium.googlesource.com-external-github.com-llvm-llvm--project 7fcd9e3f70830a9c4bf631a602c2764180b5c3a8)"
+0x00000161: "third.cpp"
+0x0000016b: "/tmp/emscripten_test_wasm0_xkAHBX"
+0x0000018d: "sidef"
+0x00000193: "int"
+(module
+ (type $none_=>_none (func))
+ (type $none_=>_i32 (func (result i32)))
+ (import "env" "memory" (memory $mimport$0 0))
+ (import "env" "__indirect_function_table" (table $timport$0 0 funcref))
+ (import "env" "__stack_pointer" (global $gimport$0 (mut i32)))
+ (import "env" "__memory_base" (global $gimport$1 i32))
+ (import "env" "__table_base" (global $gimport$2 i32))
+ (global $global$0 i32 (i32.const 0))
+ (export "__wasm_call_ctors" (func $__wasm_call_ctors))
+ (export "__wasm_apply_relocs" (func $__wasm_apply_relocs))
+ (export "sideg" (func $sideg))
+ (export "sidef" (func $sidef))
+ (export "__dso_handle" (global $global$0))
+ (func $__wasm_call_ctors (type $none_=>_none)
+  ;; code offset: 0x3
+  (call $__wasm_apply_relocs)
+ )
+ (func $__wasm_apply_relocs (type $none_=>_none)
+ )
+ (func $sideg (type $none_=>_i32) (result i32)
+  (local $0 i32)
+  ;; code offset: 0xf
+  (local.set $0
+   ;; code offset: 0xd
+   (i32.const 17)
+  )
+  ;; code offset: 0x13
+  (return
+   ;; code offset: 0x11
+   (local.get $0)
+  )
+ )
+ (func $sidef (type $none_=>_i32) (result i32)
+  (local $0 i32)
+  ;; code offset: 0x1b
+  (local.set $0
+   ;; code offset: 0x19
+   (i32.const 36)
+  )
+  ;; code offset: 0x1f
+  (return
+   ;; code offset: 0x1d
+   (local.get $0)
+  )
+ )
+ ;; dylink section
+ ;;   memorysize: 0
+ ;;   memoryalignment: 0
+ ;;   tablesize: 0
+ ;;   tablealignment: 0
+ ;; custom section ".debug_info", size 130
+ ;; custom section ".debug_abbrev", size 100
+ ;; custom section ".debug_line", size 145
+ ;; custom section ".debug_str", size 407
+ ;; custom section "producers", size 180
+)
