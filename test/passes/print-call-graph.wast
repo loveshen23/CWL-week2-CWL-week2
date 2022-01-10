@@ -1070,3 +1070,309 @@
               (i32.const 3)
             )
           )
+          (block
+            (local.set $3
+              (i32.sub
+                (i32.add
+                  (local.get $0)
+                  (i32.const 4)
+                )
+                (local.get $3)
+              )
+            )
+            (loop $while-in
+              (if
+                (i32.lt_s
+                  (local.get $0)
+                  (local.get $3)
+                )
+                (block
+                  (i32.store8
+                    (local.get $0)
+                    (local.get $1)
+                  )
+                  (local.set $0
+                    (i32.add
+                      (local.get $0)
+                      (i32.const 1)
+                    )
+                  )
+                  (br $while-in)
+                )
+              )
+            )
+          )
+        )
+        (loop $while-in1
+          (if
+            (i32.lt_s
+              (local.get $0)
+              (local.get $6)
+            )
+            (block
+              (i32.store
+                (local.get $0)
+                (local.get $5)
+              )
+              (local.set $0
+                (i32.add
+                  (local.get $0)
+                  (i32.const 4)
+                )
+              )
+              (br $while-in1)
+            )
+          )
+        )
+      )
+    )
+    (loop $while-in3
+      (if
+        (i32.lt_s
+          (local.get $0)
+          (local.get $4)
+        )
+        (block
+          (i32.store8
+            (local.get $0)
+            (local.get $1)
+          )
+          (local.set $0
+            (i32.add
+              (local.get $0)
+              (i32.const 1)
+            )
+          )
+          (br $while-in3)
+        )
+      )
+    )
+    (i32.sub
+      (local.get $0)
+      (local.get $2)
+    )
+  )
+  (func $_memcpy (param $0 i32) (param $1 i32) (param $2 i32) (result i32)
+    (local $3 i32)
+    (if
+      (i32.ge_s
+        (local.get $2)
+        (i32.const 4096)
+      )
+      (return
+        (call $_emscripten_memcpy_big
+          (local.get $0)
+          (local.get $1)
+          (local.get $2)
+        )
+      )
+    )
+    (local.set $3
+      (local.get $0)
+    )
+    (if
+      (i32.eq
+        (i32.and
+          (local.get $0)
+          (i32.const 3)
+        )
+        (i32.and
+          (local.get $1)
+          (i32.const 3)
+        )
+      )
+      (block
+        (loop $while-in
+          (block $while-out
+            (br_if $while-out
+              (i32.eqz
+                (i32.and
+                  (local.get $0)
+                  (i32.const 3)
+                )
+              )
+            )
+            (if
+              (i32.eqz
+                (local.get $2)
+              )
+              (return
+                (local.get $3)
+              )
+            )
+            (i32.store8
+              (local.get $0)
+              (i32.load8_s
+                (local.get $1)
+              )
+            )
+            (local.set $0
+              (i32.add
+                (local.get $0)
+                (i32.const 1)
+              )
+            )
+            (local.set $1
+              (i32.add
+                (local.get $1)
+                (i32.const 1)
+              )
+            )
+            (local.set $2
+              (i32.sub
+                (local.get $2)
+                (i32.const 1)
+              )
+            )
+            (br $while-in)
+          )
+        )
+        (loop $while-in1
+          (if
+            (i32.ge_s
+              (local.get $2)
+              (i32.const 4)
+            )
+            (block
+              (i32.store
+                (local.get $0)
+                (i32.load
+                  (local.get $1)
+                )
+              )
+              (local.set $0
+                (i32.add
+                  (local.get $0)
+                  (i32.const 4)
+                )
+              )
+              (local.set $1
+                (i32.add
+                  (local.get $1)
+                  (i32.const 4)
+                )
+              )
+              (local.set $2
+                (i32.sub
+                  (local.get $2)
+                  (i32.const 4)
+                )
+              )
+              (br $while-in1)
+            )
+          )
+        )
+      )
+    )
+    (loop $while-in3
+      (if
+        (i32.gt_s
+          (local.get $2)
+          (i32.const 0)
+        )
+        (block
+          (i32.store8
+            (local.get $0)
+            (i32.load8_s
+              (local.get $1)
+            )
+          )
+          (local.set $0
+            (i32.add
+              (local.get $0)
+              (i32.const 1)
+            )
+          )
+          (local.set $1
+            (i32.add
+              (local.get $1)
+              (i32.const 1)
+            )
+          )
+          (local.set $2
+            (i32.sub
+              (local.get $2)
+              (i32.const 1)
+            )
+          )
+          (br $while-in3)
+        )
+      )
+    )
+    (local.get $3)
+  )
+  (func $_pthread_self (result i32)
+    (i32.const 0)
+  )
+  (func $dynCall_ii (param $0 i32) (param $1 i32) (result i32)
+    (call_indirect (type $FUNCSIG$ii)
+      (local.get $1)
+      (i32.add
+        (i32.and
+          (local.get $0)
+          (i32.const 1)
+        )
+        (i32.const 0)
+      )
+    )
+  )
+  (func $dynCall_iiii (param $0 i32) (param $1 i32) (param $2 i32) (param $3 i32) (result i32)
+    (call_indirect (type $FUNCSIG$iiii)
+      (local.get $1)
+      (local.get $2)
+      (local.get $3)
+      (i32.add
+        (i32.and
+          (local.get $0)
+          (i32.const 3)
+        )
+        (i32.const 2)
+      )
+    )
+  )
+  (func $dynCall_vi (param $0 i32) (param $1 i32)
+    (call_indirect (type $FUNCSIG$vi)
+      (local.get $1)
+      (i32.add
+        (i32.and
+          (local.get $0)
+          (i32.const 1)
+        )
+        (i32.const 6)
+      )
+    )
+  )
+  (func $dynCall_v (param $0 i32)
+    (call_indirect (type $FUNCSIG$v)
+      (i32.add
+        (i32.and
+          (local.get $0)
+          (i32.const 0)
+        )
+        (i32.const 8)
+      )
+    )
+  )
+  (func $b0 (param $0 i32) (result i32)
+    (call $abort
+      (i32.const 0)
+    )
+    (i32.const 0)
+  )
+  (func $b1 (param $0 i32) (param $1 i32) (param $2 i32) (result i32)
+    (call $abort
+      (i32.const 1)
+    )
+    (i32.const 0)
+  )
+  (func $b2 (param $0 i32)
+    (call $abort
+      (i32.const 2)
+    )
+  )
+  (func $b3
+    (call $abort
+      (i32.const 3)
+    )
+  )
+)

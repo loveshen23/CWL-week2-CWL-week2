@@ -1,0 +1,127 @@
+(module
+ (type $i64_i64_=>_i64 (func (param i64 i64) (result i64)))
+ (type $i32_=>_i32 (func (param i32) (result i32)))
+ (type $i32_i32_=>_i32 (func (param i32 i32) (result i32)))
+ (type $f64_=>_f64 (func (param f64) (result f64)))
+ (type $f32_=>_f32 (func (param f32) (result f32)))
+ (type $i32_i32_i32_=>_none (func (param i32 i32 i32)))
+ (type $f64_f64_=>_f64 (func (param f64 f64) (result f64)))
+ (type $f32_f32_=>_f32 (func (param f32 f32) (result f32)))
+ (type $i32_i32_=>_none (func (param i32 i32)))
+ (type $none_=>_f32 (func (result f32)))
+ (type $f32_=>_none (func (param f32)))
+ (type $none_=>_f64 (func (result f64)))
+ (type $f64_=>_none (func (param f64)))
+ (type $i32_i32_i32_i32_=>_none (func (param i32 i32 i32 i32)))
+ (type $i32_=>_none (func (param i32)))
+ (type $i32_i32_i32_i32_i32_=>_i32 (func (param i32 i32 i32 i32 i32) (result i32)))
+ (type $i32_i32_i32_i32_i32_i32_=>_i32 (func (param i32 i32 i32 i32 i32 i32) (result i32)))
+ (type $none_=>_i32 (func (result i32)))
+ (type $none_=>_none (func))
+ (import "env" "wasm2js_scratch_load_i32" (func $wasm2js_scratch_load_i32 (param i32) (result i32)))
+ (import "env" "wasm2js_scratch_store_i32" (func $wasm2js_scratch_store_i32 (param i32 i32)))
+ (import "env" "wasm2js_scratch_load_f32" (func $wasm2js_scratch_load_f32 (result f32)))
+ (import "env" "wasm2js_scratch_store_f32" (func $wasm2js_scratch_store_f32 (param f32)))
+ (import "env" "wasm2js_scratch_load_f64" (func $wasm2js_scratch_load_f64 (result f64)))
+ (import "env" "wasm2js_scratch_store_f64" (func $wasm2js_scratch_store_f64 (param f64)))
+ (import "env" "wasm2js_memory_init" (func $wasm2js_memory_init (param i32 i32 i32 i32)))
+ (import "env" "wasm2js_memory_fill" (func $wasm2js_memory_fill (param i32 i32 i32)))
+ (import "env" "wasm2js_memory_copy" (func $wasm2js_memory_copy (param i32 i32 i32)))
+ (import "env" "wasm2js_data_drop" (func $wasm2js_data_drop (param i32)))
+ (import "env" "wasm2js_atomic_wait_i32" (func $wasm2js_atomic_wait_i32 (param i32 i32 i32 i32 i32) (result i32)))
+ (import "env" "wasm2js_atomic_rmw_i64" (func $wasm2js_atomic_rmw_i64 (param i32 i32 i32 i32 i32 i32) (result i32)))
+ (import "env" "wasm2js_get_stashed_bits" (func $wasm2js_get_stashed_bits (result i32)))
+ (import "env" "wasm2js_trap" (func $wasm2js_trap))
+ (global $__wasm-intrinsics-temp-i64 (mut i64) (i64.const 0))
+ (memory $0 1)
+ (func $copysign64 (param $0 f64) (param $1 f64) (result f64)
+  (f64.reinterpret_i64
+   (i64.or
+    (i64.and
+     (i64.reinterpret_f64
+      (local.get $0)
+     )
+     (i64.const 9223372036854775807)
+    )
+    (i64.and
+     (i64.reinterpret_f64
+      (local.get $1)
+     )
+     (i64.const -9223372036854775808)
+    )
+   )
+  )
+ )
+ (func $copysign32 (param $0 f32) (param $1 f32) (result f32)
+  (f32.reinterpret_i32
+   (i32.or
+    (i32.and
+     (i32.reinterpret_f32
+      (local.get $0)
+     )
+     (i32.const 2147483647)
+    )
+    (i32.and
+     (i32.reinterpret_f32
+      (local.get $1)
+     )
+     (i32.const -2147483648)
+    )
+   )
+  )
+ )
+ (func $rotl32 (param $0 i32) (param $1 i32) (result i32)
+  (call $__wasm_rotl_i32
+   (local.get $0)
+   (local.get $1)
+  )
+ )
+ (func $rotr32 (param $0 i32) (param $1 i32) (result i32)
+  (call $__wasm_rotr_i32
+   (local.get $0)
+   (local.get $1)
+  )
+ )
+ (func $rotl64 (param $0 i64) (param $1 i64) (result i64)
+  (call $__wasm_rotl_i64
+   (local.get $0)
+   (local.get $1)
+  )
+ )
+ (func $rotr64 (param $0 i64) (param $1 i64) (result i64)
+  (call $__wasm_rotr_i64
+   (local.get $0)
+   (local.get $1)
+  )
+ )
+ (func $nearest64 (param $0 f64) (result f64)
+  (call $__wasm_nearest_f64
+   (local.get $0)
+  )
+ )
+ (func $nearest32 (param $0 f32) (result f32)
+  (call $__wasm_nearest_f32
+   (local.get $0)
+  )
+ )
+ (func $trunc64 (param $0 f64) (result f64)
+  (f64.trunc
+   (local.get $0)
+  )
+ )
+ (func $trunc32 (param $0 f32) (result f32)
+  (f32.trunc
+   (local.get $0)
+  )
+ )
+ (func $popcnt32 (param $0 i32) (result i32)
+  (call $__wasm_popcnt_i32
+   (local.get $0)
+  )
+ )
+ (func $ctz32 (param $0 i32) (result i32)
+  (call $__wasm_ctz_i32
+   (local.get $0)
+  )
+ )
+ (fun
