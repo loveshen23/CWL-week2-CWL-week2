@@ -158,4 +158,881 @@
     (i32.const 1)
     (block $block1
      (drop
-      (i32
+      (i32.const 12)
+     )
+     (drop
+      (br_if $topmost
+       (i32.const 1)
+       (i32.const 1)
+      )
+     )
+    )
+    (block $block3
+     (drop
+      (i32.const 27)
+     )
+     (br $topmost
+      (i32.const 2)
+     )
+    )
+   )
+   (i32.const 3)
+  )
+ )
+ (func $b14 (result i32)
+  (select
+   (block $topmost (result i32)
+    (block $block1 (result i32)
+     (i32.const 12)
+    )
+   )
+   (block $block3 (result i32)
+    (i32.const 27)
+   )
+   (i32.const 1)
+  )
+ )
+ (func $b14-tuple (result i32 i64)
+  (if (result i32 i64)
+   (i32.const 1)
+   (block $topmost (result i32 i64)
+    (block $block1 (result i32 i64)
+     (tuple.make
+      (i32.const 12)
+      (i64.const 12)
+     )
+    )
+   )
+   (block $block3 (result i32 i64)
+    (tuple.make
+     (i32.const 27)
+     (i64.const 27)
+    )
+   )
+  )
+ )
+ (func $b15
+  (block $topmost
+   (br_if $topmost
+    (i32.const 17)
+   )
+  )
+ )
+ (func $b15b
+  (if
+   (i32.const 18)
+   (block $topmost
+    (block
+     (drop
+      (i32.const 0)
+     )
+    )
+   )
+  )
+ )
+ (func $b16
+  (block $a
+   (block $b
+    (block $c
+    )
+   )
+  )
+  (block $a1
+   (block $b2
+    (block $c3
+    )
+   )
+  )
+  (block $a4
+   (block $b5
+    (block $c6
+    )
+   )
+  )
+ )
+ (func $b17
+  (if
+   (i32.const 0)
+   (block $a
+    (block $block1
+    )
+   )
+   (block $block3
+   )
+  )
+  (if
+   (i32.const 0)
+   (block $a7
+    (drop
+     (i32.const 1)
+    )
+   )
+   (block $block6
+   )
+  )
+  (if
+   (i32.const 0)
+   (block $a9
+    (block $block8
+    )
+   )
+   (drop
+    (i32.const 1)
+   )
+  )
+  (if
+   (i32.const 0)
+   (block $c
+    (block $b
+     (block $block11
+     )
+    )
+   )
+   (block $block13
+   )
+  )
+ )
+ (func $ret-1
+  (nop)
+ )
+ (func $ret-2
+  (block $block0
+   (block $block1
+   )
+  )
+ )
+ (func $ret-3
+  (if
+   (i32.const 0)
+   (block $block0
+   )
+   (block $block3
+   )
+  )
+ )
+ (func $ret-value (result i32)
+  (block $block0 (result i32)
+   (block $block1 (result i32)
+    (i32.const 1)
+   )
+  )
+ )
+ (func $no-select-but-the-last
+  (block $a
+   (if
+    (i32.const 0)
+    (drop
+     (i32.const 1)
+    )
+    (block $block2
+     (block
+      (drop
+       (i32.const 2)
+      )
+      (br $a)
+     )
+     (drop
+      (i32.const 3)
+     )
+    )
+   )
+   (if
+    (i32.const 0)
+    (block $block4
+     (block
+      (drop
+       (i32.const 2)
+      )
+      (br $a)
+     )
+     (drop
+      (i32.const 3)
+     )
+    )
+    (drop
+     (i32.const 1)
+    )
+   )
+   (if
+    (block $block6 (result i32)
+     (block
+      (drop
+       (i32.const 2)
+      )
+      (br $a)
+     )
+     (i32.const 3)
+    )
+    (drop
+     (i32.const 0)
+    )
+    (drop
+     (i32.const 1)
+    )
+   )
+   (if
+    (block $a17 (result i32)
+     (i32.const 0)
+    )
+    (block $a18
+     (block
+      (drop
+       (i32.const 1)
+      )
+     )
+    )
+    (block $a20
+     (block
+      (drop
+       (i32.const 2)
+      )
+     )
+    )
+   )
+  )
+ )
+ (func $side-effects-and-order (result i32)
+  (local $x i32)
+  (block $do-once$0
+   (if
+    (call $b13)
+    (block
+     (drop
+      (i32.const 0)
+     )
+     (br $do-once$0)
+    )
+   )
+   (drop
+    (i32.const 1)
+   )
+  )
+  (block $do-once$022
+   (if
+    (call $b13)
+    (block
+     (drop
+      (call $b14)
+     )
+     (br $do-once$022)
+    )
+   )
+   (drop
+    (i32.const 1)
+   )
+  )
+  (block $do-once$025
+   (if
+    (i32.const 0)
+    (block
+     (drop
+      (call $b14)
+     )
+     (br $do-once$025)
+    )
+   )
+   (drop
+    (i32.const 1)
+   )
+  )
+  (block $do-once$028 (result i32)
+   (if
+    (local.tee $x
+     (i32.const 1)
+    )
+    (br $do-once$028
+     (local.tee $x
+      (i32.const 2)
+     )
+    )
+   )
+   (i32.const 1)
+  )
+ )
+ (func $loops
+  (loop $in
+   (block $out
+    (br_if $in
+     (i32.eqz
+      (i32.const 0)
+     )
+    )
+   )
+  )
+  (loop $in30
+   (br $in30)
+  )
+  (loop $loop-in
+   (block $out31
+    (br_if $out31
+     (i32.const 0)
+    )
+   )
+  )
+  (loop $in33
+   (block $out34
+    (br_if $out34
+     (i32.const 0)
+    )
+   )
+  )
+  (loop $in36
+   (nop)
+  )
+  (loop $in37
+   (block $out38
+   )
+  )
+  (loop $in39
+   (if
+    (i32.eqz
+     (i32.const 0)
+    )
+    (block $out40
+     (nop)
+     (br_if $in39
+      (i32.const 1)
+     )
+    )
+   )
+  )
+  (loop $in42
+   (block $out43
+    (br_if $in42
+     (i32.const 0)
+    )
+   )
+  )
+  (loop $in45
+   (if
+    (i32.const 0)
+    (block $out46
+     (unreachable)
+    )
+    (br $in45)
+   )
+  )
+  (loop $in48
+   (if
+    (i32.const 0)
+    (block $out49
+     (block
+      (call $loops)
+     )
+    )
+    (br $in48)
+   )
+  )
+  (loop $in-todo
+   (if
+    (i32.const 0)
+    (block $out-todo
+    )
+    (block
+     (call $loops)
+     (br $in-todo)
+    )
+   )
+  )
+  (loop $in52
+   (if
+    (i32.const 0)
+    (block $out53
+    )
+    (block
+     (call $loops)
+     (br $in52)
+    )
+   )
+  )
+  (loop $in55
+   (if
+    (i32.const 0)
+    (block
+     (call $loops)
+     (br $in55)
+    )
+    (block $out56
+    )
+   )
+  )
+  (loop $in58
+   (if
+    (i32.const 0)
+    (block
+     (drop
+      (i32.const 1)
+     )
+     (call $loops)
+     (br $in58)
+    )
+    (block $out59
+    )
+   )
+  )
+  (loop $in62
+   (if
+    (i32.const 0)
+    (block $out63
+    )
+    (block
+     (call $loops)
+     (drop
+      (i32.const 100)
+     )
+     (br $in62)
+    )
+   )
+  )
+  (loop $in65
+   (if
+    (i32.const 0)
+    (block
+     (call $loops)
+     (drop
+      (i32.const 101)
+     )
+     (br $in65)
+    )
+    (block $out66
+    )
+   )
+  )
+  (loop $in68
+   (if
+    (i32.const 0)
+    (block
+     (drop
+      (i32.const 1)
+     )
+     (call $loops)
+     (drop
+      (i32.const 102)
+     )
+     (br $in68)
+    )
+    (block $out69
+    )
+   )
+  )
+  (loop $in72
+   (if
+    (i32.eqz
+     (i32.const 0)
+    )
+    (block $out73
+     (nop)
+     (call $loops)
+     (return)
+     (br $in72)
+    )
+   )
+  )
+  (loop $in75
+   (block $out76
+    (br_if $out76
+     (i32.const 0)
+    )
+    (call $loops)
+    (br $out76)
+    (br $in75)
+   )
+  )
+  (loop $in78
+   (if
+    (i32.const 0)
+    (block $out79
+    )
+    (block
+     (call $loops)
+     (drop
+      (block $out2 (result i32)
+       (i32.const 1)
+      )
+     )
+     (br $in78)
+    )
+   )
+  )
+  (loop $in81
+   (block $out82
+    (br_if $in81
+     (i32.eqz
+      (i32.const 0)
+     )
+    )
+   )
+  )
+  (loop $in-todo2
+   (if
+    (i32.const 0)
+    (block $out-todo2
+    )
+    (block
+     (call $loops)
+     (br $in-todo2)
+    )
+   )
+  )
+  (loop $in83
+   (block $out84
+    (br $out84)
+    (br $in83)
+   )
+  )
+  (loop $in85
+   (block $out86
+    (drop
+     (i32.const 0)
+    )
+    (br $in85)
+   )
+  )
+  (loop $in-not
+   (block $out-not
+    (br_if $out-not
+     (i32.const -1)
+    )
+    (br_if $out-not
+     (i32.const 0)
+    )
+    (call $loops)
+    (br $in-not)
+   )
+  )
+  (loop $in-todo287
+   (if
+    (i32.const 0)
+    (block $out-todo288
+    )
+    (block
+     (call $loops)
+     (drop
+      (i32.const 1)
+     )
+     (br $in-todo287)
+    )
+   )
+  )
+ )
+ (func $br_if_in_block (result i32)
+  (block $outval (result i32)
+   (block $in
+    (drop
+     (i32.const 1)
+    )
+    (br $in)
+    (drop
+     (i32.const 2)
+    )
+    (br_if $in
+     (i32.eqz
+      (i32.const 3)
+     )
+    )
+    (unreachable)
+    (drop
+     (i32.const 4)
+    )
+    (br_if $in
+     (i32.const 5)
+    )
+    (unreachable)
+    (drop
+     (i32.const 6)
+    )
+   )
+   (select
+    (i32.const 7)
+    (i32.const 8)
+    (i32.const 6)
+   )
+  )
+ )
+ (func $threading
+  (drop
+   (block $value-out (result i32)
+    (block $value-in (result i32)
+     (block $out
+      (block $in
+       (br_if $out
+        (i32.const 1)
+       )
+       (br_if $out
+        (i32.const 2)
+       )
+       (br $value-in
+        (i32.const 3)
+       )
+      )
+     )
+     (i32.const 4)
+    )
+   )
+  )
+  (block $stack1
+   (block $stack2
+    (block $stack3
+     (block $stack4
+      (br_if $stack1
+       (i32.const 1)
+      )
+      (unreachable)
+     )
+    )
+   )
+  )
+ )
+ (func $if-to-br_if-conflict (param $x i32) (param $y i32) (result i32)
+  (block $leave
+   (local.set $y
+    (block $out (result i32)
+     (if
+      (local.get $x)
+      (br $out
+       (block (result i32)
+        (local.set $x
+         (i32.const 0)
+        )
+        (i32.const 1)
+       )
+      )
+      (br_if $leave
+       (i32.const 1)
+      )
+     )
+     (unreachable)
+    )
+   )
+  )
+  (i32.add
+   (local.get $x)
+   (local.get $y)
+  )
+ )
+ (func $if-to-br_if-conflict2 (param $x i32) (param $y i32) (result i32)
+  (block $leave
+   (local.set $y
+    (block $out (result i32)
+     (if
+      (local.get $x)
+      (br_if $leave
+       (i32.const 1)
+      )
+      (br $out
+       (block (result i32)
+        (local.set $x
+         (i32.const 0)
+        )
+        (i32.const 1)
+       )
+      )
+     )
+     (unreachable)
+    )
+   )
+  )
+  (i32.add
+   (local.get $x)
+   (local.get $y)
+  )
+ )
+ (func $if-to-br_if-value-sideeffect (param $x i32) (param $y i32) (result i32)
+  (block $leave
+   (local.set $y
+    (block $out (result i32)
+     (if
+      (local.get $x)
+      (br $out
+       (block (result i32)
+        (drop
+         (call $if-to-br_if-value-sideeffect
+          (i32.const 0)
+          (i32.const 1)
+         )
+        )
+        (nop)
+        (i32.const 1)
+       )
+      )
+     )
+     (unreachable)
+    )
+   )
+  )
+  (i32.add
+   (local.get $x)
+   (local.get $y)
+  )
+ )
+ (func $fuzz (param $j i32) (param $g i32)
+  (loop $label$continue$d
+   (block $label$break$c
+    (block $label$break$d
+     (if
+      (i32.lt_s
+       (local.get $j)
+       (i32.const 2147483640)
+      )
+      (block $x
+       (block $y
+        (block $z
+         (br_if $x
+          (local.get $j)
+         )
+        )
+       )
+      )
+      (block $switch$26
+      )
+     )
+     (i32.store
+      (i32.const 5724)
+      (i32.const -254899267)
+     )
+     (br $label$continue$d)
+    )
+   )
+  )
+ )
+ (func $iffify
+  (if
+   (i32.eqz
+    (i32.const 0)
+   )
+   (block $yes
+    (nop)
+    (drop
+     (i32.const 1)
+    )
+    (drop
+     (i32.const 2)
+    )
+   )
+  )
+  (block $no
+   (br_if $no
+    (i32.const 0)
+   )
+   (drop
+    (i32.const 1)
+   )
+   (br $no)
+   (drop
+    (i32.const 2)
+   )
+  )
+  (block $no2
+   (br_if $no2
+    (i32.const 0)
+   )
+  )
+  (block $no3
+   (br $no3)
+   (drop
+    (i32.const 1)
+   )
+   (drop
+    (i32.const 2)
+   )
+  )
+  (block $no5
+   (block $no4
+    (br_if $no5
+     (i32.const 0)
+    )
+    (drop
+     (i32.const 1)
+    )
+    (drop
+     (i32.const 2)
+    )
+   )
+  )
+ )
+ (func $loop-if (result i32)
+  (loop $typed (result i32)
+   (block $outer (result i32)
+    (block (result i32)
+     (br_if $typed
+      (i32.eqz
+       (i32.const 2)
+      )
+     )
+     (block (result i32)
+      (drop
+       (call $loop-if)
+      )
+      (i32.const 0)
+     )
+    )
+   )
+  )
+ )
+ (func $block-break (param $0 i32)
+  (block $block$7$break
+   (block $shape$6$continue
+    (call $block-break
+     (i32.const 1)
+    )
+   )
+  )
+ )
+ (func $loop-break (param $0 i32)
+  (loop $shape$6$continue
+   (block $block$7$break
+    (block
+     (call $loop-break
+      (i32.const 1)
+     )
+     (br_if $shape$6$continue
+      (local.get $0)
+     )
+    )
+   )
+  )
+ )
+ (func $untaken-brs-might-prevent-block-removal (param $0 f32) (param $1 i32) (param $2 f32) (param $3 i32) (param $4 i32) (param $5 f64) (param $6 f32) (result i32)
+  (block $label$0 (result i32)
+   (block $label$1
+    (br_if $label$1
+     (i32.const 607395945)
+    )
+    (br_if $label$1
+     (i32.load offset=3 align=1
+      (select
+       (call $untaken-brs-might-prevent-block-removal
+        (f32.const 1.4904844647389837e-07)
+        (br_if $label$0
+         (i32.store16 offset=4 align=1
+          (i32.const 1900641)
+          (br $label$0
+           (i32.const 1628075109)
+          )
+         )
+         (i32.const 1764950569)
+        )
+        (f32.const 1.1910939690100655e-32)
+        (i32.const 1628057906)
+        (i32.const 859068982)
+        (f64.const 2.524518840347722e-258)
+        (f32.const -nan:0x40a63)
+       )
+       (i32.const 688529440)
+       (i32.const 1751478890)
+      )
+     )
+    )
+   )
+   (i32.const 1935947830)
+  )
+ )
+ (func $unexitable-loops-result (param $0 i32) (result i64)
+  (loop $label$0
+   (loop $label$1
+    (br_if $label$0
+     (i32.load8_s
+      (i32.const 201460482)
+     )
+    )
+  
