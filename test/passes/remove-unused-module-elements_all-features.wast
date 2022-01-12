@@ -224,3 +224,66 @@
   (func $forget_implemented
     (nop)
   )
+  (func $starter
+    (nop)
+  )
+)
+(module ;; empty start being removed
+  (start $starter)
+  (func $starter
+    (nop)
+  )
+)
+(module ;; non-empty start being kept
+  (start $starter)
+  (func $starter
+    (drop (i32.const 0))
+  )
+)
+(module ;; imported start cannot be removed
+  (import "env" "start" (func $start))
+  (start $start)
+)
+(module ;; the function and the table can be removed
+ (type $0 (func (param f64) (result f64)))
+ (table 6 6 funcref)
+ (func $0 (; 0 ;) (type $0) (param $var$0 f64) (result f64)
+  (if (result f64)
+   (f64.eq
+    (f64.const 1)
+    (f64.const 1)
+   )
+   (f64.const 1)
+   (f64.const 0)
+  )
+ )
+)
+(module ;; the function uses the table, but all are removeable
+ (type $0 (func (param f64) (result f64)))
+ (table 6 6 funcref)
+ (func $0 (; 0 ;) (type $0) (param $var$0 f64) (result f64)
+  (if (result f64)
+   (f64.eq
+    (f64.const 1)
+    (f64.const 1)
+   )
+   (call_indirect (type $0) (f64.const 1) (i32.const 0))
+   (f64.const 0)
+  )
+ )
+)
+(module ;; the table is imported - we can't remove it
+ (type $0 (func (param f64) (result f64)))
+ (import "env" "table" (table 6 6 funcref))
+ (elem (i32.const 0) $0)
+ (func $0 (; 0 ;) (type $0) (param $var$0 f64) (result f64)
+  (if (result f64)
+   (f64.eq
+    (f64.const 1)
+    (f64.const 1)
+   )
+   (f64.const 1)
+   (f64.const 0)
+  )
+ )
+)
