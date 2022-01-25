@@ -39,4 +39,18 @@
 (module
  (memory 100 100)
  (func $loads
- 
+  (drop (i32.load (i32.const 1)))
+ )
+)
+;; pre-existing
+(module
+ (type $FUNCSIG$v (func))
+ (import "env" "emscripten_get_sbrk_ptr" (func $foo (result i32)))
+ (import "env" "segfault" (func $segfault))
+ (import "env" "alignfault" (func $alignfault))
+ (memory $0 (shared 100 100))
+ (func $actions
+  (drop (i32.load (i32.const 1)))
+  (i32.store (i32.const 1) (i32.const 100))
+ )
+)
