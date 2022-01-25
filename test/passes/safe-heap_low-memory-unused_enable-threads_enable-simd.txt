@@ -7703,4 +7703,712 @@
      )
     )
    )
-   (call $se
+   (call $segfault)
+  )
+  (if
+   (i32.and
+    (local.get $3)
+    (i32.const 1)
+   )
+   (call $alignfault)
+  )
+  (i64.store32 align=2
+   (local.get $3)
+   (local.get $2)
+  )
+ )
+ (func $SAFE_HEAP_STORE_i64_4_A (param $0 i32) (param $1 i32) (param $2 i64)
+  (local $3 i32)
+  (local.set $3
+   (i32.add
+    (local.get $0)
+    (local.get $1)
+   )
+  )
+  (if
+   (i32.or
+    (i32.lt_u
+     (local.get $3)
+     (i32.const 1024)
+    )
+    (i32.gt_u
+     (i32.add
+      (local.get $3)
+      (i32.const 4)
+     )
+     (i32.load
+      (call $foo)
+     )
+    )
+   )
+   (call $segfault)
+  )
+  (if
+   (i32.and
+    (local.get $3)
+    (i32.const 3)
+   )
+   (call $alignfault)
+  )
+  (i64.atomic.store32
+   (local.get $3)
+   (local.get $2)
+  )
+ )
+ (func $SAFE_HEAP_STORE_i64_4_4 (param $0 i32) (param $1 i32) (param $2 i64)
+  (local $3 i32)
+  (local.set $3
+   (i32.add
+    (local.get $0)
+    (local.get $1)
+   )
+  )
+  (if
+   (i32.or
+    (i32.lt_u
+     (local.get $3)
+     (i32.const 1024)
+    )
+    (i32.gt_u
+     (i32.add
+      (local.get $3)
+      (i32.const 4)
+     )
+     (i32.load
+      (call $foo)
+     )
+    )
+   )
+   (call $segfault)
+  )
+  (if
+   (i32.and
+    (local.get $3)
+    (i32.const 3)
+   )
+   (call $alignfault)
+  )
+  (i64.store32
+   (local.get $3)
+   (local.get $2)
+  )
+ )
+ (func $SAFE_HEAP_STORE_i64_8_1 (param $0 i32) (param $1 i32) (param $2 i64)
+  (local $3 i32)
+  (local.set $3
+   (i32.add
+    (local.get $0)
+    (local.get $1)
+   )
+  )
+  (if
+   (i32.or
+    (i32.lt_u
+     (local.get $3)
+     (i32.const 1024)
+    )
+    (i32.gt_u
+     (i32.add
+      (local.get $3)
+      (i32.const 8)
+     )
+     (i32.load
+      (call $foo)
+     )
+    )
+   )
+   (call $segfault)
+  )
+  (i64.store align=1
+   (local.get $3)
+   (local.get $2)
+  )
+ )
+ (func $SAFE_HEAP_STORE_i64_8_2 (param $0 i32) (param $1 i32) (param $2 i64)
+  (local $3 i32)
+  (local.set $3
+   (i32.add
+    (local.get $0)
+    (local.get $1)
+   )
+  )
+  (if
+   (i32.or
+    (i32.lt_u
+     (local.get $3)
+     (i32.const 1024)
+    )
+    (i32.gt_u
+     (i32.add
+      (local.get $3)
+      (i32.const 8)
+     )
+     (i32.load
+      (call $foo)
+     )
+    )
+   )
+   (call $segfault)
+  )
+  (if
+   (i32.and
+    (local.get $3)
+    (i32.const 1)
+   )
+   (call $alignfault)
+  )
+  (i64.store align=2
+   (local.get $3)
+   (local.get $2)
+  )
+ )
+ (func $SAFE_HEAP_STORE_i64_8_4 (param $0 i32) (param $1 i32) (param $2 i64)
+  (local $3 i32)
+  (local.set $3
+   (i32.add
+    (local.get $0)
+    (local.get $1)
+   )
+  )
+  (if
+   (i32.or
+    (i32.lt_u
+     (local.get $3)
+     (i32.const 1024)
+    )
+    (i32.gt_u
+     (i32.add
+      (local.get $3)
+      (i32.const 8)
+     )
+     (i32.load
+      (call $foo)
+     )
+    )
+   )
+   (call $segfault)
+  )
+  (if
+   (i32.and
+    (local.get $3)
+    (i32.const 3)
+   )
+   (call $alignfault)
+  )
+  (i64.store align=4
+   (local.get $3)
+   (local.get $2)
+  )
+ )
+ (func $SAFE_HEAP_STORE_i64_8_A (param $0 i32) (param $1 i32) (param $2 i64)
+  (local $3 i32)
+  (local.set $3
+   (i32.add
+    (local.get $0)
+    (local.get $1)
+   )
+  )
+  (if
+   (i32.or
+    (i32.lt_u
+     (local.get $3)
+     (i32.const 1024)
+    )
+    (i32.gt_u
+     (i32.add
+      (local.get $3)
+      (i32.const 8)
+     )
+     (i32.load
+      (call $foo)
+     )
+    )
+   )
+   (call $segfault)
+  )
+  (if
+   (i32.and
+    (local.get $3)
+    (i32.const 7)
+   )
+   (call $alignfault)
+  )
+  (i64.atomic.store
+   (local.get $3)
+   (local.get $2)
+  )
+ )
+ (func $SAFE_HEAP_STORE_i64_8_8 (param $0 i32) (param $1 i32) (param $2 i64)
+  (local $3 i32)
+  (local.set $3
+   (i32.add
+    (local.get $0)
+    (local.get $1)
+   )
+  )
+  (if
+   (i32.or
+    (i32.lt_u
+     (local.get $3)
+     (i32.const 1024)
+    )
+    (i32.gt_u
+     (i32.add
+      (local.get $3)
+      (i32.const 8)
+     )
+     (i32.load
+      (call $foo)
+     )
+    )
+   )
+   (call $segfault)
+  )
+  (if
+   (i32.and
+    (local.get $3)
+    (i32.const 7)
+   )
+   (call $alignfault)
+  )
+  (i64.store
+   (local.get $3)
+   (local.get $2)
+  )
+ )
+ (func $SAFE_HEAP_STORE_f32_4_1 (param $0 i32) (param $1 i32) (param $2 f32)
+  (local $3 i32)
+  (local.set $3
+   (i32.add
+    (local.get $0)
+    (local.get $1)
+   )
+  )
+  (if
+   (i32.or
+    (i32.lt_u
+     (local.get $3)
+     (i32.const 1024)
+    )
+    (i32.gt_u
+     (i32.add
+      (local.get $3)
+      (i32.const 4)
+     )
+     (i32.load
+      (call $foo)
+     )
+    )
+   )
+   (call $segfault)
+  )
+  (f32.store align=1
+   (local.get $3)
+   (local.get $2)
+  )
+ )
+ (func $SAFE_HEAP_STORE_f32_4_2 (param $0 i32) (param $1 i32) (param $2 f32)
+  (local $3 i32)
+  (local.set $3
+   (i32.add
+    (local.get $0)
+    (local.get $1)
+   )
+  )
+  (if
+   (i32.or
+    (i32.lt_u
+     (local.get $3)
+     (i32.const 1024)
+    )
+    (i32.gt_u
+     (i32.add
+      (local.get $3)
+      (i32.const 4)
+     )
+     (i32.load
+      (call $foo)
+     )
+    )
+   )
+   (call $segfault)
+  )
+  (if
+   (i32.and
+    (local.get $3)
+    (i32.const 1)
+   )
+   (call $alignfault)
+  )
+  (f32.store align=2
+   (local.get $3)
+   (local.get $2)
+  )
+ )
+ (func $SAFE_HEAP_STORE_f32_4_4 (param $0 i32) (param $1 i32) (param $2 f32)
+  (local $3 i32)
+  (local.set $3
+   (i32.add
+    (local.get $0)
+    (local.get $1)
+   )
+  )
+  (if
+   (i32.or
+    (i32.lt_u
+     (local.get $3)
+     (i32.const 1024)
+    )
+    (i32.gt_u
+     (i32.add
+      (local.get $3)
+      (i32.const 4)
+     )
+     (i32.load
+      (call $foo)
+     )
+    )
+   )
+   (call $segfault)
+  )
+  (if
+   (i32.and
+    (local.get $3)
+    (i32.const 3)
+   )
+   (call $alignfault)
+  )
+  (f32.store
+   (local.get $3)
+   (local.get $2)
+  )
+ )
+ (func $SAFE_HEAP_STORE_f64_8_1 (param $0 i32) (param $1 i32) (param $2 f64)
+  (local $3 i32)
+  (local.set $3
+   (i32.add
+    (local.get $0)
+    (local.get $1)
+   )
+  )
+  (if
+   (i32.or
+    (i32.lt_u
+     (local.get $3)
+     (i32.const 1024)
+    )
+    (i32.gt_u
+     (i32.add
+      (local.get $3)
+      (i32.const 8)
+     )
+     (i32.load
+      (call $foo)
+     )
+    )
+   )
+   (call $segfault)
+  )
+  (f64.store align=1
+   (local.get $3)
+   (local.get $2)
+  )
+ )
+ (func $SAFE_HEAP_STORE_f64_8_2 (param $0 i32) (param $1 i32) (param $2 f64)
+  (local $3 i32)
+  (local.set $3
+   (i32.add
+    (local.get $0)
+    (local.get $1)
+   )
+  )
+  (if
+   (i32.or
+    (i32.lt_u
+     (local.get $3)
+     (i32.const 1024)
+    )
+    (i32.gt_u
+     (i32.add
+      (local.get $3)
+      (i32.const 8)
+     )
+     (i32.load
+      (call $foo)
+     )
+    )
+   )
+   (call $segfault)
+  )
+  (if
+   (i32.and
+    (local.get $3)
+    (i32.const 1)
+   )
+   (call $alignfault)
+  )
+  (f64.store align=2
+   (local.get $3)
+   (local.get $2)
+  )
+ )
+ (func $SAFE_HEAP_STORE_f64_8_4 (param $0 i32) (param $1 i32) (param $2 f64)
+  (local $3 i32)
+  (local.set $3
+   (i32.add
+    (local.get $0)
+    (local.get $1)
+   )
+  )
+  (if
+   (i32.or
+    (i32.lt_u
+     (local.get $3)
+     (i32.const 1024)
+    )
+    (i32.gt_u
+     (i32.add
+      (local.get $3)
+      (i32.const 8)
+     )
+     (i32.load
+      (call $foo)
+     )
+    )
+   )
+   (call $segfault)
+  )
+  (if
+   (i32.and
+    (local.get $3)
+    (i32.const 3)
+   )
+   (call $alignfault)
+  )
+  (f64.store align=4
+   (local.get $3)
+   (local.get $2)
+  )
+ )
+ (func $SAFE_HEAP_STORE_f64_8_8 (param $0 i32) (param $1 i32) (param $2 f64)
+  (local $3 i32)
+  (local.set $3
+   (i32.add
+    (local.get $0)
+    (local.get $1)
+   )
+  )
+  (if
+   (i32.or
+    (i32.lt_u
+     (local.get $3)
+     (i32.const 1024)
+    )
+    (i32.gt_u
+     (i32.add
+      (local.get $3)
+      (i32.const 8)
+     )
+     (i32.load
+      (call $foo)
+     )
+    )
+   )
+   (call $segfault)
+  )
+  (if
+   (i32.and
+    (local.get $3)
+    (i32.const 7)
+   )
+   (call $alignfault)
+  )
+  (f64.store
+   (local.get $3)
+   (local.get $2)
+  )
+ )
+ (func $SAFE_HEAP_STORE_v128_16_1 (param $0 i32) (param $1 i32) (param $2 v128)
+  (local $3 i32)
+  (local.set $3
+   (i32.add
+    (local.get $0)
+    (local.get $1)
+   )
+  )
+  (if
+   (i32.or
+    (i32.lt_u
+     (local.get $3)
+     (i32.const 1024)
+    )
+    (i32.gt_u
+     (i32.add
+      (local.get $3)
+      (i32.const 16)
+     )
+     (i32.load
+      (call $foo)
+     )
+    )
+   )
+   (call $segfault)
+  )
+  (v128.store align=1
+   (local.get $3)
+   (local.get $2)
+  )
+ )
+ (func $SAFE_HEAP_STORE_v128_16_2 (param $0 i32) (param $1 i32) (param $2 v128)
+  (local $3 i32)
+  (local.set $3
+   (i32.add
+    (local.get $0)
+    (local.get $1)
+   )
+  )
+  (if
+   (i32.or
+    (i32.lt_u
+     (local.get $3)
+     (i32.const 1024)
+    )
+    (i32.gt_u
+     (i32.add
+      (local.get $3)
+      (i32.const 16)
+     )
+     (i32.load
+      (call $foo)
+     )
+    )
+   )
+   (call $segfault)
+  )
+  (if
+   (i32.and
+    (local.get $3)
+    (i32.const 1)
+   )
+   (call $alignfault)
+  )
+  (v128.store align=2
+   (local.get $3)
+   (local.get $2)
+  )
+ )
+ (func $SAFE_HEAP_STORE_v128_16_4 (param $0 i32) (param $1 i32) (param $2 v128)
+  (local $3 i32)
+  (local.set $3
+   (i32.add
+    (local.get $0)
+    (local.get $1)
+   )
+  )
+  (if
+   (i32.or
+    (i32.lt_u
+     (local.get $3)
+     (i32.const 1024)
+    )
+    (i32.gt_u
+     (i32.add
+      (local.get $3)
+      (i32.const 16)
+     )
+     (i32.load
+      (call $foo)
+     )
+    )
+   )
+   (call $segfault)
+  )
+  (if
+   (i32.and
+    (local.get $3)
+    (i32.const 3)
+   )
+   (call $alignfault)
+  )
+  (v128.store align=4
+   (local.get $3)
+   (local.get $2)
+  )
+ )
+ (func $SAFE_HEAP_STORE_v128_16_8 (param $0 i32) (param $1 i32) (param $2 v128)
+  (local $3 i32)
+  (local.set $3
+   (i32.add
+    (local.get $0)
+    (local.get $1)
+   )
+  )
+  (if
+   (i32.or
+    (i32.lt_u
+     (local.get $3)
+     (i32.const 1024)
+    )
+    (i32.gt_u
+     (i32.add
+      (local.get $3)
+      (i32.const 16)
+     )
+     (i32.load
+      (call $foo)
+     )
+    )
+   )
+   (call $segfault)
+  )
+  (if
+   (i32.and
+    (local.get $3)
+    (i32.const 7)
+   )
+   (call $alignfault)
+  )
+  (v128.store align=8
+   (local.get $3)
+   (local.get $2)
+  )
+ )
+ (func $SAFE_HEAP_STORE_v128_16_16 (param $0 i32) (param $1 i32) (param $2 v128)
+  (local $3 i32)
+  (local.set $3
+   (i32.add
+    (local.get $0)
+    (local.get $1)
+   )
+  )
+  (if
+   (i32.or
+    (i32.lt_u
+     (local.get $3)
+     (i32.const 1024)
+    )
+    (i32.gt_u
+     (i32.add
+      (local.get $3)
+      (i32.const 16)
+     )
+     (i32.load
+      (call $foo)
+     )
+    )
+   )
+   (call $segfault)
+  )
+  (if
+   (i32.and
+    (local.get $3)
+    (i32.const 15)
+   )
+   (call $alignfault)
+  )
+  (v128.store
+   (local.get $3)
+   (local.get $2)
+  )
+ )
+)
