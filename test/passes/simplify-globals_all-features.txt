@@ -153,3 +153,89 @@
   )
   (local.get $x)
  )
+)
+(module
+ (type $i32_=>_i32 (func (param i32) (result i32)))
+ (global $g1 (mut i32) (i32.const 1))
+ (global $g2 (mut i32) (i32.const 1))
+ (func $f (type $i32_=>_i32) (param $x i32) (result i32)
+  (global.set $g1
+   (i32.const 100)
+  )
+  (global.set $g2
+   (local.get $x)
+  )
+  (local.set $x
+   (i32.add
+    (i32.add
+     (i32.const 100)
+     (i32.const 100)
+    )
+    (global.get $g2)
+   )
+  )
+  (local.get $x)
+ )
+)
+(module
+ (type $i32_=>_i32 (func (param i32) (result i32)))
+ (global $g1 (mut i32) (i32.const 1))
+ (global $g2 i32 (i32.const 1))
+ (func $no (type $i32_=>_i32) (param $x i32) (result i32)
+  (global.set $g1
+   (i32.const 100)
+  )
+  (drop
+   (call $no
+    (i32.const 200)
+   )
+  )
+  (global.get $g1)
+ )
+ (func $no2 (type $i32_=>_i32) (param $x i32) (result i32)
+  (global.set $g1
+   (i32.const 100)
+  )
+  (global.set $g1
+   (local.get $x)
+  )
+  (global.get $g1)
+ )
+ (func $yes (type $i32_=>_i32) (param $x i32) (result i32)
+  (global.set $g1
+   (i32.const 100)
+  )
+  (drop
+   (local.get $x)
+  )
+  (i32.const 100)
+ )
+)
+(module
+ (type $none_=>_none (func))
+ (import "env" "global-1" (global $g1 externref))
+ (global $g2 externref (global.get $g1))
+ (global $g3 externref (ref.null noextern))
+ (func $test1 (type $none_=>_none)
+  (drop
+   (global.get $g1)
+  )
+  (drop
+   (global.get $g1)
+  )
+ )
+ (func $test2 (type $none_=>_none)
+  (drop
+   (ref.null noextern)
+  )
+ )
+)
+(module
+ (type $none_=>_none (func))
+ (global $write-only i32 (i32.const 1))
+ (func $foo (type $none_=>_none)
+  (drop
+   (i32.const 2)
+  )
+ )
+)
