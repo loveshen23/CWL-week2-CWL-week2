@@ -1077,3 +1077,636 @@
       (global.set $global$0
        (i32.sub
         (global.get $global$0)
+        (i32.const 1)
+       )
+      )
+      (br $label$1)
+     )
+     (f64.const -70)
+    )
+   )
+  )
+)
+(module
+  (memory (shared 256 256))
+  (type $FUNCSIG$v (func))
+  (type $FUNCSIG$i (func (result i32)))
+  (type $FUNCSIG$iiiii (func (param i32 i32 i32 i32) (result i32)))
+  (type $FUNCSIG$iiiiii (func (param i32 i32 i32 i32 i32) (result i32)))
+  (type $4 (func (param i32)))
+  (type $5 (func (param i32) (result i32)))
+  (type $6 (func (param i32 i32 i32 i32 i32 i32)))
+  (import "fuzzing-support" "log1" (func $fimport$0 (result i32)))
+  (import "fuzzing-support" "log2" (func $fimport$1 (param i32)))
+  (import "fuzzing-support" "log3" (func $fimport$2 (param f32)))
+  (global $global$0 (mut i32) (i32.const 10))
+  (func $nonatomics (result i32) ;; loads are reordered
+    (local $x i32)
+    (local.set $x (i32.load (i32.const 1024)))
+    (drop (i32.load (i32.const 1028)))
+    (local.get $x)
+  )
+  (func $nonatomic-growmem (result i32) ;; memory.grow is modeled as modifying memory
+    (local $x i32)
+    (local.set $x (i32.load (memory.grow (i32.const 1))))
+    (drop (i32.load (i32.const 1028)))
+    (local.get $x)
+  )
+  (func $atomics ;; atomic loads don't pass each other
+    (local $x i32)
+    (local.set $x (i32.atomic.load (i32.const 1024)))
+    (drop (i32.atomic.load (i32.const 1028)))
+    (drop (local.get $x))
+  )
+  (func $one-atomic ;; atomic loads don't pass other loads
+    (local $x i32)
+    (local.set $x (i32.load (i32.const 1024)))
+    (drop (i32.atomic.load (i32.const 1028)))
+    (drop (local.get $x))
+  )
+  (func $other-atomic ;; atomic loads don't pass other loads
+    (local $x i32)
+    (local.set $x (i32.atomic.load (i32.const 1024)))
+    (drop (i32.load (i32.const 1028)))
+    (drop (local.get $x))
+  )
+  (func $atomic-growmem (result i32) ;; memory.grow is modeled as modifying memory
+    (local $x i32)
+    (local.set $x (i32.load (memory.grow (i32.const 1))))
+    (drop (i32.atomic.load (i32.const 1028)))
+    (local.get $x)
+  )
+  (func $atomicrmw ;; atomic rmw don't pass loads
+    (local $x i32)
+    (local.set $x (i32.atomic.rmw.add (i32.const 1024) (i32.const 1)))
+    (drop (i32.atomic.load (i32.const 1028)))
+    (drop (local.get $x))
+  )
+  (func $atomic-cmpxchg ;; cmpxchg don't pass loads
+    (local $x i32)
+    (local.set $x (i32.atomic.rmw.cmpxchg (i32.const 1024) (i32.const 1) (i32.const 2)))
+    (drop (i32.atomic.load (i32.const 1028)))
+    (drop (local.get $x))
+  )
+  (func $br-value-reordering (result i32)
+   (local $temp i32)
+   (block $outside
+    (loop $loop ;; we should exit this loop, hit the unreachable outside
+     ;; loop logic
+     (br_if $outside ;; we should not create a block value that adds a value to a br, if the value&condition of the br cannot be reordered,
+                     ;; as the value comes first
+      (block (result i32)
+       (br_if $loop
+        (local.get $temp) ;; false, don't loop
+       )
+       (unreachable) ;; the end
+       (local.set $temp
+        (i32.const -1)
+       )
+       (i32.const 0)
+      )
+     )
+    )
+    (local.set $temp
+     (i32.const -1)
+    )
+   )
+   (unreachable)
+  )
+  (func $br-value-reordering-safe (result i32)
+   (local $temp i32)
+   (block $outside
+    (loop $loop ;; we should exit this loop, hit the unreachable outside
+     ;; loop logic
+     (drop (local.get $temp)) ;; different from above - add a use here
+     (br_if $outside ;; we should not create a block value that adds a value to a br, if the value&condition of the br cannot be reordered,
+                     ;; as the value comes first
+      (block (result i32)
+       (local.set $temp ;; the use *is* in the condition, but it's ok, no conflicts
+        (i32.const -1)
+       )
+       (i32.const 0)
+      )
+     )
+    )
+    (local.set $temp
+     (i32.const -1)
+    )
+   )
+   (unreachable)
+  )
+  (func $if-one-side-unreachable
+   (local $x i32)
+   (block $out
+    (if
+     (i32.const 1)
+     (br $out)
+     (local.set $x
+      (i32.const 2)
+     )
+    )
+    (if
+     (i32.const 3)
+     (local.set $x
+      (i32.const 4)
+     )
+     (br $out)
+    )
+    (if
+     (i32.const 5)
+     (br $out)
+     (br $out)
+    )
+   )
+  )
+  (func $if-one-side-unreachable-blocks
+   (local $x i32)
+   (local $y i32)
+   (block $out
+    (if
+     (i32.const 1)
+     (block
+      (local.set $x
+       (i32.const 2)
+      )
+      (local.set $y
+       (i32.const 3)
+      )
+      (br $out)
+     )
+     (block
+      (local.set $x
+       (i32.const 4)
+      )
+      (local.set $y
+       (i32.const 5)
+      )
+     )
+    )
+    (if
+     (i32.const 6)
+     (block
+      (local.set $x
+       (i32.const 7)
+      )
+      (local.set $y
+       (i32.const 8)
+      )
+     )
+     (block
+      (local.set $x
+       (i32.const 9)
+      )
+      (local.set $y
+       (i32.const 10)
+      )
+      (br $out)
+     )
+    )
+    (if
+     (i32.const 11)
+     (block
+      (local.set $x
+       (i32.const 12)
+      )
+      (local.set $y
+       (i32.const 13)
+      )
+      (br $out)
+     )
+     (block
+      (local.set $x
+       (i32.const 14)
+      )
+      (local.set $y
+       (i32.const 15)
+      )
+      (br $out)
+     )
+    )
+   )
+  )
+  (func $loop-value (param $x i32) (result i32)
+    (loop $loopy
+      (local.set $x (unreachable))
+    )
+    (loop $loopy
+      (local.set $x (i32.const 1))
+    )
+    (local.get $x)
+  )
+  (func $loop-loop-loopy-value (param $x i32) (result i32)
+    (loop $loopy1
+      (loop $loopy2
+        (loop $loopy3
+          (local.set $x (i32.const 1))
+        )
+      )
+    )
+    (local.get $x)
+  )
+  (func $loop-modified-during-main-pass-be-careful-fuzz (result i32)
+   (local $0 i32)
+   (if
+    (i32.const 0)
+    (local.set $0
+     (i32.const 0)
+    )
+    (loop $label$4
+     (br $label$4)
+    )
+   )
+   (local.get $0)
+  )
+  (func $loop-later (param $var$0 i32) (param $var$1 i32) (param $var$2 i32) (param $var$3 i32) (param $var$4 i32) (result i32)
+   (loop $label$1
+    (block $label$2
+     (if
+      (i32.const 0)
+      (block
+       (local.set $var$0
+        (i32.const -1)
+       )
+       (br $label$2)
+      )
+     )
+     (local.set $var$0
+      (i32.const -1)
+     )
+    )
+   )
+   (i32.const 0)
+  )
+  (func $pick
+   (local $x i32)
+   (local $y i32)
+   (local.set $x (local.get $y))
+   (if (i32.const 1)
+    (local.set $x (i32.const 1))
+   )
+   (local.set $x (local.get $y))
+   (local.set $x (local.get $y))
+  )
+  (func $pick-2
+   (local $x i32)
+   (local $y i32)
+   (local.set $y (local.get $x))
+   (if (i32.const 1)
+    (local.set $y (i32.const 1))
+   )
+   (local.set $y (local.get $x))
+   (local.set $y (local.get $x))
+  )
+  (func $many
+   (local $x i32)
+   (local $y i32)
+   (local $z i32)
+   (local $w i32)
+   (local.set $y (local.get $x))
+   (local.set $z (local.get $y))
+   (local.set $w (local.get $z))
+   (local.set $x (local.get $z))
+   (if (i32.const 1)
+    (local.set $y (i32.const 1))
+   )
+   (local.set $x (local.get $z))
+   (if (i32.const 1)
+    (local.set $y (i32.const 1))
+   )
+   (local.set $y (local.get $x))
+   (local.set $z (local.get $y))
+   (local.set $w (local.get $z))
+   (local.set $z (i32.const 2))
+   (local.set $x (local.get $z))
+   (if (i32.const 1)
+    (local.set $y (i32.const 1))
+   )
+   (local.set $y (local.get $x))
+   (local.set $z (local.get $y))
+   (local.set $w (local.get $z))
+   (local.set $z (i32.const 2))
+   (local.set $x (local.get $w))
+  )
+  (func $loop-copies (param $x i32) (param $y i32)
+   (loop $loop
+    (local.set $x (local.get $y))
+    (local.set $y (local.get $x))
+    (br_if $loop (local.get $x))
+   )
+  )
+  (func $proper-type (result f64)
+   (local $var$0 i32)
+   (local $var$2 f64)
+   (local.set $var$0
+    (select
+     (i32.const 0)
+     (i32.const 1)
+     (local.get $var$0)
+    )
+   )
+   (local.tee $var$2
+    (local.get $var$2)
+   )
+  )
+  (func $multi-pass-get-equivs-right (param $var$0 i32) (param $var$1 i32) (result f64)
+   (local $var$2 i32)
+   (local.set $var$2
+    (local.get $var$0)
+   )
+   (i32.store
+    (local.get $var$2)
+    (i32.const 1)
+   )
+   (f64.promote_f32
+    (f32.load
+     (local.get $var$2)
+    )
+   )
+  )
+  (func $if-value-structure-equivalent (param $x i32) (result i32)
+    (local $y i32)
+    (if (i32.const 1)
+      (local.set $x (i32.const 2))
+      (block
+        (local.set $y (local.get $x))
+        (local.set $x (local.get $y))
+      )
+    )
+    (local.get $x)
+  )
+  (func $set-tee-need-one-of-them (param $var$0 i32) (param $var$1 i32) (result i32)
+   (local $var$2 i32)
+   (local $var$3 i32)
+   (local.set $var$0 ;; this is redundant
+    (local.tee $var$2 ;; but this is not - we need this set, we read it at the end
+     (local.get $var$0)
+    )
+   )
+   (loop $loop
+    (br_if $loop
+     (local.get $var$1)
+    )
+   )
+   (local.get $var$2)
+  )
+  (func $loop-value-harder (result i32)
+   (local $0 i32)
+   (local $1 i32)
+   (local $2 i32)
+   (local $3 f32)
+   (local $4 f32)
+   (local $5 f32)
+   (local $6 f32)
+   (local $7 f32)
+   (local $8 f32)
+   (local $9 f32)
+   (local $10 f32)
+   (block $label$1
+    (loop $label$2
+     (block $label$3
+      (global.set $global$0
+       (i32.const -1)
+      )
+      (block $label$4
+       (local.set $0
+        (call $fimport$0)
+       )
+       (if
+        (local.get $0)
+        (local.set $5
+         (f32.const -2048)
+        )
+        (block
+         (call $fimport$1
+          (i32.const -25732)
+         )
+         (br $label$2)
+        )
+       )
+      )
+      (local.set $6
+       (local.get $5)
+      )
+      (local.set $7
+       (local.get $6)
+      )
+     )
+     (local.set $8
+      (local.get $7)
+     )
+     (local.set $9
+      (local.get $8)
+     )
+    )
+    (local.set $10
+     (local.get $9)
+    )
+    (call $fimport$2
+     (local.get $10)
+    )
+    (local.set $1
+     (i32.const -5417091)
+    )
+   )
+   (local.set $2
+    (local.get $1)
+   )
+   (return
+    (local.get $2)
+   )
+  )
+  (func $tee-chain
+    (param $x i32)
+    (param $z i32)
+    (param $t1 i32)
+    (param $t2 i32)
+    (param $t3 i32)
+    (result i32)
+    (local.set $x
+      (local.get $x)
+    )
+    (local.set $z
+      (local.tee $z
+        (i32.const 10)
+      )
+    )
+    (local.set $z
+      (local.tee $z
+        (i32.const 10)
+      )
+    )
+    (local.set $t1
+      (local.tee $t2
+        (local.tee $t3
+          (local.tee $t1
+            (call $tee-chain (local.get $x) (local.get $z) (local.get $t1) (local.get $t2) (local.get $t3))
+          )
+        )
+      )
+    )
+    (call $tee-chain (local.get $x) (local.get $z) (local.get $t1) (local.get $t2) (local.get $t3))
+  )
+)
+(module
+ (memory 256 256)
+ (data "hello, there!")
+ (func $memory-init-load
+  (local $x i32)
+  (local.set $x
+   (i32.load (i32.const 0))
+  )
+  (memory.init 0 (i32.const 0) (i32.const 0) (i32.const 5))
+  (drop
+   (local.get $x)
+  )
+ )
+ (func $memory-init-store
+  (local $x i32)
+  (local.set $x
+   (block i32
+    (i32.store (i32.const 0) (i32.const 42))
+    (i32.const 0)
+   )
+  )
+  (memory.init 0 (i32.const 0) (i32.const 0) (i32.const 5))
+  (drop
+   (local.get $x)
+  )
+ )
+ (func $memory-copy-load
+  (local $x i32)
+  (local.set $x
+   (i32.load (i32.const 0))
+  )
+  (memory.copy (i32.const 0) (i32.const 8) (i32.const 8))
+  (drop
+   (local.get $x)
+  )
+ )
+ (func $memory-copy-store
+  (local $x i32)
+  (local.set $x
+   (block i32
+    (i32.store (i32.const 0) (i32.const 42))
+    (i32.const 0)
+   )
+  )
+  (memory.copy (i32.const 0) (i32.const 8) (i32.const 8))
+  (drop
+   (local.get $x)
+  )
+ )
+ (func $memory-fill-load
+  (local $x i32)
+  (local.set $x
+   (i32.load (i32.const 0))
+  )
+  (memory.fill (i32.const 0) (i32.const 42) (i32.const 8))
+  (drop
+   (local.get $x)
+  )
+ )
+ (func $memory-fill-store
+  (local $x i32)
+  (local.set $x
+   (block i32
+    (i32.store (i32.const 0) (i32.const 42))
+    (i32.const 0)
+   )
+  )
+  (memory.fill (i32.const 0) (i32.const 8) (i32.const 8))
+  (drop
+   (local.get $x)
+  )
+ )
+ (func $data-drop-load
+  (local $x i32)
+  (local.set $x
+   (i32.load (i32.const 0))
+  )
+  (data.drop 0)
+  (drop
+   (local.get $x)
+  )
+ )
+ (func $data-drop-store
+  (local $x i32)
+  (local.set $x
+   (block i32
+    (i32.store (i32.const 0) (i32.const 42))
+    (i32.const 0)
+   )
+  )
+  (data.drop 0)
+  (drop
+   (local.get $x)
+  )
+ )
+ (func $data-drop-memory-init
+  (local $x i32)
+  (local.set $x
+   (block i32
+    (memory.init 0 (i32.const 0) (i32.const 0) (i32.const 5))
+    (i32.const 0)
+   )
+  )
+  (data.drop 0)
+  (drop
+   (local.get $x)
+  )
+ )
+)
+(module
+ (func $subtype-test (result anyref)
+  (local $0 eqref)
+  (local $1 anyref)
+  (local $2 anyref)
+  (block
+   (local.set $1
+    (local.get $0)
+   )
+  )
+  (local.set $2
+   (local.get $1)
+  )
+  (local.get $1)
+ )
+)
+;; data.drop has global side effects
+(module
+ (memory $0 (shared 1 1))
+ (data "data")
+ (func "foo" (result i32)
+  (local $0 i32)
+  (block (result i32)
+   (local.set $0
+    (i32.rem_u     ;; will trap, so cannot be reordered to the end
+     (i32.const 0)
+     (i32.const 0)
+    )
+   )
+   (data.drop 0)   ;; has global side effects that may be noticed later
+   (local.get $0)
+  )
+ )
+)
+;; do not be confused by subtyping: when an index is set, even to another type,
+;; it is no longer equivalent
+;; (see https://github.com/WebAssembly/binaryen/issues/3266)
+(module
+ (func "test" (param $0 eqref) (param $1 (ref null i31)) (result i32)
+  (local $2 eqref)
+  (local $3 (ref null i31))
+  (local.set $2
+   (local.get $0) ;; $0 and $2 are equivalent
+  )
+  (local.set $0   ;; set $0 to something with another type
+   (local.get $3)
+  )
+  ;; compares a null eqref and a zero (ref null i31) - should be false
+  (ref.eq
+   (local.get $2)
+   (local.get $1)
+  )
+ )
+)
