@@ -1,0 +1,231 @@
+(module
+  (memory 256 256)
+  (type $0 (func))
+  (type $1 (func (param i32)))
+  (type $2 (func (result f32)))
+  (type $3 (func (result i32)))
+  (type $4 (func (param i32 f64 i32 i32)))
+  (import $int "env" "int" (result i32))
+  (global $Int i32 (i32.const 0))
+  (func $b (type $0)
+    (drop
+      (i32.const 50)
+    )
+    (nop)
+    (drop
+      (i32.const 51)
+    )
+    (nop)
+    (nop)
+    (drop
+      (i32.const 52)
+    )
+    (block $waka1
+      (drop
+        (i32.const 53)
+      )
+      (br $waka1)
+      (drop
+        (i32.const 54)
+      )
+    )
+    (block $waka2
+      (nop)
+      (br $waka2)
+      (drop
+        (i32.const 56)
+      )
+    )
+    (block $waka3
+      (br_table $waka3 $waka3 $waka3
+        (i32.const 57)
+      )
+      (drop
+        (i32.const 58)
+      )
+    )
+    (if
+      (i32.const 100)
+      (nop)
+      (drop
+        (i32.const 101)
+      )
+    )
+    (if
+      (i32.const 102)
+      (drop
+        (i32.const 103)
+      )
+      (nop)
+    )
+    (if
+      (i32.const 104)
+      (nop)
+      (nop)
+    )
+  )
+  (func $l (result i32)
+    (local $x i32)
+    (local $y i32)
+    (drop
+      (local.get $x)
+    )
+    (local.set $x
+      (local.get $x)
+    )
+    (block $in-a-block
+      (drop
+        (local.get $x)
+      )
+    )
+    (block $two-in-a-block
+      (drop
+        (local.get $x)
+      )
+      (drop
+        (local.get $y)
+      )
+    )
+    (local.set $x
+      (block $result-used (result i32)
+        (local.get $x)
+      )
+    )
+    (local.set $x
+      (block $two-and-result-used (result i32)
+        (drop
+          (local.get $x)
+        )
+        (local.get $y)
+      )
+    )
+    (local.get $x)
+  )
+  (func $loopy (type $1) (param $0 i32)
+    (loop $loop-in1
+      (nop)
+    )
+    (loop $loop-in3
+      (nop)
+      (nop)
+    )
+    (drop
+      (loop $loop-in5 (result i32)
+        (drop
+          (local.get $0)
+        )
+        (i32.const 20)
+      )
+    )
+  )
+  (func $unary (type $2) (result f32)
+    (drop
+      (f32.abs
+        (f32.const 1)
+      )
+    )
+    (f32.abs
+      (unreachable)
+    )
+    (f32.abs
+      (f32.const 2)
+    )
+  )
+  (func $binary (type $2) (result f32)
+    (drop
+      (f32.add
+        (f32.const 1)
+        (f32.const 2)
+      )
+    )
+    (drop
+      (f32.add
+        (unreachable)
+        (f32.const 3)
+      )
+    )
+    (drop
+      (f32.add
+        (f32.const 4)
+        (unreachable)
+      )
+    )
+    (f32.add
+      (unreachable)
+      (unreachable)
+    )
+    (f32.add
+      (f32.const 5)
+      (f32.const 6)
+    )
+  )
+  (func $select (type $3) (result i32)
+    (drop
+      (select
+        (i32.const 1)
+        (i32.const 2)
+        (i32.const 3)
+      )
+    )
+    (drop
+      (select
+        (unreachable)
+        (i32.const 4)
+        (i32.const 5)
+      )
+    )
+    (drop
+      (select
+        (i32.const 6)
+        (unreachable)
+        (i32.const 7)
+      )
+    )
+    (drop
+      (select
+        (i32.const 8)
+        (i32.const 9)
+        (unreachable)
+      )
+    )
+    (select
+      (unreachable)
+      (unreachable)
+      (i32.const 10)
+    )
+    (drop
+      (select
+        (unreachable)
+        (i32.const 11)
+        (unreachable)
+      )
+    )
+    (drop
+      (select
+        (i32.const 12)
+        (unreachable)
+        (unreachable)
+      )
+    )
+    (select
+      (unreachable)
+      (unreachable)
+      (unreachable)
+    )
+    (select
+      (i32.const 13)
+      (i32.const 14)
+      (i32.const 15)
+    )
+  )
+  (func $block-to-one (type $0)
+    (block $block0
+      (nop)
+      (nop)
+    )
+    (block $block1
+      (nop)
+      (unreachable)
+    )
+    (block $block2
+      (nop)
