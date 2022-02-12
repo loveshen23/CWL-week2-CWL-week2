@@ -5,4 +5,4 @@
   )
 )
 
-(assert_
+(assert_return (invoke "atomic-fence"))
