@@ -586,4 +586,322 @@
     "1"                                  ;; name
     "2"                                  ;; sequence of bytes
   )
-  "integer t
+  "integer too large"
+)
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\00"                                ;; custom section
+    "\09"                                ;; section size
+    "\83\80\80\80\40"                    ;; name byte count 3 with unused bits set
+    "123"                                ;; name
+    "4"                                  ;; sequence of bytes
+  )
+  "integer too large"
+)
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\01\0b\01"                          ;; type section
+    "\60"                                ;; func type
+    "\82\80\80\80\10"                    ;; num params 2 with unused bits set
+    "\7f\7e"                             ;; param type
+    "\01"                                ;; num result
+    "\7f"                                ;; result type
+  )
+  "integer too large"
+)
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\01\0b\01"                          ;; type section
+    "\60"                                ;; func type
+    "\02"                                ;; num params
+    "\7f\7e"                             ;; param type
+    "\81\80\80\80\40"                    ;; num result 1 with unused bits set
+    "\7f"                                ;; result type
+  )
+  "integer too large"
+)
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\01\05\01"                          ;; type section
+    "\60\01\7f\00"                       ;; function type
+    "\02\1a\01"                          ;; import section
+    "\88\80\80\80\10"                    ;; module name length 8 with unused bits set
+    "\73\70\65\63\74\65\73\74"           ;; module name
+    "\09"                                ;; entity name length
+    "\70\72\69\6e\74\5f\69\33\32"        ;; entity name
+    "\00"                                ;; import kind
+    "\00"                                ;; import signature index
+  )
+  "integer too large"
+)
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\01\05\01"                          ;; type section
+    "\60\01\7f\00"                       ;; function type
+    "\02\1a\01"                          ;; import section
+    "\08"                                ;; module name length
+    "\73\70\65\63\74\65\73\74"           ;; module name
+    "\89\80\80\80\40"                    ;; entity name length 9 with unused bits set
+    "\70\72\69\6e\74\5f\69\33\32"        ;; entity name
+    "\00"                                ;; import kind
+    "\00"                                ;; import signature index
+  )
+  "integer too large"
+)
+(assert_malformed
+(module binary
+  "\00asm" "\01\00\00\00"
+  "\01\05\01"                          ;; type section
+  "\60\01\7f\00"                       ;; function type
+  "\02\1a\01"                          ;; import section
+  "\08"                                ;; module name length
+  "\73\70\65\63\74\65\73\74"           ;; module name
+  "\09"                                ;; entity name length 9
+  "\70\72\69\6e\74\5f\69\33\32"        ;; entity name
+  "\00"                                ;; import kind
+  "\80\80\80\80\10"                    ;; import signature index 0 with unused bits set
+)
+  "integer too large"
+)
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\01\04\01"                          ;; type section
+    "\60\00\00"                          ;; function type
+    "\03\06\01"                          ;; function section
+    "\80\80\80\80\10"                    ;; function 0 signature index with unused bits set
+    "\0a\04\01"                          ;; code section
+    "\02\00\0b"                          ;; function body
+  )
+  "integer too large"
+)
+
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\01\04\01"                          ;; type section
+    "\60\00\00"                          ;; fun type
+    "\03\02\01\00"                       ;; function section
+    "\07\0a\01"                          ;; export section
+    "\82\80\80\80\10"                    ;; string length 2 with unused bits set
+    "\66\31"                             ;; export name f1
+    "\00"                                ;; export kind
+    "\00"                                ;; export func index
+    "\0a\04\01"                          ;; code section
+    "\02\00\0b"                          ;; function body
+  )
+  "integer too large"
+)
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\01\04\01"                          ;; type section
+    "\60\00\00"                          ;; fun type
+    "\03\02\01\00"                       ;; function section
+    "\07\0a\01"                          ;; export section
+    "\02"                                ;; string length 2
+    "\66\31"                             ;; export name f1
+    "\00"                                ;; export kind
+    "\80\80\80\80\10"                    ;; export func index with unused bits set
+    "\0a\04\01"                          ;; code section
+    "\02\00\0b"                          ;; function body
+  )
+  "integer too large"
+)
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\01\04\01"                          ;; type section
+    "\60\00\00"                          ;; fun type
+    "\03\02\01\00"                       ;; function section
+    "\0a"                                ;; code section
+    "\08"                                ;; section size
+    "\81\80\80\80\10"                    ;; num functions 1 with unused bits set
+    "\02\00\0b"                          ;; function body
+  )
+  "integer too large"
+)
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\01\04\01\60\00\00"       ;; Type section
+    "\03\02\01\00"             ;; Function section
+    "\05\03\01\00\01"          ;; Memory section
+    "\0a\10\01"                ;; Code section
+    ;; function 0
+    "\0e\01\01"                ;; local type count
+    "\7f"                      ;; i32
+    "\41\00"                   ;; i32.const 0
+    "\28"                      ;; i32.load
+    "\02"                      ;; alignment 2
+    "\82\80\80\80\10"          ;; offset 2 with unused bits set
+    "\1a"                      ;; drop
+    "\0b"                      ;; end
+  )
+  "integer too large"
+)
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\01\04\01\60\00\00"       ;; Type section
+    "\03\02\01\00"             ;; Function section
+    "\05\03\01\00\01"          ;; Memory section
+    "\0a\10\01"                ;; Code section
+    ;; function 0
+    "\0e\01\01"                ;; local type count
+    "\7f"                      ;; i32
+    "\41\00"                   ;; i32.const 0
+    "\28"                      ;; i32.load
+    "\02"                      ;; alignment 2
+    "\82\80\80\80\40"          ;; offset 2 with some unused bits set
+    "\1a"                      ;; drop
+    "\0b"                      ;; end
+  )
+  "integer too large"
+)
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\01\04\01\60\00\00"       ;; Type section
+    "\03\02\01\00"             ;; Function section
+    "\05\03\01\00\01"          ;; Memory section
+    "\0a\10\01"                ;; Code section
+    "\0e\01\01"                ;; local type count
+    "\7f"                      ;; i32
+    "\41\00"                   ;; i32.const 0
+    "\28"                      ;; i32.load
+    "\82\80\80\80\10"          ;; alignment 2 with unused bits set
+    "\00"                      ;; offset 0
+    "\1a"                      ;; drop
+    "\0b"                      ;; end
+  )
+  "integer too large"
+)
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\01\04\01\60\00\00"       ;; Type section
+    "\03\02\01\00"             ;; Function section
+    "\05\03\01\00\01"          ;; Memory section
+    "\0a\10\01"                ;; Code section
+    ;; function 0
+    "\0e\01\01"                ;; local type count
+    "\7f"                      ;; i32
+    "\41\00"                   ;; i32.const 0
+    "\28"                      ;; i32.load
+    "\82\80\80\80\40"          ;; alignment 2 with some unused bits set
+    "\00"                      ;; offset 0
+    "\1a"                      ;; drop
+    "\0b"                      ;; end
+  )
+  "integer too large"
+)
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\01\04\01\60\00\00"       ;; Type section
+    "\03\02\01\00"             ;; Function section
+    "\05\03\01\00\01"          ;; Memory section
+    "\0a\11\01"                ;; Code section
+    ;; function 0
+    "\0f\01\01"                ;; local type count
+    "\7f"                      ;; i32
+    "\41\00"                   ;; i32.const 0
+    "\41\03"                   ;; i32.const 3
+    "\36"                      ;; i32.store
+    "\82\80\80\80\10"          ;; alignment 2 with unused bits set
+    "\03"                      ;; offset 3
+    "\0b"                      ;; end
+  )
+  "integer too large"
+)
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\01\04\01\60\00\00"       ;; Type section
+    "\03\02\01\00"             ;; Function section
+    "\05\03\01\00\01"          ;; Memory section
+    "\0a\11\01"                ;; Code section
+    ;; function 0
+    "\0f\01\01"                ;; local type count
+    "\7f"                      ;; i32
+    "\41\00"                   ;; i32.const 0
+    "\41\03"                   ;; i32.const 3
+    "\36"                      ;; i32.store
+    "\82\80\80\80\40"          ;; alignment 2 with some unused bits set
+    "\03"                      ;; offset 3
+    "\0b"                      ;; end
+  )
+  "integer too large"
+)
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\01\04\01\60\00\00"       ;; Type section
+    "\03\02\01\00"             ;; Function section
+    "\05\03\01\00\01"          ;; Memory section
+    "\0a\11\01"                ;; Code section
+    ;; function 0
+    "\0f\01\01"                ;; local type count
+    "\7f"                      ;; i32
+    "\41\00"                   ;; i32.const 0
+    "\41\03"                   ;; i32.const 3
+    "\36"                      ;; i32.store
+    "\03"                      ;; alignment 2
+    "\82\80\80\80\10"          ;; offset 2 with unused bits set
+    "\0b"                      ;; end
+  )
+  "integer too large"
+)
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\01\04\01\60\00\00"       ;; Type section
+    "\03\02\01\00"             ;; Function section
+    "\05\03\01\00\01"          ;; Memory section
+    "\0a\11\01"                ;; Code section
+
+    ;; function 0
+    "\0f\01\01"                ;; local type count
+    "\7f"                      ;; i32
+    "\41\00"                   ;; i32.const 0
+    "\41\03"                   ;; i32.const 3
+    "\36"                      ;; i32.store
+    "\02"                      ;; alignment 2
+    "\82\80\80\80\40"          ;; offset 2 with some unused bits set
+    "\0b"                      ;; end
+  )
+  "integer too large"
+)
+
+;; Signed LEB128s sign-extend
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\06\0a\01"                          ;; Global section with 1 entry
+    "\7f\00"                             ;; i32, immutable
+    "\41\80\80\80\80\70"                 ;; i32.const 0 with unused bits set
+    "\0b"                                ;; end
+  )
+  "integer too large"
+)
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\06\0a\01"                          ;; Global section with 1 entry
+    "\7f\00"                             ;; i32, immutable
+    "\41\ff\ff\ff\ff\0f"                 ;; i32.const -1 with unused bits unset
+    "\0b"                                ;; end
+  )
+  "integer too large"
+)
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\06\0a\01"                          ;; Global section with 1 entry
+    "\7f\00"                             ;; i32, im
