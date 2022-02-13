@@ -904,4 +904,60 @@
   (module binary
     "\00asm" "\01\00\00\00"
     "\06\0a\01"                          ;; Global section with 1 entry
-    "\7f\00"                             ;; i32, im
+    "\7f\00"                             ;; i32, immutable
+    "\41\80\80\80\80\1f"                 ;; i32.const 0 with some unused bits set
+    "\0b"                                ;; end
+  )
+  "integer too large"
+)
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\06\0a\01"                          ;; Global section with 1 entry
+    "\7f\00"                             ;; i32, immutable
+    "\41\ff\ff\ff\ff\4f"                 ;; i32.const -1 with some unused bits unset
+    "\0b"                                ;; end
+  )
+  "integer too large"
+)
+
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\06\0f\01"                          ;; Global section with 1 entry
+    "\7e\00"                             ;; i64, immutable
+    "\42\80\80\80\80\80\80\80\80\80\7e"  ;; i64.const 0 with unused bits set
+    "\0b"                                ;; end
+  )
+  "integer too large"
+)
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\06\0f\01"                          ;; Global section with 1 entry
+    "\7e\00"                             ;; i64, immutable
+    "\42\ff\ff\ff\ff\ff\ff\ff\ff\ff\01"  ;; i64.const -1 with unused bits unset
+    "\0b"                                ;; end
+  )
+  "integer too large"
+)
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\06\0f\01"                          ;; Global section with 1 entry
+    "\7e\00"                             ;; i64, immutable
+    "\42\80\80\80\80\80\80\80\80\80\02"  ;; i64.const 0 with some unused bits set
+    "\0b"                                ;; end
+  )
+  "integer too large"
+)
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\06\0f\01"                          ;; Global section with 1 entry
+    "\7e\00"                             ;; i64, immutable
+    "\42\ff\ff\ff\ff\ff\ff\ff\ff\ff\41"  ;; i64.const -1 with some unused bits unset
+    "\0b"                                ;; end
+  )
+  "integer too large"
+)
