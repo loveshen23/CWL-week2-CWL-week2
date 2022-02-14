@@ -639,4 +639,173 @@
   "invalid value type"
 )
 
-;; 1 el
+;; 1 elem segment declared, 2 given
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\01\04\01"                             ;; type section
+    "\60\00\00"                             ;; type 0
+    "\03\02\01\00"                          ;; func section
+    "\04\04\01"                             ;; table section
+    "\70\00\01"                             ;; table 0
+    "\09\0d\01"                             ;; elem with inconsistent segment count (1 declared, 2 given)
+    "\00\41\00\0b\01\00"                    ;; elem 0
+    "\00\41\00\0b\01\00"                    ;; elem 1 (redundant)
+    "\0a\04\01"                             ;; code section
+    "\02\00\0b"                             ;; function body
+  )
+  "section size mismatch"
+)
+
+;; data segment count can be zero
+(module binary
+  "\00asm" "\01\00\00\00"
+  "\05\03\01"                               ;; memory section
+  "\00\01"                                  ;; memory 0
+  "\0b\01\00"                               ;; data segment count can be zero
+)
+
+;; 2 data segment declared, 1 given
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\05\03\01"                             ;; memory section
+    "\00\01"                                ;; memory 0
+    "\0b\07\02"                             ;; data with inconsistent segment count (2 declared, 1 given)
+    "\00\41\00\0b\01\61"                    ;; data 0
+    ;; "\00\41\01\0b\01\62"                 ;; data 1 (missed)
+  )
+  "unexpected end of section or function"
+)
+
+;; 1 data segment declared, 2 given
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\05\03\01"                             ;; memory section
+    "\00\01"                                ;; memory 0
+    "\0b\0d\01"                             ;; data with inconsistent segment count (1 declared, 2 given)
+    "\00\41\00\0b\01\61"                    ;; data 0
+    "\00\41\01\0b\01\62"                    ;; data 1 (redundant)
+  )
+  "section size mismatch"
+)
+
+;; data segment has 7 bytes declared, but 6 bytes given
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\05\03\01"                             ;; memory section
+    "\00\01"                                ;; memory 0
+    "\0b\0c\01"                             ;; data section
+    "\00\41\03\0b"                          ;; data segment 0
+    "\07"                                   ;; data segment size with inconsistent lengths (7 declared, 6 given)
+    "\61\62\63\64\65\66"                    ;; 6 bytes given
+  )
+  "unexpected end of section or function"
+)
+
+;; data segment has 5 bytes declared, but 6 bytes given
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\05\03\01"                             ;; memory section
+    "\00\01"                                ;; memory 0
+    "\0b\0c\01"                             ;; data section
+    "\00\41\00\0b"                          ;; data segment 0
+    "\05"                                   ;; data segment size with inconsistent lengths (5 declared, 6 given)
+    "\61\62\63\64\65\66"                    ;; 6 bytes given
+  )
+  "section size mismatch"
+)
+
+;; br_table target count can be zero
+(module binary
+  "\00asm" "\01\00\00\00"
+  "\01\04\01"                               ;; type section
+  "\60\00\00"                               ;; type 0
+  "\03\02\01\00"                            ;; func section
+  "\0a\11\01"                               ;; code section
+  "\0f\00"                                  ;; func 0
+  "\02\40"                                  ;; block 0
+  "\41\01"                                  ;; condition of if 0
+  "\04\40"                                  ;; if 0
+  "\41\01"                                  ;; index of br_table element
+  "\0e\00"                                  ;; br_table target count can be zero
+  "\02"                                     ;; break depth for default
+  "\0b\0b\0b"                               ;; end
+)
+
+;; 2 br_table target declared, 1 given
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\01\04\01"                             ;; type section
+    "\60\00\00"                             ;; type 0
+    "\03\02\01\00"                          ;; func section
+    "\0a\12\01"                             ;; code section
+    "\10\00"                                ;; func 0
+    "\02\40"                                ;; block 0
+    "\41\01"                                ;; condition of if 0
+    "\04\40"                                ;; if 0
+    "\41\01"                                ;; index of br_table element
+    "\0e\02"                                ;; br_table with inconsistent target count (2 declared, 1 given)
+    "\00"                                   ;; break depth 0
+    ;; "\01"                                ;; break depth 1 (missed)
+    "\02"                                   ;; break depth for default
+    "\0b\0b\0b"                             ;; end
+  )
+  "unexpected end of section or function"
+)
+
+;; 1 br_table target declared, 2 given
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\01\04\01"                             ;; type section
+    "\60\00\00"                             ;; type 0
+    "\03\02\01\00"                          ;; func section
+    "\0a\12\01"                             ;; code section
+    "\11\00"                                ;; func 0
+    "\02\40"                                ;; block 0
+    "\41\01"                                ;; condition of if 0
+    "\04\40"                                ;; if 0
+    "\41\01"                                ;; index of br_table element
+    "\0e\01"                                ;; br_table with inconsistent target count (1 declared, 2 given)
+    "\00"                                   ;; break depth 0
+    "\01"                                   ;; break depth 1
+    "\02"                                   ;; break depth for default
+    "\0b\0b\0b"                             ;; end
+  )
+  "invalid value type"
+)
+
+;; Start section
+(module binary
+  "\00asm" "\01\00\00\00"
+  "\01\04\01\60\00\00"       ;; Type section
+  "\03\02\01\00"             ;; Function section
+  "\08\01\00"                ;; Start section: function 0
+
+  "\0a\04\01"                ;; Code section
+  ;; function 0
+  "\02\00"
+  "\0b"                      ;; end
+)
+
+;; Multiple start sections
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\01\04\01\60\00\00"       ;; Type section
+    "\03\02\01\00"             ;; Function section
+    "\08\01\00"                ;; Start section: function 0
+    "\08\01\00"                ;; Start section: function 0
+
+    "\0a\04\01"                ;; Code section
+    ;; function 0
+    "\02\00"
+    "\0b"                      ;; end
+  )
+  "junk after last section"
+)
