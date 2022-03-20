@@ -25,4 +25,6 @@
 (assert_return (invoke "get_s" (i32.const -1)) (i32.const -1))
 (assert_return (invoke "get_s" (i32.const 0x3fffffff)) (i32.const 0x3fffffff))
 (assert_return (invoke "get_s" (i32.const 0x40000000)) (i32.const -0x40000000))
-(assert_return (invoke "get_s" (i32.const 0x7ffff
+(assert_return (invoke "get_s" (i32.const 0x7fffffff)) (i32.const -1))
+(assert_return (invoke "get_s" (i32.const 0xaaaaaaaa)) (i32.const 0x2aaaaaaa))
+(assert_return (invoke "get_s" (i32.const 0xcaaaaaaa)) (i32.const 0xcaaaaaaa))
