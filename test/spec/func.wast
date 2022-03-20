@@ -573,3 +573,89 @@
   (module (func $type-return-num-vs-num (result i32)
     (return (i64.const 1)) (i32.const 1)
   ))
+  "type mismatch"
+)
+(assert_invalid
+  (module (func $type-return-first-num-vs-num (result i32)
+    (return (i64.const 1)) (return (i32.const 1))
+  ))
+  "type mismatch"
+)
+
+(assert_invalid
+  (module (func $type-break-last-void-vs-num (result i32)
+    (br 0)
+  ))
+  "type mismatch"
+)
+(assert_invalid
+  (module (func $type-break-last-num-vs-num (result i32)
+    (br 0 (f32.const 0))
+  ))
+  "type mismatch"
+)
+(assert_invalid
+  (module (func $type-break-void-vs-num (result i32)
+    (br 0) (i32.const 1)
+  ))
+  "type mismatch"
+)
+(assert_invalid
+  (module (func $type-break-num-vs-num (result i32)
+    (br 0 (i64.const 1)) (i32.const 1)
+  ))
+  "type mismatch"
+)
+(assert_invalid
+  (module (func $type-break-first-num-vs-num (result i32)
+    (br 0 (i64.const 1)) (br 0 (i32.const 1))
+  ))
+  "type mismatch"
+)
+
+(assert_invalid
+  (module (func $type-break-nested-empty-vs-num (result i32)
+    (block (br 1)) (br 0 (i32.const 1))
+  ))
+  "type mismatch"
+)
+(assert_invalid
+  (module (func $type-break-nested-void-vs-num (result i32)
+    (block (br 1 (nop))) (br 0 (i32.const 1))
+  ))
+  "type mismatch"
+)
+(assert_invalid
+  (module (func $type-break-nested-num-vs-num (result i32)
+    (block (br 1 (i64.const 1))) (br 0 (i32.const 1))
+  ))
+  "type mismatch"
+)
+
+
+;; Syntax errors
+
+(assert_malformed
+  (module quote "(func (nop) (local i32))")
+  "unexpected token"
+)
+(assert_malformed
+  (module quote "(func (nop) (param i32))")
+  "unexpected token"
+)
+(assert_malformed
+  (module quote "(func (nop) (result i32))")
+  "unexpected token"
+)
+(assert_malformed
+  (module quote "(func (local i32) (param i32))")
+  "unexpected token"
+)
+(assert_malformed
+  (module quote "(func (local i32) (result i32) (local.get 0))")
+  "unexpected token"
+)
+(assert_malformed
+  (module quote "(func (result i32) (param i32) (local.get 0))")
+  "unexpected token"
+)
