@@ -485,3 +485,206 @@
 
   (func (export "load") (param i32) (result i32) (i32.load (local.get 0)))
 )
+(assert_return (invoke "load" (i32.const 0)) (i32.const 0))
+(assert_return (invoke "load" (i32.const 10)) (i32.const 16))
+(assert_return (invoke "load" (i32.const 8)) (i32.const 0x100000))
+(assert_trap (invoke "load" (i32.const 1000000)) "out of bounds memory access")
+
+(module (import "test" "memory-2-inf" (memory 2)))
+(module (import "test" "memory-2-inf" (memory 1)))
+(module (import "test" "memory-2-inf" (memory 0)))
+(module (import "spectest" "memory" (memory 1)))
+(module (import "spectest" "memory" (memory 0)))
+(module (import "spectest" "memory" (memory 1 2)))
+(module (import "spectest" "memory" (memory 0 2)))
+(module (import "spectest" "memory" (memory 1 3)))
+(module (import "spectest" "memory" (memory 0 3)))
+
+(assert_unlinkable
+  (module (import "test" "unknown" (memory 1)))
+  "unknown import"
+)
+(assert_unlinkable
+  (module (import "spectest" "unknown" (memory 1)))
+  "unknown import"
+)
+
+(assert_unlinkable
+  (module (import "test" "memory-2-inf" (memory 3)))
+  "incompatible import type"
+)
+(assert_unlinkable
+  (module (import "test" "memory-2-inf" (memory 2 3)))
+  "incompatible import type"
+)
+(assert_unlinkable
+  (module (import "spectest" "memory" (memory 2)))
+  "incompatible import type"
+)
+(assert_unlinkable
+  (module (import "spectest" "memory" (memory 1 1)))
+  "incompatible import type"
+)
+
+(assert_unlinkable
+  (module (import "test" "func-i32" (memory 1)))
+  "incompatible import type"
+)
+(assert_unlinkable
+  (module (import "test" "global-i32" (memory 1)))
+  "incompatible import type"
+)
+(assert_unlinkable
+  (module (import "test" "table-10-inf" (memory 1)))
+  "incompatible import type"
+)
+(assert_unlinkable
+  (module (import "spectest" "print_i32" (memory 1)))
+  "incompatible import type"
+)
+(assert_unlinkable
+  (module (import "spectest" "global_i32" (memory 1)))
+  "incompatible import type"
+)
+(assert_unlinkable
+  (module (import "spectest" "table" (memory 1)))
+  "incompatible import type"
+)
+
+(assert_unlinkable
+  (module (import "spectest" "memory" (memory 2)))
+  "incompatible import type"
+)
+(assert_unlinkable
+  (module (import "spectest" "memory" (memory 1 1)))
+  "incompatible import type"
+)
+
+(module
+  (import "spectest" "memory" (memory 0 3))  ;; actual has max size 2
+  (func (export "grow") (param i32) (result i32) (memory.grow (local.get 0)))
+)
+(assert_return (invoke "grow" (i32.const 0)) (i32.const 1))
+(assert_return (invoke "grow" (i32.const 1)) (i32.const 1))
+(assert_return (invoke "grow" (i32.const 0)) (i32.const 2))
+(assert_return (invoke "grow" (i32.const 1)) (i32.const -1))
+(assert_return (invoke "grow" (i32.const 0)) (i32.const 2))
+
+(module $Mgm
+  (memory (export "memory") 1) ;; initial size is 1
+  (func (export "grow") (result i32) (memory.grow (i32.const 1)))
+)
+(register "grown-memory" $Mgm)
+(assert_return (invoke $Mgm "grow") (i32.const 1)) ;; now size is 2
+(module $Mgim1
+  ;; imported memory limits should match, because external memory size is 2 now
+  (memory (import "grown-memory" "memory") 2)
+  (export "memory" (memory 0))
+  (func (export "grow") (result i32) (memory.grow (i32.const 1)))
+)
+(register "grown-imported-memory" $Mgim1)
+(assert_return (invoke $Mgim1 "grow") (i32.const 2)) ;; now size is 3
+(module $Mgim2
+  ;; imported memory limits should match, because external memory size is 3 now
+  (import "grown-imported-memory" "memory" (memory 3))
+  (func (export "size") (result i32) (memory.size))
+)
+(assert_return (invoke $Mgim2 "size") (i32.const 3))
+
+
+;; Syntax errors
+
+(assert_malformed
+  (module quote "(func) (import \"\" \"\" (func))")
+  "import after function"
+)
+(assert_malformed
+  (module quote "(func) (import \"\" \"\" (global i64))")
+  "import after function"
+)
+(assert_malformed
+  (module quote "(func) (import \"\" \"\" (table 0 funcref))")
+  "import after function"
+)
+(assert_malformed
+  (module quote "(func) (import \"\" \"\" (memory 0))")
+  "import after function"
+)
+
+(assert_malformed
+  (module quote "(global i64 (i64.const 0)) (import \"\" \"\" (func))")
+  "import after global"
+)
+(assert_malformed
+  (module quote "(global i64 (i64.const 0)) (import \"\" \"\" (global f32))")
+  "import after global"
+)
+(assert_malformed
+  (module quote "(global i64 (i64.const 0)) (import \"\" \"\" (table 0 funcref))")
+  "import after global"
+)
+(assert_malformed
+  (module quote "(global i64 (i64.const 0)) (import \"\" \"\" (memory 0))")
+  "import after global"
+)
+
+(assert_malformed
+  (module quote "(table 0 funcref) (import \"\" \"\" (func))")
+  "import after table"
+)
+(assert_malformed
+  (module quote "(table 0 funcref) (import \"\" \"\" (global i32))")
+  "import after table"
+)
+(assert_malformed
+  (module quote "(table 0 funcref) (import \"\" \"\" (table 0 funcref))")
+  "import after table"
+)
+(assert_malformed
+  (module quote "(table 0 funcref) (import \"\" \"\" (memory 0))")
+  "import after table"
+)
+
+(assert_malformed
+  (module quote "(memory 0) (import \"\" \"\" (func))")
+  "import after memory"
+)
+(assert_malformed
+  (module quote "(memory 0) (import \"\" \"\" (global i32))")
+  "import after memory"
+)
+(assert_malformed
+  (module quote "(memory 0) (import \"\" \"\" (table 1 3 funcref))")
+  "import after memory"
+)
+(assert_malformed
+  (module quote "(memory 0) (import \"\" \"\" (memory 1 2))")
+  "import after memory"
+)
+
+;; This module is required to validate, regardless of whether it can be
+;; linked. Overloading is not possible in wasm itself, but it is possible
+;; in modules from which wasm can import.
+(module)
+(register "not wasm")
+(assert_unlinkable
+  (module
+    (import "not wasm" "overloaded" (func))
+    (import "not wasm" "overloaded" (func (param i32)))
+    (import "not wasm" "overloaded" (func (param i32 i32)))
+    (import "not wasm" "overloaded" (func (param i64)))
+    (import "not wasm" "overloaded" (func (param f32)))
+    (import "not wasm" "overloaded" (func (param f64)))
+    (import "not wasm" "overloaded" (func (result i32)))
+    (import "not wasm" "overloaded" (func (result i64)))
+    (import "not wasm" "overloaded" (func (result f32)))
+    (import "not wasm" "overloaded" (func (result f64)))
+    (import "not wasm" "overloaded" (global i32))
+    (import "not wasm" "overloaded" (global i64))
+    (import "not wasm" "overloaded" (global f32))
+    (import "not wasm" "overloaded" (global f64))
+    (import "not wasm" "overloaded" (table 0 funcref))
+    (import "not wasm" "overloaded" (memory 0))
+  )
+  "unknown import"
+)
