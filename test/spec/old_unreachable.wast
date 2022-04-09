@@ -203,4 +203,60 @@
 (assert_trap (invoke "as-loop-last") "unreachable")
 (assert_return (invoke "as-loop-broke") (i32.const 1))
 
-(assert_trap
+(assert_trap (invoke "as-br-value") "unreachable")
+
+(assert_trap (invoke "as-br_if-cond") "unreachable")
+(assert_trap (invoke "as-br_if-value") "unreachable")
+(assert_trap (invoke "as-br_if-value-cond") "unreachable")
+
+(assert_trap (invoke "as-br_table-index") "unreachable")
+(assert_trap (invoke "as-br_table-value") "unreachable")
+(assert_trap (invoke "as-br_table-value-index") "unreachable")
+
+(assert_trap (invoke "as-return-value") "unreachable")
+
+(assert_trap (invoke "as-if-cond") "unreachable")
+(assert_trap (invoke "as-if-then" (i32.const 1) (i32.const 6)) "unreachable")
+(assert_return (invoke "as-if-then" (i32.const 0) (i32.const 6)) (i32.const 6))
+(assert_trap (invoke "as-if-else" (i32.const 0) (i32.const 6)) "unreachable")
+(assert_return (invoke "as-if-else" (i32.const 1) (i32.const 6)) (i32.const 6))
+
+(assert_trap (invoke "as-select-first" (i32.const 0) (i32.const 6)) "unreachable")
+(assert_trap (invoke "as-select-first" (i32.const 1) (i32.const 6)) "unreachable")
+(assert_trap (invoke "as-select-second" (i32.const 0) (i32.const 6)) "unreachable")
+(assert_trap (invoke "as-select-second" (i32.const 1) (i32.const 6)) "unreachable")
+(assert_trap (invoke "as-select-cond") "unreachable")
+
+(assert_trap (invoke "as-call-first") "unreachable")
+(assert_trap (invoke "as-call-mid") "unreachable")
+(assert_trap (invoke "as-call-last") "unreachable")
+
+(assert_trap (invoke "as-call_indirect-func") "unreachable")
+(assert_trap (invoke "as-call_indirect-first") "unreachable")
+(assert_trap (invoke "as-call_indirect-mid") "unreachable")
+(assert_trap (invoke "as-call_indirect-last") "unreachable")
+
+(assert_trap (invoke "as-local.set-value") "unreachable")
+
+(assert_trap (invoke "as-load-address") "unreachable")
+(assert_trap (invoke "as-loadN-address") "unreachable")
+
+(assert_trap (invoke "as-store-address") "unreachable")
+(assert_trap (invoke "as-store-value") "unreachable")
+(assert_trap (invoke "as-storeN-address") "unreachable")
+(assert_trap (invoke "as-storeN-value") "unreachable")
+
+(assert_trap (invoke "as-unary-operand") "unreachable")
+
+(assert_trap (invoke "as-binary-left") "unreachable")
+(assert_trap (invoke "as-binary-right") "unreachable")
+
+(assert_trap (invoke "as-test-operand") "unreachable")
+
+(assert_trap (invoke "as-compare-left") "unreachable")
+(assert_trap (invoke "as-compare-right") "unreachable")
+
+(assert_trap (invoke "as-convert-operand") "unreachable")
+
+(assert_trap (invoke "as-memory.grow-size") "unreachable")
+
