@@ -311,3 +311,213 @@
 (assert_return (invoke "signature-explicit-reused"))
 (assert_return (invoke "signature-implicit-reused"))
 (assert_return (invoke "signature-explicit-duplicate"))
+(assert_return (invoke "signature-implicit-duplicate"))
+
+
+;; Invalid typing of locals
+
+(assert_invalid
+  (module (func $type-local-num-vs-num (result i64) (local i32) (local.get 0)))
+  "type mismatch"
+)
+(assert_invalid
+  (module (func $type-local-num-vs-num (local f32) (i32.eqz (local.get 0))))
+  "type mismatch"
+)
+(assert_invalid
+  (module (func $type-local-num-vs-num (local f64 i64) (f64.neg (local.get 1))))
+  "type mismatch"
+)
+
+
+;; Invalid typing of parameters
+
+(assert_invalid
+  (module (func $type-param-num-vs-num (param i32) (result i64) (local.get 0)))
+  "type mismatch"
+)
+(assert_invalid
+  (module (func $type-param-num-vs-num (param f32) (i32.eqz (local.get 0))))
+  "type mismatch"
+)
+(assert_invalid
+  (module (func $type-param-num-vs-num (param f64 i64) (f64.neg (local.get 1))))
+  "type mismatch"
+)
+
+
+;; Invalid typing of result
+
+(assert_invalid
+  (module (func $type-empty-i32 (result i32)))
+  "type mismatch"
+)
+(assert_invalid
+  (module (func $type-empty-i64 (result i64)))
+  "type mismatch"
+)
+(assert_invalid
+  (module (func $type-empty-f32 (result f32)))
+  "type mismatch"
+)
+(assert_invalid
+  (module (func $type-empty-f64 (result f64)))
+  "type mismatch"
+)
+
+(assert_invalid
+  (module (func $type-value-void-vs-num (result i32)
+    (nop)
+  ))
+  "type mismatch"
+)
+(assert_invalid
+  (module (func $type-value-num-vs-void
+    (i32.const 0)
+  ))
+  "type mismatch"
+)
+(assert_invalid
+  (module (func $type-value-num-vs-num (result i32)
+    (f32.const 0)
+  ))
+  "type mismatch"
+)
+
+(; TODO(stack): Should these become legal?
+(assert_invalid
+  (module (func $type-value-void-vs-num-after-return (result i32)
+    (return (i32.const 1)) (nop)
+  ))
+  "type mismatch"
+)
+(assert_invalid
+  (module (func $type-value-num-vs-num-after-return (result i32)
+    (return (i32.const 1)) (f32.const 0)
+  ))
+  "type mismatch"
+)
+(assert_invalid
+  (module (func $type-value-void-vs-num-after-break (result i32)
+    (br 0 (i32.const 1)) (nop)
+  ))
+  "type mismatch"
+)
+(assert_invalid
+  (module (func $type-value-num-vs-num-after-break (result i32)
+    (br 0 (i32.const 1)) (f32.const 0)
+  ))
+  "arity mismatch"
+)
+;)
+
+(assert_invalid
+  (module (func $type-return-last-empty-vs-num (result i32)
+    (return)
+  ))
+  "type mismatch"
+)
+(assert_invalid
+  (module (func $type-return-last-void-vs-num (result i32)
+    (return (nop))
+  ))
+  "type mismatch"
+)
+(assert_invalid
+  (module (func $type-return-last-num-vs-num (result i32)
+    (return (i64.const 0))
+  ))
+  "type mismatch"
+)
+
+(assert_invalid
+  (module (func $type-return-empty-vs-num (result i32)
+    (return) (i32.const 1)
+  ))
+  "type mismatch"
+)
+(assert_invalid
+  (module (func $type-return-void-vs-num (result i32)
+    (return (nop)) (i32.const 1)
+  ))
+  "type mismatch"
+)
+(assert_invalid
+  (module (func $type-return-num-vs-num (result i32)
+    (return (i64.const 1)) (i32.const 1)
+  ))
+  "type mismatch"
+)
+(assert_invalid
+  (module (func $type-return-first-num-vs-num (result i32)
+    (return (i64.const 1)) (return (i32.const 1))
+  ))
+  "type mismatch"
+)
+(; TODO(stack): Should this become legal?
+(assert_invalid
+  (module (func $type-return-second-num-vs-num (result i32)
+    (return (i32.const 1)) (return (f64.const 1))
+  ))
+  "type mismatch"
+)
+;)
+
+(assert_invalid
+  (module (func $type-break-last-void-vs-num (result i32)
+    (br 0)
+  ))
+  "type mismatch"
+)
+(assert_invalid
+  (module (func $type-break-last-num-vs-num (result i32)
+    (br 0 (f32.const 0))
+  ))
+  "type mismatch"
+)
+(assert_invalid
+  (module (func $type-break-void-vs-num (result i32)
+    (br 0) (i32.const 1)
+  ))
+  "type mismatch"
+)
+(assert_invalid
+  (module (func $type-break-num-vs-num (result i32)
+    (br 0 (i64.const 1)) (i32.const 1)
+  ))
+  "type mismatch"
+)
+(assert_invalid
+  (module (func $type-break-first-num-vs-num (result i32)
+    (br 0 (i64.const 1)) (br 0 (i32.const 1))
+  ))
+  "type mismatch"
+)
+
+(; TODO(stack): soft failure
+(assert_invalid
+  (module (func $type-break-second-num-vs-num (result i32)
+    (br 0 (i32.const 1)) (br 0 (f64.const 1))
+  ))
+  "type mismatch"
+)
+;)
+
+(assert_invalid
+  (module (func $type-break-nested-empty-vs-num (result i32)
+    (block (br 1)) (br 0 (i32.const 1))
+  ))
+  "type mismatch"
+)
+(assert_invalid
+  (module (func $type-break-nested-void-vs-num (result i32)
+    (block (br 1 (nop))) (br 0 (i32.const 1))
+  ))
+  "type mismatch"
+)
+(assert_invalid
+  (module (func $type-break-nested-num-vs-num (result i32)
+    (block (br 1 (i64.const 1))) (br 0 (i32.const 1))
+  ))
+  "type mismatch"
+)
