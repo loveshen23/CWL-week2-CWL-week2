@@ -306,4 +306,219 @@
 (assert_return (invoke "i16x8.replace_lane_last" (v128.const i64x2 0 0) (i32.const 7)) (v128.const i32x4 0 0 0 0 0 0 0 7))
 
 ;; i32x4 lane accesses
-(assert_return (invoke "i32x4.
+(assert_return (invoke "i32x4.splat" (i32.const -5)) (v128.const i32x4 -5 -5 -5 -5))
+(assert_return (invoke "i32x4.extract_lane_first" (v128.const i32x4 -5 0 0 0)) (i32.const -5))
+(assert_return (invoke "i32x4.extract_lane_last" (v128.const i32x4 0 0 0 -5)) (i32.const -5))
+(assert_return (invoke "i32x4.replace_lane_first" (v128.const i64x2 0 0) (i32.const 53)) (v128.const i32x4 53 0 0 0))
+(assert_return (invoke "i32x4.replace_lane_last" (v128.const i64x2 0 0) (i32.const 53)) (v128.const i32x4 0 0 0 53))
+
+;; i64x2 lane accesses
+(assert_return (invoke "i64x2.splat" (i64.const -5)) (v128.const i64x2 -5 -5))
+(assert_return (invoke "i64x2.extract_lane_first" (v128.const i64x2 -5 0)) (i64.const -5))
+(assert_return (invoke "i64x2.extract_lane_last" (v128.const i64x2 0 -5)) (i64.const -5))
+(assert_return (invoke "i64x2.replace_lane_first" (v128.const i64x2 0 0) (i64.const 53)) (v128.const i64x2 53 0))
+(assert_return (invoke "i64x2.replace_lane_last" (v128.const i64x2 0 0) (i64.const 53)) (v128.const i64x2 0 53))
+
+;; f32x4 lane accesses
+(assert_return (invoke "f32x4.splat" (f32.const -5)) (v128.const f32x4 -5 -5 -5 -5))
+(assert_return (invoke "f32x4.extract_lane_first" (v128.const f32x4 -5 0 0 0)) (f32.const -5))
+(assert_return (invoke "f32x4.extract_lane_last" (v128.const f32x4 0 0 0 -5)) (f32.const -5))
+(assert_return (invoke "f32x4.replace_lane_first" (v128.const i64x2 0 0) (f32.const 53)) (v128.const f32x4 53 0 0 0))
+(assert_return (invoke "f32x4.replace_lane_last" (v128.const i64x2 0 0) (f32.const 53)) (v128.const f32x4 0 0 0 53))
+
+;; f64x2 lane accesses
+(assert_return (invoke "f64x2.splat" (f64.const -5)) (v128.const f64x2 -5 -5))
+(assert_return (invoke "f64x2.extract_lane_first" (v128.const f64x2 -5 0)) (f64.const -5))
+(assert_return (invoke "f64x2.extract_lane_last" (v128.const f64x2 0 -5)) (f64.const -5))
+(assert_return (invoke "f64x2.replace_lane_first" (v128.const f64x2 0 0) (f64.const 53)) (v128.const f64x2 53 0))
+(assert_return (invoke "f64x2.replace_lane_last" (v128.const f64x2 0 0) (f64.const 53)) (v128.const f64x2 0 53))
+
+;; i8x16 comparisons
+(assert_return
+  (invoke "i8x16.eq"
+    (v128.const i32x4 0 127 13 128 1   13  129 42  0 127 255 42  1   13  129 42)
+    (v128.const i32x4 0 255 13 42  129 127 0   128 0 255 13  42  129 127 0   128)
+  )
+  (v128.const i32x4 -1 0 -1 0 0 0 0 0 -1 0 0 -1 0 0 0 0)
+)
+(assert_return
+  (invoke "i8x16.ne"
+    (v128.const i32x4 0 127 13 128 1   13  129 42  0 127 255 42  1   13  129 42)
+    (v128.const i32x4 0 255 13 42  129 127 0   128 0 255 13  42  129 127 0   128)
+  )
+  (v128.const i32x4 0 -1 0 -1 -1 -1 -1 -1 0 -1 -1 0 -1 -1 -1 -1)
+)
+(assert_return
+  (invoke "i8x16.lt_s"
+    (v128.const i32x4 0 127 13 128 1   13  129 42  0 127 255 42  1   13  129 42)
+    (v128.const i32x4 0 255 13 42  129 127 0   128 0 255 13  42  129 127 0   128)
+  )
+  (v128.const i32x4 0 0 0 -1 0 -1 -1 0 0 0 -1 0 0 -1 -1 0)
+)
+(assert_return
+  (invoke "i8x16.lt_u"
+    (v128.const i32x4 0 127 13 128 1   13  129 42  0 127 255 42  1   13  129 42)
+    (v128.const i32x4 0 255 13 42  129 127 0   128 0 255 13  42  129 127 0   128)
+  )
+  (v128.const i32x4 0 -1 0 0 -1 -1 0 -1 0 -1 0 0 -1 -1 0 -1)
+)
+(assert_return
+  (invoke "i8x16.gt_s"
+    (v128.const i32x4 0 127 13 128 1   13  129 42  0 127 255 42  1   13  129 42)
+    (v128.const i32x4 0 255 13 42  129 127 0   128 0 255 13  42  129 127 0   128)
+  )
+  (v128.const i32x4 0 -1 0 0 -1 0 0 -1 0 -1 0 0 -1 0 0 -1)
+)
+(assert_return
+  (invoke "i8x16.gt_u"
+    (v128.const i32x4 0 127 13 128 1   13  129 42  0 127 255 42  1   13  129 42)
+    (v128.const i32x4 0 255 13 42  129 127 0   128 0 255 13  42  129 127 0   128)
+  )
+  (v128.const i32x4 0 0 0 -1 0 0 -1 0 0 0 -1 0 0 0 -1 0)
+)
+(assert_return
+  (invoke "i8x16.le_s"
+    (v128.const i32x4 0 127 13 128 1   13  129 42  0 127 255 42  1   13  129 42)
+    (v128.const i32x4 0 255 13 42  129 127 0   128 0 255 13  42  129 127 0   128)
+  )
+  (v128.const i32x4 -1 0 -1 -1 0 -1 -1 0 -1 0 -1 -1 0 -1 -1 0)
+)
+(assert_return
+  (invoke "i8x16.le_u"
+    (v128.const i32x4 0 127 13 128 1   13  129 42  0 127 255 42  1   13  129 42)
+    (v128.const i32x4 0 255 13 42  129 127 0   128 0 255 13  42  129 127 0   128)
+  )
+  (v128.const i32x4 -1 -1 -1 0 -1 -1 0 -1 -1 -1 0 -1 -1 -1 0 -1)
+)
+(assert_return
+  (invoke "i8x16.ge_s"
+    (v128.const i32x4 0 127 13 128 1   13  129 42  0 127 255 42  1   13  129 42)
+    (v128.const i32x4 0 255 13 42  129 127 0   128 0 255 13  42  129 127 0   128)
+  )
+  (v128.const i32x4 -1 -1 -1 0 -1 0 0 -1 -1 -1 0 -1 -1 0 0 -1)
+)
+(assert_return
+  (invoke "i8x16.ge_u"
+    (v128.const i32x4 0 127 13 128 1   13  129 42  0 127 255 42  1   13  129 42)
+    (v128.const i32x4 0 255 13 42  129 127 0   128 0 255 13  42  129 127 0   128)
+  )
+  (v128.const i32x4 -1 0 -1 -1 0 0 -1 0 -1 0 -1 -1 0 0 -1 0)
+)
+
+;; i16x8 comparisons
+(assert_return (invoke "i16x8.eq"
+    (v128.const i32x4 0 32767 13 32768 1     32769 42    40000)
+    (v128.const i32x4 0 13    1  32767 32769 42    40000 32767)
+  )
+  (v128.const i32x4 -1 0 0 0 0 0 0 0)
+)
+(assert_return
+  (invoke "i16x8.ne"
+    (v128.const i32x4 0 32767 13 32768 1     32769 42    40000)
+    (v128.const i32x4 0 13    1  32767 32769 42    40000 32767)
+  )
+  (v128.const i32x4 0 -1 -1 -1 -1 -1 -1 -1)
+)
+(assert_return
+  (invoke "i16x8.lt_s"
+    (v128.const i32x4 0 32767 13 32768 1     32769 42    40000)
+    (v128.const i32x4 0 13    1  32767 32769 42    40000 32767)
+  )
+  (v128.const i32x4 0 0 0 -1 0 -1 0 -1)
+)
+(assert_return
+  (invoke "i16x8.lt_u"
+    (v128.const i32x4 0 32767 13 32768 1     32769 42    40000)
+    (v128.const i32x4 0 13    1  32767 32769 42    40000 32767)
+  )
+  (v128.const i32x4 0 0 0 0 -1 0 -1 0)
+)
+(assert_return
+  (invoke "i16x8.gt_s"
+    (v128.const i32x4 0 32767 13 32768 1     32769 42    40000)
+    (v128.const i32x4 0 13    1  32767 32769 42    40000 32767)
+  )
+  (v128.const i32x4 0 -1 -1 0 -1 0 -1 0)
+)
+(assert_return
+  (invoke "i16x8.gt_u"
+    (v128.const i32x4 0 32767 13 32768 1     32769 42    40000)
+    (v128.const i32x4 0 13    1  32767 32769 42    40000 32767)
+  )
+  (v128.const i32x4 0 -1 -1 -1 0 -1 0 -1)
+)
+(assert_return
+  (invoke "i16x8.le_s"
+    (v128.const i32x4 0 32767 13 32768 1     32769 42    40000)
+    (v128.const i32x4 0 13    1  32767 32769 42    40000 32767)
+  )
+  (v128.const i32x4 -1 0 0 -1 0 -1 0 -1)
+)
+(assert_return
+  (invoke "i16x8.le_u"
+    (v128.const i32x4 0 32767 13 32768 1     32769 42    40000)
+    (v128.const i32x4 0 13    1  32767 32769 42    40000 32767)
+  )
+  (v128.const i32x4 -1 0 0 0 -1 0 -1 0)
+)
+(assert_return
+  (invoke "i16x8.ge_s"
+    (v128.const i32x4 0 32767 13 32768 1     32769 42    40000)
+    (v128.const i32x4 0 13    1  32767 32769 42    40000 32767)
+  )
+  (v128.const i32x4 -1 -1 -1 0 -1 0 -1 0)
+)
+(assert_return
+  (invoke "i16x8.ge_u"
+    (v128.const i32x4 0 32767 13 32768 1     32769 42    40000)
+    (v128.const i32x4 0 13    1  32767 32769 42    40000 32767)
+  )
+  (v128.const i32x4 -1 -1 -1 -1 0 -1 0 -1)
+)
+
+;; i32x4 comparisons
+(assert_return (invoke "i32x4.eq" (v128.const i32x4 0 -1 53 -7) (v128.const i32x4 0 53 -7 -1)) (v128.const i32x4 -1 0 0 0))
+(assert_return (invoke "i32x4.ne" (v128.const i32x4 0 -1 53 -7) (v128.const i32x4 0 53 -7 -1)) (v128.const i32x4 0 -1 -1 -1))
+(assert_return (invoke "i32x4.lt_s" (v128.const i32x4 0 -1 53 -7) (v128.const i32x4 0 53 -7 -1)) (v128.const i32x4 0 -1 0 -1))
+(assert_return (invoke "i32x4.lt_u" (v128.const i32x4 0 -1 53 -7) (v128.const i32x4 0 53 -7 -1)) (v128.const i32x4 0 0 -1 -1))
+(assert_return (invoke "i32x4.gt_s" (v128.const i32x4 0 -1 53 -7) (v128.const i32x4 0 53 -7 -1)) (v128.const i32x4 0 0 -1 0))
+(assert_return (invoke "i32x4.gt_u" (v128.const i32x4 0 -1 53 -7) (v128.const i32x4 0 53 -7 -1)) (v128.const i32x4 0 -1 0 0))
+(assert_return (invoke "i32x4.le_s" (v128.const i32x4 0 -1 53 -7) (v128.const i32x4 0 53 -7 -1)) (v128.const i32x4 -1 -1 0 -1))
+(assert_return (invoke "i32x4.le_u" (v128.const i32x4 0 -1 53 -7) (v128.const i32x4 0 53 -7 -1)) (v128.const i32x4 -1 0 -1 -1))
+(assert_return (invoke "i32x4.ge_s" (v128.const i32x4 0 -1 53 -7) (v128.const i32x4 0 53 -7 -1)) (v128.const i32x4 -1 0 -1 0))
+(assert_return (invoke "i32x4.ge_u" (v128.const i32x4 0 -1 53 -7) (v128.const i32x4 0 53 -7 -1)) (v128.const i32x4 -1 -1 0 0))
+
+;; i64x2 comparisons
+(assert_return (invoke "i64x2.eq" (v128.const i64x2 0 -1) (v128.const i64x2 -1 -1)) (v128.const i64x2 0 -1))
+
+;; f32x4 comparisons
+(assert_return (invoke "f32x4.eq" (v128.const f32x4 0 -1 1 0) (v128.const f32x4 0 0 -1 1)) (v128.const i32x4 -1 0 0 0))
+(assert_return (invoke "f32x4.ne" (v128.const f32x4 0 -1 1 0) (v128.const f32x4 0 0 -1 1)) (v128.const i32x4 0 -1 -1 -1))
+(assert_return (invoke "f32x4.lt" (v128.const f32x4 0 -1 1 0) (v128.const f32x4 0 0 -1 1)) (v128.const i32x4 0 -1 0 -1))
+(assert_return (invoke "f32x4.gt" (v128.const f32x4 0 -1 1 0) (v128.const f32x4 0 0 -1 1)) (v128.const i32x4 0 0 -1 0))
+(assert_return (invoke "f32x4.le" (v128.const f32x4 0 -1 1 0) (v128.const f32x4 0 0 -1 1)) (v128.const i32x4 -1 -1 0 -1))
+(assert_return (invoke "f32x4.ge" (v128.const f32x4 0 -1 1 0) (v128.const f32x4 0 0 -1 1)) (v128.const i32x4 -1 0 -1 0))
+(assert_return (invoke "f32x4.eq" (v128.const f32x4 nan 0 nan infinity) (v128.const f32x4 0 nan nan infinity)) (v128.const i32x4 0 0 0 -1))
+(assert_return (invoke "f32x4.ne" (v128.const f32x4 nan 0 nan infinity) (v128.const f32x4 0 nan nan infinity)) (v128.const i32x4 -1 -1 -1 0))
+(assert_return (invoke "f32x4.lt" (v128.const f32x4 nan 0 nan infinity) (v128.const f32x4 0 nan nan infinity)) (v128.const i32x4 0 0 0 0))
+(assert_return (invoke "f32x4.gt" (v128.const f32x4 nan 0 nan infinity) (v128.const f32x4 0 nan nan infinity)) (v128.const i32x4 0 0 0 0))
+(assert_return (invoke "f32x4.le" (v128.const f32x4 nan 0 nan infinity) (v128.const f32x4 0 nan nan infinity)) (v128.const i32x4 0 0 0 -1))
+(assert_return (invoke "f32x4.ge" (v128.const f32x4 nan 0 nan infinity) (v128.const f32x4 0 nan nan infinity)) (v128.const i32x4 0 0 0 -1))
+(assert_return (invoke "f32x4.eq" (v128.const f32x4 -infinity 0 nan -infinity) (v128.const f32x4 0 infinity infinity nan)) (v128.const i32x4 0 0 0 0))
+(assert_return (invoke "f32x4.ne" (v128.const f32x4 -infinity 0 nan -infinity) (v128.const f32x4 0 infinity infinity nan)) (v128.const i32x4 -1 -1 -1 -1))
+(assert_return (invoke "f32x4.lt" (v128.const f32x4 -infinity 0 nan -infinity) (v128.const f32x4 0 infinity infinity nan)) (v128.const i32x4 -1 -1 0 0))
+(assert_return (invoke "f32x4.gt" (v128.const f32x4 -infinity 0 nan -infinity) (v128.const f32x4 0 infinity infinity nan)) (v128.const i32x4 0 0 0 0))
+(assert_return (invoke "f32x4.le" (v128.const f32x4 -infinity 0 nan -infinity) (v128.const f32x4 0 infinity infinity nan)) (v128.const i32x4 -1 -1 0 0))
+(assert_return (invoke "f32x4.ge" (v128.const f32x4 -infinity 0 nan -infinity) (v128.const f32x4 0 infinity infinity nan)) (v128.const i32x4 0 0 0 0))
+
+;; f64x2 comparisons
+(assert_return (invoke "f64x2.eq" (v128.const f64x2 0 1) (v128.const f64x2 0 0)) (v128.const i64x2 -1 0))
+(assert_return (invoke "f64x2.ne" (v128.const f64x2 0 1) (v128.const f64x2 0 0)) (v128.const i64x2 0 -1))
+(assert_return (invoke "f64x2.lt" (v128.const f64x2 0 1) (v128.const f64x2 0 0)) (v128.const i64x2 0 0))
+(assert_return (invoke "f64x2.gt" (v128.const f64x2 0 1) (v128.const f64x2 0 0)) (v128.const i64x2 0 -1))
+(assert_return (invoke "f64x2.le" (v128.const f64x2 0 1) (v128.const f64x2 0 0)) (v128.const i64x2 -1 0))
+(assert_return (invoke "f64x2.ge" (v128.const f64x2 0 1) (v128.const f64x2 0 0)) (v128.const i64x2 -1 -1))
+(assert_return (invoke "f64x2.eq" (v128.const f64x2 nan 0) (v128.const f64x2 infinity infinity)) (v128.const i64x2 0 0))
+(assert_return (invoke "f64x2.ne" (v128.const f64x2 nan 0) (v128.const f64x2 infinity infinity)) (v128.const i64x2 -1 -1))
+(assert_return (invoke "f64x2.lt" (v128.const f64x2 nan 0) (v128.const f64x2 infinity infinity)) (v128.const i64x2 0 -1))
+(assert_retur
