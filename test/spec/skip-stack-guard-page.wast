@@ -127,4 +127,166 @@
     (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) ;; 0x358-0x35f
     (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) ;; 0x360-0x367
     (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) ;; 0x368-0x36f
-    (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) (local
+    (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) ;; 0x370-0x377
+    (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) ;; 0x378-0x37f
+    (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) ;; 0x380-0x387
+    (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) ;; 0x388-0x38f
+    (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) ;; 0x390-0x397
+    (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) ;; 0x398-0x39f
+    (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) ;; 0x3a0-0x3a7
+    (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) ;; 0x3a8-0x3af
+    (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) ;; 0x3b0-0x3b7
+    (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) ;; 0x3b8-0x3bf
+    (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) ;; 0x3c0-0x3c7
+    (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) ;; 0x3c8-0x3cf
+    (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) ;; 0x3d0-0x3d7
+    (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) ;; 0x3d8-0x3df
+    (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) ;; 0x3e0-0x3e7
+    (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) ;; 0x3e8-0x3ef
+    (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) ;; 0x3f0-0x3f7
+    (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) ;; 0x3f8-0x3ff
+
+    (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) ;; 0x400-0x407
+    (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) ;; 0x408-0x40f
+    (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) ;; 0x410-0x417
+    (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) (local i64) ;; 0x418-0x41f
+
+    ;; recurse first to try to make the callee access the stack below the space allocated for the locals before the locals themselves have been initialized.
+    (call $function-with-many-locals)
+
+    ;; load from memory into the locals
+    (local.set 0x000 (i64.load offset=0x000 align=1 (i32.const 0)))
+    (local.set 0x001 (i64.load offset=0x001 align=1 (i32.const 0)))
+    (local.set 0x002 (i64.load offset=0x002 align=1 (i32.const 0)))
+    (local.set 0x003 (i64.load offset=0x003 align=1 (i32.const 0)))
+    (local.set 0x004 (i64.load offset=0x004 align=1 (i32.const 0)))
+    (local.set 0x005 (i64.load offset=0x005 align=1 (i32.const 0)))
+    (local.set 0x006 (i64.load offset=0x006 align=1 (i32.const 0)))
+    (local.set 0x007 (i64.load offset=0x007 align=1 (i32.const 0)))
+    (local.set 0x008 (i64.load offset=0x008 align=1 (i32.const 0)))
+    (local.set 0x009 (i64.load offset=0x009 align=1 (i32.const 0)))
+    (local.set 0x00a (i64.load offset=0x00a align=1 (i32.const 0)))
+    (local.set 0x00b (i64.load offset=0x00b align=1 (i32.const 0)))
+    (local.set 0x00c (i64.load offset=0x00c align=1 (i32.const 0)))
+    (local.set 0x00d (i64.load offset=0x00d align=1 (i32.const 0)))
+    (local.set 0x00e (i64.load offset=0x00e align=1 (i32.const 0)))
+    (local.set 0x00f (i64.load offset=0x00f align=1 (i32.const 0)))
+    (local.set 0x010 (i64.load offset=0x010 align=1 (i32.const 0)))
+    (local.set 0x011 (i64.load offset=0x011 align=1 (i32.const 0)))
+    (local.set 0x012 (i64.load offset=0x012 align=1 (i32.const 0)))
+    (local.set 0x013 (i64.load offset=0x013 align=1 (i32.const 0)))
+    (local.set 0x014 (i64.load offset=0x014 align=1 (i32.const 0)))
+    (local.set 0x015 (i64.load offset=0x015 align=1 (i32.const 0)))
+    (local.set 0x016 (i64.load offset=0x016 align=1 (i32.const 0)))
+    (local.set 0x017 (i64.load offset=0x017 align=1 (i32.const 0)))
+    (local.set 0x018 (i64.load offset=0x018 align=1 (i32.const 0)))
+    (local.set 0x019 (i64.load offset=0x019 align=1 (i32.const 0)))
+    (local.set 0x01a (i64.load offset=0x01a align=1 (i32.const 0)))
+    (local.set 0x01b (i64.load offset=0x01b align=1 (i32.const 0)))
+    (local.set 0x01c (i64.load offset=0x01c align=1 (i32.const 0)))
+    (local.set 0x01d (i64.load offset=0x01d align=1 (i32.const 0)))
+    (local.set 0x01e (i64.load offset=0x01e align=1 (i32.const 0)))
+    (local.set 0x01f (i64.load offset=0x01f align=1 (i32.const 0)))
+    (local.set 0x020 (i64.load offset=0x020 align=1 (i32.const 0)))
+    (local.set 0x021 (i64.load offset=0x021 align=1 (i32.const 0)))
+    (local.set 0x022 (i64.load offset=0x022 align=1 (i32.const 0)))
+    (local.set 0x023 (i64.load offset=0x023 align=1 (i32.const 0)))
+    (local.set 0x024 (i64.load offset=0x024 align=1 (i32.const 0)))
+    (local.set 0x025 (i64.load offset=0x025 align=1 (i32.const 0)))
+    (local.set 0x026 (i64.load offset=0x026 align=1 (i32.const 0)))
+    (local.set 0x027 (i64.load offset=0x027 align=1 (i32.const 0)))
+    (local.set 0x028 (i64.load offset=0x028 align=1 (i32.const 0)))
+    (local.set 0x029 (i64.load offset=0x029 align=1 (i32.const 0)))
+    (local.set 0x02a (i64.load offset=0x02a align=1 (i32.const 0)))
+    (local.set 0x02b (i64.load offset=0x02b align=1 (i32.const 0)))
+    (local.set 0x02c (i64.load offset=0x02c align=1 (i32.const 0)))
+    (local.set 0x02d (i64.load offset=0x02d align=1 (i32.const 0)))
+    (local.set 0x02e (i64.load offset=0x02e align=1 (i32.const 0)))
+    (local.set 0x02f (i64.load offset=0x02f align=1 (i32.const 0)))
+    (local.set 0x030 (i64.load offset=0x030 align=1 (i32.const 0)))
+    (local.set 0x031 (i64.load offset=0x031 align=1 (i32.const 0)))
+    (local.set 0x032 (i64.load offset=0x032 align=1 (i32.const 0)))
+    (local.set 0x033 (i64.load offset=0x033 align=1 (i32.const 0)))
+    (local.set 0x034 (i64.load offset=0x034 align=1 (i32.const 0)))
+    (local.set 0x035 (i64.load offset=0x035 align=1 (i32.const 0)))
+    (local.set 0x036 (i64.load offset=0x036 align=1 (i32.const 0)))
+    (local.set 0x037 (i64.load offset=0x037 align=1 (i32.const 0)))
+    (local.set 0x038 (i64.load offset=0x038 align=1 (i32.const 0)))
+    (local.set 0x039 (i64.load offset=0x039 align=1 (i32.const 0)))
+    (local.set 0x03a (i64.load offset=0x03a align=1 (i32.const 0)))
+    (local.set 0x03b (i64.load offset=0x03b align=1 (i32.const 0)))
+    (local.set 0x03c (i64.load offset=0x03c align=1 (i32.const 0)))
+    (local.set 0x03d (i64.load offset=0x03d align=1 (i32.const 0)))
+    (local.set 0x03e (i64.load offset=0x03e align=1 (i32.const 0)))
+    (local.set 0x03f (i64.load offset=0x03f align=1 (i32.const 0)))
+    (local.set 0x040 (i64.load offset=0x040 align=1 (i32.const 0)))
+    (local.set 0x041 (i64.load offset=0x041 align=1 (i32.const 0)))
+    (local.set 0x042 (i64.load offset=0x042 align=1 (i32.const 0)))
+    (local.set 0x043 (i64.load offset=0x043 align=1 (i32.const 0)))
+    (local.set 0x044 (i64.load offset=0x044 align=1 (i32.const 0)))
+    (local.set 0x045 (i64.load offset=0x045 align=1 (i32.const 0)))
+    (local.set 0x046 (i64.load offset=0x046 align=1 (i32.const 0)))
+    (local.set 0x047 (i64.load offset=0x047 align=1 (i32.const 0)))
+    (local.set 0x048 (i64.load offset=0x048 align=1 (i32.const 0)))
+    (local.set 0x049 (i64.load offset=0x049 align=1 (i32.const 0)))
+    (local.set 0x04a (i64.load offset=0x04a align=1 (i32.const 0)))
+    (local.set 0x04b (i64.load offset=0x04b align=1 (i32.const 0)))
+    (local.set 0x04c (i64.load offset=0x04c align=1 (i32.const 0)))
+    (local.set 0x04d (i64.load offset=0x04d align=1 (i32.const 0)))
+    (local.set 0x04e (i64.load offset=0x04e align=1 (i32.const 0)))
+    (local.set 0x04f (i64.load offset=0x04f align=1 (i32.const 0)))
+    (local.set 0x050 (i64.load offset=0x050 align=1 (i32.const 0)))
+    (local.set 0x051 (i64.load offset=0x051 align=1 (i32.const 0)))
+    (local.set 0x052 (i64.load offset=0x052 align=1 (i32.const 0)))
+    (local.set 0x053 (i64.load offset=0x053 align=1 (i32.const 0)))
+    (local.set 0x054 (i64.load offset=0x054 align=1 (i32.const 0)))
+    (local.set 0x055 (i64.load offset=0x055 align=1 (i32.const 0)))
+    (local.set 0x056 (i64.load offset=0x056 align=1 (i32.const 0)))
+    (local.set 0x057 (i64.load offset=0x057 align=1 (i32.const 0)))
+    (local.set 0x058 (i64.load offset=0x058 align=1 (i32.const 0)))
+    (local.set 0x059 (i64.load offset=0x059 align=1 (i32.const 0)))
+    (local.set 0x05a (i64.load offset=0x05a align=1 (i32.const 0)))
+    (local.set 0x05b (i64.load offset=0x05b align=1 (i32.const 0)))
+    (local.set 0x05c (i64.load offset=0x05c align=1 (i32.const 0)))
+    (local.set 0x05d (i64.load offset=0x05d align=1 (i32.const 0)))
+    (local.set 0x05e (i64.load offset=0x05e align=1 (i32.const 0)))
+    (local.set 0x05f (i64.load offset=0x05f align=1 (i32.const 0)))
+    (local.set 0x060 (i64.load offset=0x060 align=1 (i32.const 0)))
+    (local.set 0x061 (i64.load offset=0x061 align=1 (i32.const 0)))
+    (local.set 0x062 (i64.load offset=0x062 align=1 (i32.const 0)))
+    (local.set 0x063 (i64.load offset=0x063 align=1 (i32.const 0)))
+    (local.set 0x064 (i64.load offset=0x064 align=1 (i32.const 0)))
+    (local.set 0x065 (i64.load offset=0x065 align=1 (i32.const 0)))
+    (local.set 0x066 (i64.load offset=0x066 align=1 (i32.const 0)))
+    (local.set 0x067 (i64.load offset=0x067 align=1 (i32.const 0)))
+    (local.set 0x068 (i64.load offset=0x068 align=1 (i32.const 0)))
+    (local.set 0x069 (i64.load offset=0x069 align=1 (i32.const 0)))
+    (local.set 0x06a (i64.load offset=0x06a align=1 (i32.const 0)))
+    (local.set 0x06b (i64.load offset=0x06b align=1 (i32.const 0)))
+    (local.set 0x06c (i64.load offset=0x06c align=1 (i32.const 0)))
+    (local.set 0x06d (i64.load offset=0x06d align=1 (i32.const 0)))
+    (local.set 0x06e (i64.load offset=0x06e align=1 (i32.const 0)))
+    (local.set 0x06f (i64.load offset=0x06f align=1 (i32.const 0)))
+    (local.set 0x070 (i64.load offset=0x070 align=1 (i32.const 0)))
+    (local.set 0x071 (i64.load offset=0x071 align=1 (i32.const 0)))
+    (local.set 0x072 (i64.load offset=0x072 align=1 (i32.const 0)))
+    (local.set 0x073 (i64.load offset=0x073 align=1 (i32.const 0)))
+    (local.set 0x074 (i64.load offset=0x074 align=1 (i32.const 0)))
+    (local.set 0x075 (i64.load offset=0x075 align=1 (i32.const 0)))
+    (local.set 0x076 (i64.load offset=0x076 align=1 (i32.const 0)))
+    (local.set 0x077 (i64.load offset=0x077 align=1 (i32.const 0)))
+    (local.set 0x078 (i64.load offset=0x078 align=1 (i32.const 0)))
+    (local.set 0x079 (i64.load offset=0x079 align=1 (i32.const 0)))
+    (local.set 0x07a (i64.load offset=0x07a align=1 (i32.const 0)))
+    (local.set 0x07b (i64.load offset=0x07b align=1 (i32.const 0)))
+    (local.set 0x07c (i64.load offset=0x07c align=1 (i32.const 0)))
+    (local.set 0x07d (i64.load offset=0x07d align=1 (i32.const 0)))
+    (local.set 0x07e (i64.load offset=0x07e align=1 (i32.const 0)))
+    (local.set 0x07f (i64.load offset=0x07f align=1 (i32.const 0)))
+    (local.set 0x080 (i64.load offset=0x080 align=1 (i32.const 0)))
+    (local.set 0x081 (i64.load offset=0x081 align=1 (i32.const 0)))
+    (local.set 0x082 (i64.load offset=0x082 align=1 (i32.const 0)))
+    (local.set 0x083 (i64.load offset=0x083 align=1 (i32.const 0)))
+    (local.set 0x084 (i64.load offset=0x084 align=1 (i32.const 0)))
+    (local.set 0x085 (i64.load offset=0x085 align=1 (i32.const 0)))
+    (local.set 0x086 (i64.load offset=0x
