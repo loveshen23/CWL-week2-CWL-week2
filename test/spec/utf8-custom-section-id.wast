@@ -540,4 +540,465 @@
   "invalid UTF-8 encoding"
 )
 
-;; first byte af
+;; first byte after (normal) 3-byte prefix not a continuation byte
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\00\04"                       ;; custom section
+    "\03\ee\fd\80"                 ;; "\ee\fd\80"
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; first byte after (last normal) 3-byte prefix not a continuation byte
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\00\04"                       ;; custom section
+    "\03\ef\00\80"                 ;; "\ef\00\80"
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; first byte after (last normal) 3-byte prefix not a continuation byte
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\00\04"                       ;; custom section
+    "\03\ef\7f\80"                 ;; "\ef\7f\80"
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; first byte after (last normal) 3-byte prefix not a continuation byte
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\00\04"                       ;; custom section
+    "\03\ef\c0\80"                 ;; "\ef\c0\80"
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; first byte after (last normal) 3-byte prefix not a continuation byte
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\00\04"                       ;; custom section
+    "\03\ef\fd\80"                 ;; "\ef\fd\80"
+  )
+  "invalid UTF-8 encoding"
+)
+
+;;;; 3-byte sequence contents (third byte)
+
+;; second byte after (0xe0) 3-byte prefix not a continuation byte
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\00\04"                       ;; custom section
+    "\03\e0\a0\00"                 ;; "\e0\a0\00"
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; second byte after (0xe0) 3-byte prefix not a continuation byte
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\00\04"                       ;; custom section
+    "\03\e0\a0\7f"                 ;; "\e0\a0\7f"
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; second byte after (0xe0) 3-byte prefix not a continuation byte
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\00\04"                       ;; custom section
+    "\03\e0\a0\c0"                 ;; "\e0\a0\c0"
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; second byte after (0xe0) 3-byte prefix not a continuation byte
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\00\04"                       ;; custom section
+    "\03\e0\a0\fd"                 ;; "\e0\a0\fd"
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; second byte after (first normal) 3-byte prefix not a continuation byte
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\00\04"                       ;; custom section
+    "\03\e1\80\00"                 ;; "\e1\80\00"
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; second byte after (first normal) 3-byte prefix not a continuation byte
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\00\04"                       ;; custom section
+    "\03\e1\80\7f"                 ;; "\e1\80\7f"
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; second byte after (first normal) 3-byte prefix not a continuation byte
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\00\04"                       ;; custom section
+    "\03\e1\80\c0"                 ;; "\e1\80\c0"
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; second byte after (first normal) 3-byte prefix not a continuation byte
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\00\04"                       ;; custom section
+    "\03\e1\80\fd"                 ;; "\e1\80\fd"
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; second byte after (normal) 3-byte prefix not a continuation byte
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\00\04"                       ;; custom section
+    "\03\ec\80\00"                 ;; "\ec\80\00"
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; second byte after (normal) 3-byte prefix not a continuation byte
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\00\04"                       ;; custom section
+    "\03\ec\80\7f"                 ;; "\ec\80\7f"
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; second byte after (normal) 3-byte prefix not a continuation byte
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\00\04"                       ;; custom section
+    "\03\ec\80\c0"                 ;; "\ec\80\c0"
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; second byte after (normal) 3-byte prefix not a continuation byte
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\00\04"                       ;; custom section
+    "\03\ec\80\fd"                 ;; "\ec\80\fd"
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; second byte after (0xed) 3-byte prefix not a continuation byte
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\00\04"                       ;; custom section
+    "\03\ed\80\00"                 ;; "\ed\80\00"
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; second byte after (0xed) 3-byte prefix not a continuation byte
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\00\04"                       ;; custom section
+    "\03\ed\80\7f"                 ;; "\ed\80\7f"
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; second byte after (0xed) 3-byte prefix not a continuation byte
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\00\04"                       ;; custom section
+    "\03\ed\80\c0"                 ;; "\ed\80\c0"
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; second byte after (0xed) 3-byte prefix not a continuation byte
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\00\04"                       ;; custom section
+    "\03\ed\80\fd"                 ;; "\ed\80\fd"
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; second byte after (normal) 3-byte prefix not a continuation byte
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\00\04"                       ;; custom section
+    "\03\ee\80\00"                 ;; "\ee\80\00"
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; second byte after (normal) 3-byte prefix not a continuation byte
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\00\04"                       ;; custom section
+    "\03\ee\80\7f"                 ;; "\ee\80\7f"
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; second byte after (normal) 3-byte prefix not a continuation byte
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\00\04"                       ;; custom section
+    "\03\ee\80\c0"                 ;; "\ee\80\c0"
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; second byte after (normal) 3-byte prefix not a continuation byte
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\00\04"                       ;; custom section
+    "\03\ee\80\fd"                 ;; "\ee\80\fd"
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; second byte after (last normal) 3-byte prefix not a continuation byte
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\00\04"                       ;; custom section
+    "\03\ef\80\00"                 ;; "\ef\80\00"
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; second byte after (last normal) 3-byte prefix not a continuation byte
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\00\04"                       ;; custom section
+    "\03\ef\80\7f"                 ;; "\ef\80\7f"
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; second byte after (last normal) 3-byte prefix not a continuation byte
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\00\04"                       ;; custom section
+    "\03\ef\80\c0"                 ;; "\ef\80\c0"
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; second byte after (last normal) 3-byte prefix not a continuation byte
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\00\04"                       ;; custom section
+    "\03\ef\80\fd"                 ;; "\ef\80\fd"
+  )
+  "invalid UTF-8 encoding"
+)
+
+;;;; 4-byte sequences
+
+;; 4-byte sequence contains 5 bytes
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\00\06"                       ;; custom section
+    "\05\f1\80\80\80\80"           ;; "\f1\80\80\80\80"
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; 4-byte sequence contains 3 bytes at end of string
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\00\04"                       ;; custom section
+    "\03\f1\80\80"                 ;; "\f1\80\80"
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; 4-byte sequence contains 3 bytes
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\00\05"                       ;; custom section
+    "\04\f1\80\80\23"              ;; "\f1\80\80#"
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; 4-byte sequence contains 2 bytes at end of string
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\00\03"                       ;; custom section
+    "\02\f1\80"                    ;; "\f1\80"
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; 4-byte sequence contains 2 bytes
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\00\04"                       ;; custom section
+    "\03\f1\80\23"                 ;; "\f1\80#"
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; 4-byte sequence contains 1 byte at end of string
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\00\02"                       ;; custom section
+    "\01\f1"                       ;; "\f1"
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; 4-byte sequence contains 1 byte
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\00\03"                       ;; custom section
+    "\02\f1\23"                    ;; "\f1#"
+  )
+  "invalid UTF-8 encoding"
+)
+
+;;;; 4-byte sequence contents
+
+;; first byte after (0xf0) 4-byte prefix not a continuation byte
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\00\05"                       ;; custom section
+    "\04\f0\00\90\90"              ;; "\f0\00\90\90"
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; first byte after (0xf0) 4-byte prefix not a continuation byte
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\00\05"                       ;; custom section
+    "\04\f0\7f\90\90"              ;; "\f0\7f\90\90"
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; overlong encoding after 0xf0 prefix
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\00\05"                       ;; custom section
+    "\04\f0\80\80\80"              ;; "\f0\80\80\80"
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; overlong encoding after 0xf0 prefix
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\00\05"                       ;; custom section
+    "\04\f0\80\90\90"              ;; "\f0\80\90\90"
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; overlong encoding after 0xf0 prefix
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\00\05"                       ;; custom section
+    "\04\f0\8f\90\90"              ;; "\f0\8f\90\90"
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; overlong encoding after 0xf0 prefix
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\00\05"                       ;; custom section
+    "\04\f0\8f\bf\bf"              ;; "\f0\8f\bf\bf"
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; first byte after (0xf0) 4-byte prefix not a continuation byte
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\00\05"                       ;; custom section
+    "\04\f0\c0\90\90"              ;; "\f0\c0\90\90"
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; first byte after (0xf0) 4-byte prefix not a continuation byte
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\00\05"                       ;; custom section
+    "\04\f0\fd\90\90"              ;; "\f0\fd\90\90"
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; first byte after (first normal) 4-byte prefix not a continuation byte
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\00\05"                       ;; custom section
+    "\04\f1\00\80\80"              ;; "\f1\00\80\80"
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; first byte after (first normal) 4-byte prefix not a continuation byte
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\00\05"                       ;; custom section
+    "\
