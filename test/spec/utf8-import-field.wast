@@ -1207,3 +1207,370 @@
     "\04\74\65\73\74"              ;; "test"
     "\03"                          ;; GlobalImport
     "\7f"                          ;; i32
+    "\00"                          ;; immutable
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; second byte after (last normal) 3-byte prefix not a continuation byte
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\02\0d"                       ;; import section
+    "\01"                          ;; length 1
+    "\03\ef\80\c0"                 ;; "\ef\80\c0"
+    "\04\74\65\73\74"              ;; "test"
+    "\03"                          ;; GlobalImport
+    "\7f"                          ;; i32
+    "\00"                          ;; immutable
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; second byte after (last normal) 3-byte prefix not a continuation byte
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\02\0d"                       ;; import section
+    "\01"                          ;; length 1
+    "\03\ef\80\fd"                 ;; "\ef\80\fd"
+    "\04\74\65\73\74"              ;; "test"
+    "\03"                          ;; GlobalImport
+    "\7f"                          ;; i32
+    "\00"                          ;; immutable
+  )
+  "invalid UTF-8 encoding"
+)
+
+;;;; 4-byte sequences
+
+;; 4-byte sequence contains 5 bytes
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\02\0f"                       ;; import section
+    "\01"                          ;; length 1
+    "\05\f1\80\80\80\80"           ;; "\f1\80\80\80\80"
+    "\04\74\65\73\74"              ;; "test"
+    "\03"                          ;; GlobalImport
+    "\7f"                          ;; i32
+    "\00"                          ;; immutable
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; 4-byte sequence contains 3 bytes at end of string
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\02\0d"                       ;; import section
+    "\01"                          ;; length 1
+    "\03\f1\80\80"                 ;; "\f1\80\80"
+    "\04\74\65\73\74"              ;; "test"
+    "\03"                          ;; GlobalImport
+    "\7f"                          ;; i32
+    "\00"                          ;; immutable
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; 4-byte sequence contains 3 bytes
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\02\0e"                       ;; import section
+    "\01"                          ;; length 1
+    "\04\f1\80\80\23"              ;; "\f1\80\80#"
+    "\04\74\65\73\74"              ;; "test"
+    "\03"                          ;; GlobalImport
+    "\7f"                          ;; i32
+    "\00"                          ;; immutable
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; 4-byte sequence contains 2 bytes at end of string
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\02\0c"                       ;; import section
+    "\01"                          ;; length 1
+    "\02\f1\80"                    ;; "\f1\80"
+    "\04\74\65\73\74"              ;; "test"
+    "\03"                          ;; GlobalImport
+    "\7f"                          ;; i32
+    "\00"                          ;; immutable
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; 4-byte sequence contains 2 bytes
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\02\0d"                       ;; import section
+    "\01"                          ;; length 1
+    "\03\f1\80\23"                 ;; "\f1\80#"
+    "\04\74\65\73\74"              ;; "test"
+    "\03"                          ;; GlobalImport
+    "\7f"                          ;; i32
+    "\00"                          ;; immutable
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; 4-byte sequence contains 1 byte at end of string
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\02\0b"                       ;; import section
+    "\01"                          ;; length 1
+    "\01\f1"                       ;; "\f1"
+    "\04\74\65\73\74"              ;; "test"
+    "\03"                          ;; GlobalImport
+    "\7f"                          ;; i32
+    "\00"                          ;; immutable
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; 4-byte sequence contains 1 byte
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\02\0c"                       ;; import section
+    "\01"                          ;; length 1
+    "\02\f1\23"                    ;; "\f1#"
+    "\04\74\65\73\74"              ;; "test"
+    "\03"                          ;; GlobalImport
+    "\7f"                          ;; i32
+    "\00"                          ;; immutable
+  )
+  "invalid UTF-8 encoding"
+)
+
+;;;; 4-byte sequence contents
+
+;; first byte after (0xf0) 4-byte prefix not a continuation byte
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\02\0e"                       ;; import section
+    "\01"                          ;; length 1
+    "\04\f0\00\90\90"              ;; "\f0\00\90\90"
+    "\04\74\65\73\74"              ;; "test"
+    "\03"                          ;; GlobalImport
+    "\7f"                          ;; i32
+    "\00"                          ;; immutable
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; first byte after (0xf0) 4-byte prefix not a continuation byte
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\02\0e"                       ;; import section
+    "\01"                          ;; length 1
+    "\04\f0\7f\90\90"              ;; "\f0\7f\90\90"
+    "\04\74\65\73\74"              ;; "test"
+    "\03"                          ;; GlobalImport
+    "\7f"                          ;; i32
+    "\00"                          ;; immutable
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; overlong encoding after 0xf0 prefix
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\02\0e"                       ;; import section
+    "\01"                          ;; length 1
+    "\04\f0\80\80\80"              ;; "\f0\80\80\80"
+    "\04\74\65\73\74"              ;; "test"
+    "\03"                          ;; GlobalImport
+    "\7f"                          ;; i32
+    "\00"                          ;; immutable
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; overlong encoding after 0xf0 prefix
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\02\0e"                       ;; import section
+    "\01"                          ;; length 1
+    "\04\f0\80\90\90"              ;; "\f0\80\90\90"
+    "\04\74\65\73\74"              ;; "test"
+    "\03"                          ;; GlobalImport
+    "\7f"                          ;; i32
+    "\00"                          ;; immutable
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; overlong encoding after 0xf0 prefix
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\02\0e"                       ;; import section
+    "\01"                          ;; length 1
+    "\04\f0\8f\90\90"              ;; "\f0\8f\90\90"
+    "\04\74\65\73\74"              ;; "test"
+    "\03"                          ;; GlobalImport
+    "\7f"                          ;; i32
+    "\00"                          ;; immutable
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; overlong encoding after 0xf0 prefix
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\02\0e"                       ;; import section
+    "\01"                          ;; length 1
+    "\04\f0\8f\bf\bf"              ;; "\f0\8f\bf\bf"
+    "\04\74\65\73\74"              ;; "test"
+    "\03"                          ;; GlobalImport
+    "\7f"                          ;; i32
+    "\00"                          ;; immutable
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; first byte after (0xf0) 4-byte prefix not a continuation byte
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\02\0e"                       ;; import section
+    "\01"                          ;; length 1
+    "\04\f0\c0\90\90"              ;; "\f0\c0\90\90"
+    "\04\74\65\73\74"              ;; "test"
+    "\03"                          ;; GlobalImport
+    "\7f"                          ;; i32
+    "\00"                          ;; immutable
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; first byte after (0xf0) 4-byte prefix not a continuation byte
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\02\0e"                       ;; import section
+    "\01"                          ;; length 1
+    "\04\f0\fd\90\90"              ;; "\f0\fd\90\90"
+    "\04\74\65\73\74"              ;; "test"
+    "\03"                          ;; GlobalImport
+    "\7f"                          ;; i32
+    "\00"                          ;; immutable
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; first byte after (first normal) 4-byte prefix not a continuation byte
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\02\0e"                       ;; import section
+    "\01"                          ;; length 1
+    "\04\f1\00\80\80"              ;; "\f1\00\80\80"
+    "\04\74\65\73\74"              ;; "test"
+    "\03"                          ;; GlobalImport
+    "\7f"                          ;; i32
+    "\00"                          ;; immutable
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; first byte after (first normal) 4-byte prefix not a continuation byte
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\02\0e"                       ;; import section
+    "\01"                          ;; length 1
+    "\04\f1\7f\80\80"              ;; "\f1\7f\80\80"
+    "\04\74\65\73\74"              ;; "test"
+    "\03"                          ;; GlobalImport
+    "\7f"                          ;; i32
+    "\00"                          ;; immutable
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; first byte after (first normal) 4-byte prefix not a continuation byte
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\02\0e"                       ;; import section
+    "\01"                          ;; length 1
+    "\04\f1\c0\80\80"              ;; "\f1\c0\80\80"
+    "\04\74\65\73\74"              ;; "test"
+    "\03"                          ;; GlobalImport
+    "\7f"                          ;; i32
+    "\00"                          ;; immutable
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; first byte after (first normal) 4-byte prefix not a continuation byte
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\02\0e"                       ;; import section
+    "\01"                          ;; length 1
+    "\04\f1\fd\80\80"              ;; "\f1\fd\80\80"
+    "\04\74\65\73\74"              ;; "test"
+    "\03"                          ;; GlobalImport
+    "\7f"                          ;; i32
+    "\00"                          ;; immutable
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; first byte after (last normal) 4-byte prefix not a continuation byte
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\02\0e"                       ;; import section
+    "\01"                          ;; length 1
+    "\04\f3\00\80\80"              ;; "\f3\00\80\80"
+    "\04\74\65\73\74"              ;; "test"
+    "\03"                          ;; GlobalImport
+    "\7f"                          ;; i32
+    "\00"                          ;; immutable
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; first byte after (last normal) 4-byte prefix not a continuation byte
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\02\0e"                       ;; import section
+    "\01"                          ;; length 1
+    "\04\f3\7f\80\80"              ;; "\f3\7f\80\80"
+    "\04\74\65\73\74"              ;; "test"
+    "\03"                          ;; GlobalImport
+    "\7f"                          ;; i32
+    "\00"                          ;; immutable
+  )
+  "invalid UTF-8 encoding"
+)
+
+;; first byte after (last normal) 4-byte prefix not a continuation byte
+(assert_malformed
+  (module binary
+    "\00asm" "\01\00\00\00"
+    "\02\0e"                       ;; import section
+    "\01"                          ;; length 1
+    "\04\f3\c0\80\80"              ;; "\f3\c0\80\80"
+    "\04\74\65\73\74"              ;; "test"
+    "\03"                          ;; GlobalImport
+    "\7f"                          ;; i32
+    "\00"                          ;; immutable
+  )
+  "invalid UTF-8 
