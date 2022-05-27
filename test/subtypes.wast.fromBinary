@@ -1,0 +1,14 @@
+(module
+ (type $struct-rec-one (struct (field (ref $struct-rec-one))))
+ (type $struct-rec-two (struct_subtype (field (ref $struct-rec-two)) (field (ref $struct-rec-two)) $struct-rec-one))
+ (type $vector-i32 (array i32))
+ (type $struct-any (struct (field (ref any))))
+ (type $struct-i31 (struct_subtype (field (ref i31)) $struct-any))
+ (type $ref|$vector-i32|_ref?|$vector-i32|_=>_none (func (param (ref $vector-i32) (ref null $vector-i32))))
+ (type $vector-any (array (ref any)))
+ (type $vector-i31 (array_subtype (ref i31) $vector-any))
+ (type $ref|$vector-i31|_ref|$vector-any|_=>_none (func (param (ref $vector-i31) (ref $vector-any))))
+ (type $ref|$struct-i31|_ref|$struct-any|_=>_none (func (param (ref $struct-i31) (ref $struct-any))))
+ (type $struct-i31_any (struct_subtype (field (ref i31)) (field (ref any)) $struct-i31))
+ (type $ref|$struct-i31|_ref|$struct-i31_any|_=>_none (func (param (ref $struct-i31) (ref $struct-i31_any))))
+ (type $ref|$struct-rec-one|_ref|$struct-rec-two|_=>_none (func (param (ref $struct-rec-one) (re
