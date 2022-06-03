@@ -1,0 +1,127 @@
+(module
+ (type $none_=>_i32 (func (result i32)))
+ (type $none_=>_none (func))
+ (type $f32_=>_none (func (param f32)))
+ (type $none_=>_f64 (func (result f64)))
+ (type $f64_f64_=>_f64 (func (param f64 f64) (result f64)))
+ (type $i32_i64_=>_none (func (param i32 i64)))
+ (type $i32_=>_i32 (func (param i32) (result i32)))
+ (type $f64_=>_i32 (func (param f64) (result i32)))
+ (type $none_=>_i64 (func (result i64)))
+ (type $f64_=>_f64 (func (param f64) (result f64)))
+ (import "env" "_emscripten_asm_const_vi" (func $fimport$0))
+ (import "asm2wasm" "f64-to-int" (func $fimport$1 (param f64) (result i32)))
+ (import "asm2wasm" "f64-rem" (func $fimport$2 (param f64 f64) (result f64)))
+ (memory $0 4096 4096)
+ (data (i32.const 1026) "\14\00")
+ (table $0 10 funcref)
+ (elem (i32.const 0) $17 $0 $17 $17 $18 $18 $1 $18 $17 $15)
+ (export "big_negative" (func $0))
+ (func $0 (; 3 ;)
+  (local $0 f64)
+  (local.set $0
+   (f64.const -2147483648)
+  )
+  (local.set $0
+   (f64.const -2147483648)
+  )
+  (local.set $0
+   (f64.const -21474836480)
+  )
+  (local.set $0
+   (f64.const 0.039625)
+  )
+  (local.set $0
+   (f64.const -0.039625)
+  )
+ )
+ (func $1 (; 4 ;) (result f64)
+  (local $0 f64)
+  (block $label$1 (result f64)
+   (local.set $0
+    (f64.add
+     (f64.add
+      (f64.add
+       (f64.load
+        (i32.const 8)
+       )
+       (f64.load
+        (i32.const 16)
+       )
+      )
+      (f64.neg
+       (f64.load
+        (i32.const 16)
+       )
+      )
+     )
+     (f64.neg
+      (f64.load
+       (i32.const 8)
+      )
+     )
+    )
+   )
+   (if
+    (i32.gt_s
+     (i32.load
+      (i32.const 24)
+     )
+     (i32.const 0)
+    )
+    (br $label$1
+     (f64.const -3.4)
+    )
+   )
+   (if
+    (f64.gt
+     (f64.load
+      (i32.const 32)
+     )
+     (f64.const 0)
+    )
+    (br $label$1
+     (f64.const 5.6)
+    )
+   )
+   (f64.const 1.2)
+  )
+ )
+ (func $2 (; 5 ;) (param $0 f64) (param $1 f64) (result f64)
+  (local $2 i32)
+  (local $3 f64)
+  (local $4 f64)
+  (block $label$1 (result f64)
+   (if
+    (f64.gt
+     (local.get $0)
+     (f64.const 0)
+    )
+    (br $label$1
+     (f64.const 1.2)
+    )
+   )
+   (if
+    (f64.gt
+     (local.get $4)
+     (f64.const 0)
+    )
+    (br $label$1
+     (f64.const -3.4)
+    )
+   )
+   (if
+    (i32.gt_s
+     (local.get $2)
+     (i32.const 0)
+    )
+    (br $label$1
+     (f64.const 5.6)
+    )
+   )
+   (if
+    (f64.lt
+     (local.get $0)
+     (local.get $1)
+    )
+    (br $labe

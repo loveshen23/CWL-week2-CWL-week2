@@ -35,4 +35,11 @@ class BinaryenTestCase(unittest.TestCase):
         self.assertEqual(p.returncode, 0)
         self.assertEqual(p.stderr, '')
         self.assertEqual(p.stdout.splitlines(),
-   
+                         ['--enable-' + f for f in features])
+
+    # similar to assertEqual, but while ignoring line ending differences such
+    # as those between windows and unix
+    def assert_equal_ignoring_line_endings(self, left, right):
+        left = left.replace('\r\n', '\n')
+        right = right.replace('\r\n', '\n')
+        self.assertEqual(left, right)
