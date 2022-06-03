@@ -377,3 +377,23 @@ class TargetFeaturesSectionTest(utils.BinaryenTestCase):
         p2 = shared.run_process(shared.WASM_OPT +
                                 ['--print-features', '-o', os.devnull],
                                 input=p.stdout, check=False,
+                                capture_output=True)
+        self.assertEqual(p2.returncode, 0)
+        self.assertEqual([
+            '--enable-threads',
+            '--enable-mutable-globals',
+            '--enable-nontrapping-float-to-int',
+            '--enable-simd',
+            '--enable-bulk-memory',
+            '--enable-sign-ext',
+            '--enable-exception-handling',
+            '--enable-tail-call',
+            '--enable-reference-types',
+            '--enable-multivalue',
+            '--enable-gc',
+            '--enable-memory64',
+            '--enable-relaxed-simd',
+            '--enable-extended-const',
+            '--enable-strings',
+            '--enable-multi-memories',
+        ], p2.stdout.splitlines())
