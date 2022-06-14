@@ -630,4 +630,149 @@ function asmFunc(imports) {
  }
  
  function legalstub$49() {
-  var i64toi32_i32$0 = 0, i64toi32_i32$4 = 0,
+  var i64toi32_i32$0 = 0, i64toi32_i32$4 = 0, i64toi32_i32$1 = 0, i64toi32_i32$3 = 0, $7_1 = 0, $0 = 0, $0$hi = 0, i64toi32_i32$2 = 0;
+  i64toi32_i32$0 = $49() | 0;
+  i64toi32_i32$1 = i64toi32_i32$HIGH_BITS;
+  $0 = i64toi32_i32$0;
+  $0$hi = i64toi32_i32$1;
+  i64toi32_i32$2 = i64toi32_i32$0;
+  i64toi32_i32$0 = 0;
+  i64toi32_i32$3 = 32;
+  i64toi32_i32$4 = i64toi32_i32$3 & 31 | 0;
+  if (32 >>> 0 <= (i64toi32_i32$3 & 63 | 0) >>> 0) {
+   i64toi32_i32$0 = 0;
+   $7_1 = i64toi32_i32$1 >>> i64toi32_i32$4 | 0;
+  } else {
+   i64toi32_i32$0 = i64toi32_i32$1 >>> i64toi32_i32$4 | 0;
+   $7_1 = (((1 << i64toi32_i32$4 | 0) - 1 | 0) & i64toi32_i32$1 | 0) << (32 - i64toi32_i32$4 | 0) | 0 | (i64toi32_i32$2 >>> i64toi32_i32$4 | 0) | 0;
+  }
+  setTempRet0($7_1 | 0);
+  i64toi32_i32$0 = $0$hi;
+  return $0 | 0;
+ }
+ 
+ return {
+  "type_i32": $1, 
+  "type_i64": $2, 
+  "type_f32": $3, 
+  "type_f64": $4, 
+  "type_i32_value": $5, 
+  "type_i64_value": legalstub$6, 
+  "type_f32_value": $7, 
+  "type_f64_value": $8, 
+  "as_block_first": $9, 
+  "as_block_mid": $10, 
+  "as_block_last": $11, 
+  "as_block_value": $12, 
+  "as_loop_first": $13, 
+  "as_loop_mid": $14, 
+  "as_loop_last": $15, 
+  "as_br_value": $16, 
+  "as_br_if_cond": $17, 
+  "as_br_if_value": $18, 
+  "as_br_if_value_cond": $19, 
+  "as_br_table_index": $20, 
+  "as_br_table_value": $21, 
+  "as_br_table_value_index": $22, 
+  "as_return_value": legalstub$23, 
+  "as_if_cond": $24, 
+  "as_if_then": $25, 
+  "as_if_else": $26, 
+  "as_select_first": $27, 
+  "as_select_second": $28, 
+  "as_select_cond": $29, 
+  "as_call_first": $31, 
+  "as_call_mid": $32, 
+  "as_call_last": $33, 
+  "as_call_indirect_func": $34, 
+  "as_call_indirect_first": $35, 
+  "as_call_indirect_mid": $36, 
+  "as_call_indirect_last": $37, 
+  "as_local_set_value": $38, 
+  "as_local_tee_value": $39, 
+  "as_global_set_value": $40, 
+  "as_load_address": $41, 
+  "as_loadN_address": legalstub$42, 
+  "as_store_address": $43, 
+  "as_store_value": $44, 
+  "as_storeN_address": $45, 
+  "as_storeN_value": $46, 
+  "as_unary_operand": $47, 
+  "as_binary_left": $48, 
+  "as_binary_right": legalstub$49, 
+  "as_test_operand": $50, 
+  "as_compare_left": $51, 
+  "as_compare_right": $52, 
+  "as_convert_operand": $53, 
+  "as_memory_grow_size": $54, 
+  "nested_block_value": $55, 
+  "nested_br_value": $56, 
+  "nested_br_if_value": $57, 
+  "nested_br_if_value_cond": $58, 
+  "nested_br_table_value": $59, 
+  "nested_br_table_value_index": $60
+ };
+}
+
+var retasmFunc = asmFunc({
+  "env": env,
+});
+export var type_i32 = retasmFunc.type_i32;
+export var type_i64 = retasmFunc.type_i64;
+export var type_f32 = retasmFunc.type_f32;
+export var type_f64 = retasmFunc.type_f64;
+export var type_i32_value = retasmFunc.type_i32_value;
+export var type_i64_value = retasmFunc.type_i64_value;
+export var type_f32_value = retasmFunc.type_f32_value;
+export var type_f64_value = retasmFunc.type_f64_value;
+export var as_block_first = retasmFunc.as_block_first;
+export var as_block_mid = retasmFunc.as_block_mid;
+export var as_block_last = retasmFunc.as_block_last;
+export var as_block_value = retasmFunc.as_block_value;
+export var as_loop_first = retasmFunc.as_loop_first;
+export var as_loop_mid = retasmFunc.as_loop_mid;
+export var as_loop_last = retasmFunc.as_loop_last;
+export var as_br_value = retasmFunc.as_br_value;
+export var as_br_if_cond = retasmFunc.as_br_if_cond;
+export var as_br_if_value = retasmFunc.as_br_if_value;
+export var as_br_if_value_cond = retasmFunc.as_br_if_value_cond;
+export var as_br_table_index = retasmFunc.as_br_table_index;
+export var as_br_table_value = retasmFunc.as_br_table_value;
+export var as_br_table_value_index = retasmFunc.as_br_table_value_index;
+export var as_return_value = retasmFunc.as_return_value;
+export var as_if_cond = retasmFunc.as_if_cond;
+export var as_if_then = retasmFunc.as_if_then;
+export var as_if_else = retasmFunc.as_if_else;
+export var as_select_first = retasmFunc.as_select_first;
+export var as_select_second = retasmFunc.as_select_second;
+export var as_select_cond = retasmFunc.as_select_cond;
+export var as_call_first = retasmFunc.as_call_first;
+export var as_call_mid = retasmFunc.as_call_mid;
+export var as_call_last = retasmFunc.as_call_last;
+export var as_call_indirect_func = retasmFunc.as_call_indirect_func;
+export var as_call_indirect_first = retasmFunc.as_call_indirect_first;
+export var as_call_indirect_mid = retasmFunc.as_call_indirect_mid;
+export var as_call_indirect_last = retasmFunc.as_call_indirect_last;
+export var as_local_set_value = retasmFunc.as_local_set_value;
+export var as_local_tee_value = retasmFunc.as_local_tee_value;
+export var as_global_set_value = retasmFunc.as_global_set_value;
+export var as_load_address = retasmFunc.as_load_address;
+export var as_loadN_address = retasmFunc.as_loadN_address;
+export var as_store_address = retasmFunc.as_store_address;
+export var as_store_value = retasmFunc.as_store_value;
+export var as_storeN_address = retasmFunc.as_storeN_address;
+export var as_storeN_value = retasmFunc.as_storeN_value;
+export var as_unary_operand = retasmFunc.as_unary_operand;
+export var as_binary_left = retasmFunc.as_binary_left;
+export var as_binary_right = retasmFunc.as_binary_right;
+export var as_test_operand = retasmFunc.as_test_operand;
+export var as_compare_left = retasmFunc.as_compare_left;
+export var as_compare_right = retasmFunc.as_compare_right;
+export var as_convert_operand = retasmFunc.as_convert_operand;
+export var as_memory_grow_size = retasmFunc.as_memory_grow_size;
+export var nested_block_value = retasmFunc.nested_block_value;
+export var nested_br_value = retasmFunc.nested_br_value;
+export var nested_br_if_value = retasmFunc.nested_br_if_value;
+export var nested_br_if_value_cond = retasmFunc.nested_br_if_value_cond;
+export var nested_br_table_value = retasmFunc.nested_br_table_value;
+export var nested_br_table_value_index = retasmFunc.nested_br_table_value_index;
