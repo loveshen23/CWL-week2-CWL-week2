@@ -1,0 +1,6 @@
+
+function asmFunc(imports) {
+ var Math_imul = Math.imul;
+ var Math_fround = Math.fround;
+ var Math_abs = Math.abs;
+ var Math_clz32 = Math.clz32
