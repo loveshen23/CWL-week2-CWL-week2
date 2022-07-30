@@ -1,5 +1,4 @@
 
-function wasm2js_trap() { throw new Error('abort'); }
 
 function asmFunc(imports) {
  var Math_imul = Math.imul;
@@ -13,20 +12,26 @@ function asmFunc(imports) {
  var Math_trunc = Math.trunc;
  var Math_sqrt = Math.sqrt;
  function $0() {
-  wasm2js_trap();
+  
  }
  
  function $1() {
   
  }
  
+ function $2() {
+  
+ }
+ 
  return {
-  "exp1": $0, 
-  "exp2": $1
+  "br": $0, 
+  "br_if": $1, 
+  "br_table": $2
  };
 }
 
 var retasmFunc = asmFunc({
 });
-export var exp1 = retasmFunc.exp1;
-export var exp2 = retasmFunc.exp2;
+export var br = retasmFunc.br;
+export var br_if = retasmFunc.br_if;
+export var br_table = retasmFunc.br_table;
