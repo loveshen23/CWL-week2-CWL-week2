@@ -12293,4 +12293,458 @@ function asmFunc(imports) {
    case 24380:
    case 24382:
    case 24384:
-   case 243
+   case 24386:
+   case 24388:
+   case 24390:
+   case 24392:
+   case 24394:
+   case 24396:
+   case 24398:
+   case 24400:
+   case 24402:
+   case 24404:
+   case 24406:
+   case 24408:
+   case 24410:
+   case 24412:
+   case 24414:
+   case 24416:
+   case 24418:
+   case 24420:
+   case 24422:
+   case 24424:
+   case 24426:
+   case 24428:
+   case 24430:
+   case 24432:
+   case 24434:
+   case 24436:
+   case 24438:
+   case 24440:
+   case 24442:
+   case 24444:
+   case 24446:
+   case 24448:
+   case 24450:
+   case 24452:
+   case 24454:
+   case 24456:
+   case 24458:
+   case 24460:
+   case 24462:
+   case 24464:
+   case 24466:
+   case 24468:
+   case 24470:
+   case 24472:
+   case 24474:
+   case 24476:
+   case 24478:
+   case 24480:
+   case 24482:
+   case 24484:
+   case 24486:
+   case 24488:
+   case 24490:
+   case 24492:
+   case 24494:
+   case 24496:
+   case 24498:
+   case 24500:
+   case 24502:
+   case 24504:
+   case 24506:
+   case 24508:
+   case 24510:
+   case 24512:
+   case 24514:
+   case 24516:
+   case 24518:
+   case 24520:
+   case 24522:
+   case 24524:
+   case 24526:
+   case 24528:
+   case 24530:
+   case 24532:
+   case 24534:
+   case 24536:
+   case 24538:
+   case 24540:
+   case 24542:
+   case 24544:
+   case 24546:
+   case 24548:
+   case 24550:
+   case 24552:
+   case 24554:
+   case 24556:
+   case 24558:
+   case 24560:
+   case 24562:
+   case 24564:
+   case 24566:
+   case 24568:
+   case 24570:
+   case 24572:
+   case 24574:
+   case 24576:
+   case 24578:
+   case 24580:
+   case 24582:
+   case 24584:
+   case 24586:
+   case 24588:
+   case 24590:
+   case 24592:
+   case 24594:
+   case 24596:
+   case 24598:
+   case 24600:
+   case 24602:
+   case 24604:
+   case 24606:
+   case 24608:
+   case 24610:
+   case 24612:
+   case 24614:
+    return 0;
+   default:
+    break block;
+   };
+  }
+  return 1;
+ }
+ 
+ function $20() {
+  return 3;
+ }
+ 
+ function $21() {
+  return 4;
+ }
+ 
+ function $22() {
+  return 5;
+ }
+ 
+ function $23() {
+  return 9;
+ }
+ 
+ function $25() {
+  return 8;
+ }
+ 
+ function $28() {
+  return 10;
+ }
+ 
+ function $29() {
+  return 11;
+ }
+ 
+ function $30() {
+  return 7;
+ }
+ 
+ function $32($0, $1) {
+  $0 = $0 | 0;
+  $1 = $1 | 0;
+  if ($0) {
+   $1 = 3
+  }
+  return $1 | 0;
+ }
+ 
+ function $33($0, $1) {
+  $0 = $0 | 0;
+  $1 = $1 | 0;
+  if (!$0) {
+   $1 = 4
+  }
+  return $1 | 0;
+ }
+ 
+ function $34($0, $1) {
+  $0 = $0 | 0;
+  $1 = $1 | 0;
+  return 5;
+ }
+ 
+ function $35($0, $1) {
+  $0 = $0 | 0;
+  $1 = $1 | 0;
+  return 6;
+ }
+ 
+ function $38() {
+  return 12;
+ }
+ 
+ function $39() {
+  return 13;
+ }
+ 
+ function $40() {
+  return 14;
+ }
+ 
+ function $41() {
+  return 20;
+ }
+ 
+ function $42() {
+  return 21;
+ }
+ 
+ function $43() {
+  return 22;
+ }
+ 
+ function $44() {
+  return 23;
+ }
+ 
+ function $45() {
+  return 17;
+ }
+ 
+ function $47() {
+  return 30;
+ }
+ 
+ function $49() {
+  return 31;
+ }
+ 
+ function $50() {
+  return 32;
+ }
+ 
+ function $51() {
+  return 33;
+ }
+ 
+ function $54() {
+  return 45;
+ }
+ 
+ function $55() {
+  return 44;
+ }
+ 
+ function $56() {
+  return 43;
+ }
+ 
+ function $57() {
+  return 42;
+ }
+ 
+ function $58() {
+  return 41;
+ }
+ 
+ function $59() {
+  return 40;
+ }
+ 
+ function $60($0) {
+  $0 = $0 | 0;
+  var $1 = 0;
+  $1 = 16;
+  block : {
+   switch ($0 | 0) {
+   case 0:
+    $1 = 18;
+   case 1:
+    $1 = $1 + 1 | 0;
+    break;
+   default:
+    break block;
+   };
+  }
+  return $1 | 0;
+ }
+ 
+ function $61($0) {
+  $0 = $0 | 0;
+  var $1 = 0;
+  $1 = 8;
+  block : {
+   switch ($0 | 0) {
+   default:
+    $1 = 16;
+   case 1:
+    $1 = $1 + 1 | 0;
+    break;
+   case 0:
+    break block;
+   };
+  }
+  return $1 | 0;
+ }
+ 
+ function $62($0) {
+  $0 = $0 | 0;
+  var $1 = 0;
+  $1 = 8;
+  block : {
+   switch ($0 | 0) {
+   case 0:
+    $1 = 16;
+   case 1:
+    $1 = $1 + 1 | 0;
+    break;
+   default:
+    break block;
+   };
+  }
+  return $1 | 0;
+ }
+ 
+ function $63($0) {
+  $0 = $0 | 0;
+  if (($0 | 0) == 1) {
+   $0 = 8
+  } else {
+   $0 = 9
+  }
+  return $0 | 0;
+ }
+ 
+ return {
+  "type_i32": dummy, 
+  "type_i64": dummy, 
+  "type_f32": dummy, 
+  "type_f64": dummy, 
+  "type_i32_value": $5, 
+  "type_i64_value": $6, 
+  "type_f32_value": $7, 
+  "type_f64_value": $8, 
+  "empty": $9, 
+  "empty_value": $10, 
+  "singleton": $11, 
+  "singleton_value": $12, 
+  "multiple": $13, 
+  "multiple_value": $14, 
+  "large": $15, 
+  "as_block_first": dummy, 
+  "as_block_mid": dummy, 
+  "as_block_last": dummy, 
+  "as_block_value": $6, 
+  "as_loop_first": $20, 
+  "as_loop_mid": $21, 
+  "as_loop_last": $22, 
+  "as_br_value": $23, 
+  "as_br_if_cond": dummy, 
+  "as_br_if_value": $25, 
+  "as_br_if_value_cond": $23, 
+  "as_br_table_index": dummy, 
+  "as_br_table_value": $28, 
+  "as_br_table_value_index": $29, 
+  "as_return_value": $30, 
+  "as_if_cond": $6, 
+  "as_if_then": $32, 
+  "as_if_else": $33, 
+  "as_select_first": $34, 
+  "as_select_second": $35, 
+  "as_select_cond": $30, 
+  "as_call_first": $38, 
+  "as_call_mid": $39, 
+  "as_call_last": $40, 
+  "as_call_indirect_first": $41, 
+  "as_call_indirect_mid": $42, 
+  "as_call_indirect_last": $43, 
+  "as_call_indirect_func": $44, 
+  "as_local_set_value": $45, 
+  "as_load_address": $6, 
+  "as_loadN_address": $47, 
+  "as_store_address": $47, 
+  "as_store_value": $49, 
+  "as_storeN_address": $50, 
+  "as_storeN_value": $51, 
+  "as_unary_operand": $20, 
+  "as_binary_left": $20, 
+  "as_binary_right": $54, 
+  "as_test_operand": $55, 
+  "as_compare_left": $56, 
+  "as_compare_right": $57, 
+  "as_convert_operand": $58, 
+  "as_memory_grow_size": $59, 
+  "nested_block_value": $60, 
+  "nested_br_value": $61, 
+  "nested_br_if_value": $62, 
+  "nested_br_if_value_cond": $63, 
+  "nested_br_table_value": $62, 
+  "nested_br_table_value_index": $63
+ };
+}
+
+var retasmFunc = asmFunc({
+});
+export var type_i32 = retasmFunc.type_i32;
+export var type_i64 = retasmFunc.type_i64;
+export var type_f32 = retasmFunc.type_f32;
+export var type_f64 = retasmFunc.type_f64;
+export var type_i32_value = retasmFunc.type_i32_value;
+export var type_i64_value = retasmFunc.type_i64_value;
+export var type_f32_value = retasmFunc.type_f32_value;
+export var type_f64_value = retasmFunc.type_f64_value;
+export var empty = retasmFunc.empty;
+export var empty_value = retasmFunc.empty_value;
+export var singleton = retasmFunc.singleton;
+export var singleton_value = retasmFunc.singleton_value;
+export var multiple = retasmFunc.multiple;
+export var multiple_value = retasmFunc.multiple_value;
+export var large = retasmFunc.large;
+export var as_block_first = retasmFunc.as_block_first;
+export var as_block_mid = retasmFunc.as_block_mid;
+export var as_block_last = retasmFunc.as_block_last;
+export var as_block_value = retasmFunc.as_block_value;
+export var as_loop_first = retasmFunc.as_loop_first;
+export var as_loop_mid = retasmFunc.as_loop_mid;
+export var as_loop_last = retasmFunc.as_loop_last;
+export var as_br_value = retasmFunc.as_br_value;
+export var as_br_if_cond = retasmFunc.as_br_if_cond;
+export var as_br_if_value = retasmFunc.as_br_if_value;
+export var as_br_if_value_cond = retasmFunc.as_br_if_value_cond;
+export var as_br_table_index = retasmFunc.as_br_table_index;
+export var as_br_table_value = retasmFunc.as_br_table_value;
+export var as_br_table_value_index = retasmFunc.as_br_table_value_index;
+export var as_return_value = retasmFunc.as_return_value;
+export var as_if_cond = retasmFunc.as_if_cond;
+export var as_if_then = retasmFunc.as_if_then;
+export var as_if_else = retasmFunc.as_if_else;
+export var as_select_first = retasmFunc.as_select_first;
+export var as_select_second = retasmFunc.as_select_second;
+export var as_select_cond = retasmFunc.as_select_cond;
+export var as_call_first = retasmFunc.as_call_first;
+export var as_call_mid = retasmFunc.as_call_mid;
+export var as_call_last = retasmFunc.as_call_last;
+export var as_call_indirect_first = retasmFunc.as_call_indirect_first;
+export var as_call_indirect_mid = retasmFunc.as_call_indirect_mid;
+export var as_call_indirect_last = retasmFunc.as_call_indirect_last;
+export var as_call_indirect_func = retasmFunc.as_call_indirect_func;
+export var as_local_set_value = retasmFunc.as_local_set_value;
+export var as_load_address = retasmFunc.as_load_address;
+export var as_loadN_address = retasmFunc.as_loadN_address;
+export var as_store_address = retasmFunc.as_store_address;
+export var as_store_value = retasmFunc.as_store_value;
+export var as_storeN_address = retasmFunc.as_storeN_address;
+export var as_storeN_value = retasmFunc.as_storeN_value;
+export var as_unary_operand = retasmFunc.as_unary_operand;
+export var as_binary_left = retasmFunc.as_binary_left;
+export var as_binary_right = retasmFunc.as_binary_right;
+export var as_test_operand = retasmFunc.as_test_operand;
+export var as_compare_left = retasmFunc.as_compare_left;
+export var as_compare_right = retasmFunc.as_compare_right;
+export var as_convert_operand = retasmFunc.as_convert_operand;
+export var as_memory_grow_size = retasmFunc.as_memory_grow_size;
+export var nested_block_value = retasmFunc.nested_block_value;
+export var nested_br_value = retasmFunc.nested_br_value;
+export var nested_br_if_value = retasmFunc.nested_br_if_value;
+export var nested_br_if_value_cond = retasmFunc.nested_br_if_value_cond;
+export var nested_br_table_value = retasmFunc.nested_br_table_value;
+export var nested_br_table_value_index = retasmFunc.nested_br_table_value_index;
