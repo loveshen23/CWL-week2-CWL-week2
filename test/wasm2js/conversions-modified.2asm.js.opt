@@ -1,0 +1,14 @@
+import * as env from 'env';
+
+
+  var scratchBuffer = new ArrayBuffer(16);
+  var i32ScratchView = new Int32Array(scratchBuffer);
+  var f32ScratchView = new Float32Array(scratchBuffer);
+  var f64ScratchView = new Float64Array(scratchBuffer);
+  
+  function wasm2js_scratch_load_i32(index) {
+    return i32ScratchView[index];
+  }
+      
+  function wasm2js_scratch_store_i32(index, value) {
+  
