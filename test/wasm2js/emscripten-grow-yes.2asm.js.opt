@@ -1,16 +1,5 @@
-import * as env from 'env';
 
-function Table(ret) {
-  // grow method not included; table is not growable
-  ret.set = function(i, func) {
-    this[i] = func;
-  };
-  ret.get = function(i) {
-    return this[i];
-  };
-  return ret;
-}
-
+function instantiate(info) {
   var bufferView;
   var base64ReverseLookup = new Uint8Array(123/*'z'+1*/);
   for (var i = 25; i >= 0; --i) {
@@ -33,12 +22,13 @@ function Table(ret) {
     return uint8Array;
   }
 function initActiveSegments(imports) {
-  base64DecodeToExistingUint8Array(bufferView, imports['env']['memoryBase'], "ZHluYW1pYyBkYXRh");
+  base64DecodeToExistingUint8Array(bufferView, 1600, "YWJj");
 }
 function asmFunc(imports) {
  var env = imports.env;
  var memory = env.memory;
  var buffer = memory.buffer;
+ memory.grow = __wasm_memory_grow;
  var HEAP8 = new Int8Array(buffer);
  var HEAP16 = new Int16Array(buffer);
  var HEAP32 = new Int32Array(buffer);
@@ -57,31 +47,58 @@ function asmFunc(imports) {
  var Math_ceil = Math.ceil;
  var Math_trunc = Math.trunc;
  var Math_sqrt = Math.sqrt;
- var import$memoryBase = env.memoryBase | 0;
- var import$tableBase = env.tableBase | 0;
- function foo() {
-  
+ // EMSCRIPTEN_START_FUNCS
+;
+ function $0() {
+  return __wasm_memory_size() | 0;
  }
  
+ // EMSCRIPTEN_END_FUNCS
+;
  bufferView = HEAPU8;
  initActiveSegments(imports);
- var FUNCTION_TABLE = Table(new Array(10));
- FUNCTION_TABLE[import$tableBase + 0] = foo;
- FUNCTION_TABLE[import$tableBase + 1] = foo;
  function __wasm_memory_size() {
   return buffer.byteLength / 65536 | 0;
  }
  
+ function __wasm_memory_grow(pagesToAdd) {
+  pagesToAdd = pagesToAdd | 0;
+  var oldPages = __wasm_memory_size() | 0;
+  var newPages = oldPages + pagesToAdd | 0;
+  if ((oldPages < newPages) && (newPages < 65536)) {
+   var newBuffer = new ArrayBuffer(Math_imul(newPages, 65536));
+   var newHEAP8 = new Int8Array(newBuffer);
+   newHEAP8.set(HEAP8);
+   HEAP8 = new Int8Array(newBuffer);
+   HEAP16 = new Int16Array(newBuffer);
+   HEAP32 = new Int32Array(newBuffer);
+   HEAPU8 = new Uint8Array(newBuffer);
+   HEAPU16 = new Uint16Array(newBuffer);
+   HEAPU32 = new Uint32Array(newBuffer);
+   HEAPF32 = new Float32Array(newBuffer);
+   HEAPF64 = new Float64Array(newBuffer);
+   buffer = newBuffer;
+   memory.buffer = buffer;
+   bufferView = HEAPU8;
+  }
+  return oldPages;
+ }
+ 
  return {
-  "baz": foo, 
-  "tab": FUNCTION_TABLE
+  "memory": Object.create(Object.prototype, {
+   "grow": {
+    "value": __wasm_memory_grow
+   }, 
+   "buffer": {
+    "get": function () {
+     return buffer;
+    }
+    
+   }
+  }), 
+  "get_size": $0
  };
 }
 
-var memasmFunc = new ArrayBuffer(16777216);
-var retasmFunc = asmFunc({
-  "env": {
-    memory: { buffer : memasmFunc }
-  },
-});
-export var baz = retasmFunc.baz;
+  return asmFunc(info);
+}

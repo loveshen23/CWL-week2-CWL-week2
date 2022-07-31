@@ -1,16 +1,4 @@
-import * as env from 'env';
-
-function Table(ret) {
-  // grow method not included; table is not growable
-  ret.set = function(i, func) {
-    this[i] = func;
-  };
-  ret.get = function(i) {
-    return this[i];
-  };
-  return ret;
-}
-
+function instantiate(info) {
   var bufferView;
   var base64ReverseLookup = new Uint8Array(123/*'z'+1*/);
   for (var i = 25; i >= 0; --i) {
@@ -33,7 +21,7 @@ function Table(ret) {
     return uint8Array;
   }
 function initActiveSegments(imports) {
-  base64DecodeToExistingUint8Array(bufferView, imports['env']['memoryBase'], "ZHluYW1pYyBkYXRh");
+  base64DecodeToExistingUint8Array(bufferView, 1600, "YWJj");
 }
 function asmFunc(imports) {
  var env = imports.env;
@@ -57,31 +45,30 @@ function asmFunc(imports) {
  var Math_ceil = Math.ceil;
  var Math_trunc = Math.trunc;
  var Math_sqrt = Math.sqrt;
- var import$memoryBase = env.memoryBase | 0;
- var import$tableBase = env.tableBase | 0;
- function foo() {
-  
- }
- 
+ // EMSCRIPTEN_START_FUNCS
+;
+ // EMSCRIPTEN_END_FUNCS
+;
  bufferView = HEAPU8;
  initActiveSegments(imports);
- var FUNCTION_TABLE = Table(new Array(10));
- FUNCTION_TABLE[import$tableBase + 0] = foo;
- FUNCTION_TABLE[import$tableBase + 1] = foo;
  function __wasm_memory_size() {
   return buffer.byteLength / 65536 | 0;
  }
  
  return {
-  "baz": foo, 
-  "tab": FUNCTION_TABLE
+  "memory": Object.create(Object.prototype, {
+   "grow": {
+    
+   }, 
+   "buffer": {
+    "get": function () {
+     return buffer;
+    }
+    
+   }
+  })
  };
 }
 
-var memasmFunc = new ArrayBuffer(16777216);
-var retasmFunc = asmFunc({
-  "env": {
-    memory: { buffer : memasmFunc }
-  },
-});
-export var baz = retasmFunc.baz;
+  return asmFunc(info);
+}
