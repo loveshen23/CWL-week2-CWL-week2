@@ -1,0 +1,8 @@
+import * as env from 'env';
+
+function Table(ret) {
+  // grow method not included; table is not growable
+  ret.set = function(i, func) {
+    this[i] = func;
+  };
+  ret.get = function(i)
