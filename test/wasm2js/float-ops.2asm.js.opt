@@ -1,0 +1,28 @@
+
+function asmFunc(imports) {
+ var Math_imul = Math.imul;
+ var Math_fround = Math.fround;
+ var Math_abs = Math.abs;
+ var Math_clz32 = Math.clz32;
+ var Math_min = Math.min;
+ var Math_max = Math.max;
+ var Math_floor = Math.floor;
+ var Math_ceil = Math.ceil;
+ var Math_trunc = Math.trunc;
+ var Math_sqrt = Math.sqrt;
+ function $1($0, $1_1) {
+  $0 = Math_fround($0);
+  $1_1 = Math_fround($1_1);
+  return Math_fround(Math_fround($0 + $1_1));
+ }
+ 
+ function $2($0, $1_1) {
+  $0 = Math_fround($0);
+  $1_1 = Math_fround($1_1);
+  return Math_fround(Math_fround($0 - $1_1));
+ }
+ 
+ function $3($0, $1_1) {
+  $0 = Math_fround($0);
+  $1_1 = Math_fround($1_1);
+  return Math_fround(Math_fround($0 
