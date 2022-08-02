@@ -15,4 +15,13 @@
 
 (assert_return (invoke "check_extend_ui32" (i32.const 0)
                                            (i32.const 0) (i32.const 0))
-               (i32.const
+               (i32.const 1))
+(assert_return (invoke "check_extend_ui32" (i32.const 1)
+                                           (i32.const 1) (i32.const 0))
+               (i32.const 1))
+(assert_return (invoke "check_extend_ui32" (i32.const 0x7fffffff)
+                                           (i32.const 0x7fffffff) (i32.const 0))
+               (i32.const 1))
+(assert_return (invoke "check_extend_ui32" (i32.const 0xffffffff)
+                                           (i32.const 0xffffffff) (i32.const 0))
+               (i32.const 1))
