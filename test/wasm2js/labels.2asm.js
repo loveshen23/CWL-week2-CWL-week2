@@ -354,4 +354,4 @@ export var br_if2 = retasmFunc.br_if2;
 export var br_if3 = retasmFunc.br_if3;
 export var br = retasmFunc.br;
 export var shadowing = retasmFunc.shadowing;
-export var
+export var redefinition = retasmFunc.redefinition;
