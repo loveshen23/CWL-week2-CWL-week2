@@ -1998,4 +1998,309 @@ function asmFunc(imports) {
   var i64toi32_i32$0 = 0, i64toi32_i32$1 = 0;
   i64toi32_i32$0 = var$0$hi;
   i64toi32_i32$0 = var$1$hi;
-  i64toi32_i
+  i64toi32_i32$0 = var$0$hi;
+  i64toi32_i32$1 = var$1$hi;
+  i64toi32_i32$1 = _ZN17compiler_builtins3int3mul3Mul3mul17h070e9a1c69faec5bE(var$0 | 0, i64toi32_i32$0 | 0, var$1 | 0, i64toi32_i32$1 | 0) | 0;
+  i64toi32_i32$0 = i64toi32_i32$HIGH_BITS;
+  i64toi32_i32$HIGH_BITS = i64toi32_i32$0;
+  return i64toi32_i32$1 | 0;
+ }
+ 
+ function __wasm_i64_sdiv(var$0, var$0$hi, var$1, var$1$hi) {
+  var$0 = var$0 | 0;
+  var$0$hi = var$0$hi | 0;
+  var$1 = var$1 | 0;
+  var$1$hi = var$1$hi | 0;
+  var i64toi32_i32$0 = 0, i64toi32_i32$1 = 0;
+  i64toi32_i32$0 = var$0$hi;
+  i64toi32_i32$0 = var$1$hi;
+  i64toi32_i32$0 = var$0$hi;
+  i64toi32_i32$1 = var$1$hi;
+  i64toi32_i32$1 = _ZN17compiler_builtins3int4sdiv3Div3div17he78fc483e41d7ec7E(var$0 | 0, i64toi32_i32$0 | 0, var$1 | 0, i64toi32_i32$1 | 0) | 0;
+  i64toi32_i32$0 = i64toi32_i32$HIGH_BITS;
+  i64toi32_i32$HIGH_BITS = i64toi32_i32$0;
+  return i64toi32_i32$1 | 0;
+ }
+ 
+ function __wasm_i64_srem(var$0, var$0$hi, var$1, var$1$hi) {
+  var$0 = var$0 | 0;
+  var$0$hi = var$0$hi | 0;
+  var$1 = var$1 | 0;
+  var$1$hi = var$1$hi | 0;
+  var i64toi32_i32$0 = 0, i64toi32_i32$1 = 0;
+  i64toi32_i32$0 = var$0$hi;
+  i64toi32_i32$0 = var$1$hi;
+  i64toi32_i32$0 = var$0$hi;
+  i64toi32_i32$1 = var$1$hi;
+  i64toi32_i32$1 = _ZN17compiler_builtins3int4sdiv3Mod4mod_17h2cbb7bbf36e41d68E(var$0 | 0, i64toi32_i32$0 | 0, var$1 | 0, i64toi32_i32$1 | 0) | 0;
+  i64toi32_i32$0 = i64toi32_i32$HIGH_BITS;
+  i64toi32_i32$HIGH_BITS = i64toi32_i32$0;
+  return i64toi32_i32$1 | 0;
+ }
+ 
+ function __wasm_i64_udiv(var$0, var$0$hi, var$1, var$1$hi) {
+  var$0 = var$0 | 0;
+  var$0$hi = var$0$hi | 0;
+  var$1 = var$1 | 0;
+  var$1$hi = var$1$hi | 0;
+  var i64toi32_i32$0 = 0, i64toi32_i32$1 = 0;
+  i64toi32_i32$0 = var$0$hi;
+  i64toi32_i32$0 = var$1$hi;
+  i64toi32_i32$0 = var$0$hi;
+  i64toi32_i32$1 = var$1$hi;
+  i64toi32_i32$1 = _ZN17compiler_builtins3int4udiv10divmod_u6417h6026910b5ed08e40E(var$0 | 0, i64toi32_i32$0 | 0, var$1 | 0, i64toi32_i32$1 | 0) | 0;
+  i64toi32_i32$0 = i64toi32_i32$HIGH_BITS;
+  i64toi32_i32$HIGH_BITS = i64toi32_i32$0;
+  return i64toi32_i32$1 | 0;
+ }
+ 
+ function __wasm_i64_urem(var$0, var$0$hi, var$1, var$1$hi) {
+  var$0 = var$0 | 0;
+  var$0$hi = var$0$hi | 0;
+  var$1 = var$1 | 0;
+  var$1$hi = var$1$hi | 0;
+  var i64toi32_i32$0 = 0, i64toi32_i32$1 = 0;
+  i64toi32_i32$0 = var$0$hi;
+  i64toi32_i32$0 = var$1$hi;
+  i64toi32_i32$0 = var$0$hi;
+  i64toi32_i32$1 = var$1$hi;
+  i64toi32_i32$1 = _ZN17compiler_builtins3int4udiv10divmod_u6417h6026910b5ed08e40E(var$0 | 0, i64toi32_i32$0 | 0, var$1 | 0, i64toi32_i32$1 | 0) | 0;
+  i64toi32_i32$0 = i64toi32_i32$HIGH_BITS;
+  i64toi32_i32$0 = __wasm_intrinsics_temp_i64$hi;
+  i64toi32_i32$1 = __wasm_intrinsics_temp_i64;
+  i64toi32_i32$HIGH_BITS = i64toi32_i32$0;
+  return i64toi32_i32$1 | 0;
+ }
+ 
+ function __wasm_ctz_i32(var$0) {
+  var$0 = var$0 | 0;
+  if (var$0) {
+   return 31 - Math_clz32((var$0 + -1 | 0) ^ var$0 | 0) | 0 | 0
+  }
+  return 32 | 0;
+ }
+ 
+ bufferView = HEAPU8;
+ var FUNCTION_TABLE = [i32_t0, i32_t1, i64_t0, i64_t1, f32_t0, f32_t1, f64_t0, f64_t1];
+ function __wasm_memory_size() {
+  return buffer.byteLength / 65536 | 0;
+ }
+ 
+ function __wasm_memory_grow(pagesToAdd) {
+  pagesToAdd = pagesToAdd | 0;
+  var oldPages = __wasm_memory_size() | 0;
+  var newPages = oldPages + pagesToAdd | 0;
+  if ((oldPages < newPages) && (newPages < 65536)) {
+   var newBuffer = new ArrayBuffer(Math_imul(newPages, 65536));
+   var newHEAP8 = new Int8Array(newBuffer);
+   newHEAP8.set(HEAP8);
+   HEAP8 = new Int8Array(newBuffer);
+   HEAP16 = new Int16Array(newBuffer);
+   HEAP32 = new Int32Array(newBuffer);
+   HEAPU8 = new Uint8Array(newBuffer);
+   HEAPU16 = new Uint16Array(newBuffer);
+   HEAPU32 = new Uint32Array(newBuffer);
+   HEAPF32 = new Float32Array(newBuffer);
+   HEAPF64 = new Float64Array(newBuffer);
+   buffer = newBuffer;
+   bufferView = HEAPU8;
+  }
+  return oldPages;
+ }
+ 
+ return {
+  "i32_add": $35, 
+  "i32_sub": $36, 
+  "i32_mul": $37, 
+  "i32_div_s": $38, 
+  "i32_div_u": $39, 
+  "i32_rem_s": $40, 
+  "i32_rem_u": $41, 
+  "i32_and": $42, 
+  "i32_or": $43, 
+  "i32_xor": $44, 
+  "i32_shl": $45, 
+  "i32_shr_u": $46, 
+  "i32_shr_s": $47, 
+  "i32_eq": $48, 
+  "i32_ne": $49, 
+  "i32_lt_s": $50, 
+  "i32_le_s": $51, 
+  "i32_lt_u": $52, 
+  "i32_le_u": $53, 
+  "i32_gt_s": $54, 
+  "i32_ge_s": $55, 
+  "i32_gt_u": $56, 
+  "i32_ge_u": $57, 
+  "i32_store": $58, 
+  "i32_store8": $59, 
+  "i32_store16": $60, 
+  "i32_call": $61, 
+  "i32_call_indirect": $62, 
+  "i32_select": $63, 
+  "i64_add": $64, 
+  "i64_sub": $65, 
+  "i64_mul": $66, 
+  "i64_div_s": $67, 
+  "i64_div_u": $68, 
+  "i64_rem_s": $69, 
+  "i64_rem_u": $70, 
+  "i64_and": $71, 
+  "i64_or": $72, 
+  "i64_xor": $73, 
+  "i64_shl": $74, 
+  "i64_shr_u": $75, 
+  "i64_shr_s": $76, 
+  "i64_eq": $77, 
+  "i64_ne": $78, 
+  "i64_lt_s": $79, 
+  "i64_le_s": $80, 
+  "i64_lt_u": $81, 
+  "i64_le_u": $82, 
+  "i64_gt_s": $83, 
+  "i64_ge_s": $84, 
+  "i64_gt_u": $85, 
+  "i64_ge_u": $86, 
+  "i64_store": $87, 
+  "i64_store8": $88, 
+  "i64_store16": $89, 
+  "i64_store32": $90, 
+  "i64_call": $91, 
+  "i64_call_indirect": $92, 
+  "i64_select": $93, 
+  "f32_add": $94, 
+  "f32_sub": $95, 
+  "f32_mul": $96, 
+  "f32_div": $97, 
+  "f32_copysign": $98, 
+  "f32_eq": $99, 
+  "f32_ne": $100, 
+  "f32_lt": $101, 
+  "f32_le": $102, 
+  "f32_gt": $103, 
+  "f32_ge": $104, 
+  "f32_min": $105, 
+  "f32_max": $106, 
+  "f32_store": $107, 
+  "f32_call": $108, 
+  "f32_call_indirect": $109, 
+  "f32_select": $110, 
+  "f64_add": $111, 
+  "f64_sub": $112, 
+  "f64_mul": $113, 
+  "f64_div": $114, 
+  "f64_copysign": $115, 
+  "f64_eq": $116, 
+  "f64_ne": $117, 
+  "f64_lt": $118, 
+  "f64_le": $119, 
+  "f64_gt": $120, 
+  "f64_ge": $121, 
+  "f64_min": $122, 
+  "f64_max": $123, 
+  "f64_store": $124, 
+  "f64_call": $125, 
+  "f64_call_indirect": $126, 
+  "f64_select": $127, 
+  "br_if": $128, 
+  "br_table": $129
+ };
+}
+
+var retasmFunc = asmFunc({
+});
+export var i32_add = retasmFunc.i32_add;
+export var i32_sub = retasmFunc.i32_sub;
+export var i32_mul = retasmFunc.i32_mul;
+export var i32_div_s = retasmFunc.i32_div_s;
+export var i32_div_u = retasmFunc.i32_div_u;
+export var i32_rem_s = retasmFunc.i32_rem_s;
+export var i32_rem_u = retasmFunc.i32_rem_u;
+export var i32_and = retasmFunc.i32_and;
+export var i32_or = retasmFunc.i32_or;
+export var i32_xor = retasmFunc.i32_xor;
+export var i32_shl = retasmFunc.i32_shl;
+export var i32_shr_u = retasmFunc.i32_shr_u;
+export var i32_shr_s = retasmFunc.i32_shr_s;
+export var i32_eq = retasmFunc.i32_eq;
+export var i32_ne = retasmFunc.i32_ne;
+export var i32_lt_s = retasmFunc.i32_lt_s;
+export var i32_le_s = retasmFunc.i32_le_s;
+export var i32_lt_u = retasmFunc.i32_lt_u;
+export var i32_le_u = retasmFunc.i32_le_u;
+export var i32_gt_s = retasmFunc.i32_gt_s;
+export var i32_ge_s = retasmFunc.i32_ge_s;
+export var i32_gt_u = retasmFunc.i32_gt_u;
+export var i32_ge_u = retasmFunc.i32_ge_u;
+export var i32_store = retasmFunc.i32_store;
+export var i32_store8 = retasmFunc.i32_store8;
+export var i32_store16 = retasmFunc.i32_store16;
+export var i32_call = retasmFunc.i32_call;
+export var i32_call_indirect = retasmFunc.i32_call_indirect;
+export var i32_select = retasmFunc.i32_select;
+export var i64_add = retasmFunc.i64_add;
+export var i64_sub = retasmFunc.i64_sub;
+export var i64_mul = retasmFunc.i64_mul;
+export var i64_div_s = retasmFunc.i64_div_s;
+export var i64_div_u = retasmFunc.i64_div_u;
+export var i64_rem_s = retasmFunc.i64_rem_s;
+export var i64_rem_u = retasmFunc.i64_rem_u;
+export var i64_and = retasmFunc.i64_and;
+export var i64_or = retasmFunc.i64_or;
+export var i64_xor = retasmFunc.i64_xor;
+export var i64_shl = retasmFunc.i64_shl;
+export var i64_shr_u = retasmFunc.i64_shr_u;
+export var i64_shr_s = retasmFunc.i64_shr_s;
+export var i64_eq = retasmFunc.i64_eq;
+export var i64_ne = retasmFunc.i64_ne;
+export var i64_lt_s = retasmFunc.i64_lt_s;
+export var i64_le_s = retasmFunc.i64_le_s;
+export var i64_lt_u = retasmFunc.i64_lt_u;
+export var i64_le_u = retasmFunc.i64_le_u;
+export var i64_gt_s = retasmFunc.i64_gt_s;
+export var i64_ge_s = retasmFunc.i64_ge_s;
+export var i64_gt_u = retasmFunc.i64_gt_u;
+export var i64_ge_u = retasmFunc.i64_ge_u;
+export var i64_store = retasmFunc.i64_store;
+export var i64_store8 = retasmFunc.i64_store8;
+export var i64_store16 = retasmFunc.i64_store16;
+export var i64_store32 = retasmFunc.i64_store32;
+export var i64_call = retasmFunc.i64_call;
+export var i64_call_indirect = retasmFunc.i64_call_indirect;
+export var i64_select = retasmFunc.i64_select;
+export var f32_add = retasmFunc.f32_add;
+export var f32_sub = retasmFunc.f32_sub;
+export var f32_mul = retasmFunc.f32_mul;
+export var f32_div = retasmFunc.f32_div;
+export var f32_copysign = retasmFunc.f32_copysign;
+export var f32_eq = retasmFunc.f32_eq;
+export var f32_ne = retasmFunc.f32_ne;
+export var f32_lt = retasmFunc.f32_lt;
+export var f32_le = retasmFunc.f32_le;
+export var f32_gt = retasmFunc.f32_gt;
+export var f32_ge = retasmFunc.f32_ge;
+export var f32_min = retasmFunc.f32_min;
+export var f32_max = retasmFunc.f32_max;
+export var f32_store = retasmFunc.f32_store;
+export var f32_call = retasmFunc.f32_call;
+export var f32_call_indirect = retasmFunc.f32_call_indirect;
+export var f32_select = retasmFunc.f32_select;
+export var f64_add = retasmFunc.f64_add;
+export var f64_sub = retasmFunc.f64_sub;
+export var f64_mul = retasmFunc.f64_mul;
+export var f64_div = retasmFunc.f64_div;
+export var f64_copysign = retasmFunc.f64_copysign;
+export var f64_eq = retasmFunc.f64_eq;
+export var f64_ne = retasmFunc.f64_ne;
+export var f64_lt = retasmFunc.f64_lt;
+export var f64_le = retasmFunc.f64_le;
+export var f64_gt = retasmFunc.f64_gt;
+export var f64_ge = retasmFunc.f64_ge;
+export var f64_min = retasmFunc.f64_min;
+export var f64_max = retasmFunc.f64_max;
+export var f64_store = retasmFunc.f64_store;
+export var f64_call = retasmFunc.f64_call;
+export var f64_call_indirect = retasmFunc.f64_call_indirect;
+export var f64_select = retasmFunc.f64_select;
+export var br_if = retasmFunc.br_if;
+export var br_table = retasmFunc.br_table;
