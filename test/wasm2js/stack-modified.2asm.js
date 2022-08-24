@@ -532,4 +532,40 @@ function asmFunc(imports) {
   i64toi32_i32$3 = var$2 << 16 | 0 | (var$6 & 65535 | 0) | 0;
   i64toi32_i32$1 = i64toi32_i32$0 | i64toi32_i32$1 | 0;
   i64toi32_i32$2 = i64toi32_i32$2 | i64toi32_i32$3 | 0;
-  i64toi32_i32$HIGH_BITS = i
+  i64toi32_i32$HIGH_BITS = i64toi32_i32$1;
+  return i64toi32_i32$2 | 0;
+ }
+ 
+ function __wasm_i64_mul(var$0, var$0$hi, var$1, var$1$hi) {
+  var$0 = var$0 | 0;
+  var$0$hi = var$0$hi | 0;
+  var$1 = var$1 | 0;
+  var$1$hi = var$1$hi | 0;
+  var i64toi32_i32$0 = 0, i64toi32_i32$1 = 0;
+  i64toi32_i32$0 = var$0$hi;
+  i64toi32_i32$0 = var$1$hi;
+  i64toi32_i32$0 = var$0$hi;
+  i64toi32_i32$1 = var$1$hi;
+  i64toi32_i32$1 = _ZN17compiler_builtins3int3mul3Mul3mul17h070e9a1c69faec5bE(var$0 | 0, i64toi32_i32$0 | 0, var$1 | 0, i64toi32_i32$1 | 0) | 0;
+  i64toi32_i32$0 = i64toi32_i32$HIGH_BITS;
+  i64toi32_i32$HIGH_BITS = i64toi32_i32$0;
+  return i64toi32_i32$1 | 0;
+ }
+ 
+ return {
+  "fac_expr": legalstub$0, 
+  "fac_stack": legalstub$1, 
+  "fac_stack_raw": legalstub$2, 
+  "fac_mixed": legalstub$3, 
+  "fac_mixed_raw": legalstub$4
+ };
+}
+
+var retasmFunc = asmFunc({
+  "env": env,
+});
+export var fac_expr = retasmFunc.fac_expr;
+export var fac_stack = retasmFunc.fac_stack;
+export var fac_stack_raw = retasmFunc.fac_stack_raw;
+export var fac_mixed = retasmFunc.fac_mixed;
+export var fac_mixed_raw = retasmFunc.fac_mixed_raw;
