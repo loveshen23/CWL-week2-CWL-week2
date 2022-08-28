@@ -97,4 +97,49 @@
 (assert_return (invoke "i32.clz" (i32.const 0x7fffffff)) (i32.const 1))
 (assert_return (invoke "i32.clz" (i32.const 0xffffffff)) (i32.const 0))
 
-(assert_return (invoke "i32.ctz" (i32.con
+(assert_return (invoke "i32.ctz" (i32.const 0)) (i32.const 32))
+(assert_return (invoke "i32.ctz" (i32.const 1)) (i32.const 0))
+(assert_return (invoke "i32.ctz" (i32.const 0xfffffffe)) (i32.const 1))
+(assert_return (invoke "i32.ctz" (i32.const 0x80000000)) (i32.const 31))
+
+(assert_return (invoke "check_clz_i64"
+                       (i32.const 0) (i32.const 0)
+                       (i32.const 64) (i32.const 0))
+               (i32.const 1))
+(assert_return (invoke "check_clz_i64"
+                       (i32.const 1) (i32.const 0)
+                       (i32.const 63) (i32.const 0))
+               (i32.const 1))
+(assert_return (invoke "check_clz_i64"
+                       (i32.const 0x80000000) (i32.const 0)
+                       (i32.const 32) (i32.const 0))
+               (i32.const 1))
+(assert_return (invoke "check_clz_i64"
+                       (i32.const 0) (i32.const 1)
+                       (i32.const 31) (i32.const 0))
+               (i32.const 1))
+(assert_return (invoke "check_clz_i64"
+                       (i32.const 0) (i32.const 0x80000000)
+                       (i32.const 0) (i32.const 0))
+               (i32.const 1))
+
+(assert_return (invoke "check_ctz_i64"
+                       (i32.const 0) (i32.const 0)
+                       (i32.const 64) (i32.const 0))
+               (i32.const 1))
+(assert_return (invoke "check_ctz_i64"
+                       (i32.const 0) (i32.const 0x80000000)
+                       (i32.const 63) (i32.const 0))
+               (i32.const 1))
+(assert_return (invoke "check_ctz_i64"
+                       (i32.const 0) (i32.const 1)
+                       (i32.const 32) (i32.const 0))
+               (i32.const 1))
+(assert_return (invoke "check_ctz_i64"
+                       (i32.const 0x80000000) (i32.const 0)
+                       (i32.const 31) (i32.const 0))
+               (i32.const 1))
+(assert_return (invoke "check_ctz_i64"
+                       (i32.const 1) (i32.const 0)
+                       (i32.const 0) (i32.const 0))
+               (i32.const 1))
