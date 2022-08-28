@@ -176,3 +176,8 @@ uint32_t DWARFDebugAddrTable::getLength() const {
 
 uint32_t DWARFDebugAddrTable::getDataSize() const {
   if (DataSize != 0)
+    return DataSize;
+  if (getLength() == 0)
+    return 0;
+  return getLength() - getHeaderSize();
+}
