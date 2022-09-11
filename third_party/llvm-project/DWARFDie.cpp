@@ -577,4 +577,171 @@ void DWARFDie::dump(raw_ostream &OS, unsigned Indent,
   const uint64_t Offset = getOffset();
   uint64_t offset = Offset;
   if (DumpOpts.ShowParents) {
-    DIDumpOptions Pa
+    DIDumpOptions ParentDumpOpts = DumpOpts;
+    ParentDumpOpts.ShowParents = false;
+    ParentDumpOpts.ShowChildren = false;
+    Indent = dumpParentChain(getParent(), OS, Indent, ParentDumpOpts);
+  }
+
+  if (debug_info_data.isValidOffset(offset)) {
+    uint32_t abbrCode = debug_info_data.getULEB128(&offset);
+    if (DumpOpts.ShowAddresses)
+      WithColor(OS, HighlightColor::Address).get()
+          << format("\n0x%8.8" PRIx64 ": ", Offset);
+
+    if (abbrCode) {
+      auto AbbrevDecl = getAbbreviationDeclarationPtr();
+      if (AbbrevDecl) {
+        WithColor(OS, HighlightColor::Tag).get().indent(Indent)
+            << formatv("{0}", getTag());
+        if (DumpOpts.Verbose)
+          OS << format(" [%u] %c", abbrCode,
+                       AbbrevDecl->hasChildren() ? '*' : ' ');
+        OS << '\n';
+
+        // Dump all data in the DIE for the attributes.
+        for (const auto &AttrSpec : AbbrevDecl->attributes()) {
+          if (AttrSpec.Form == DW_FORM_implicit_const) {
+            // We are dumping .debug_info section ,
+            // implicit_const attribute values are not really stored here,
+            // but in .debug_abbrev section. So we just skip such attrs.
+            continue;
+          }
+          dumpAttribute(OS, *this, &offset, AttrSpec.Attr, AttrSpec.Form,
+                        Indent, DumpOpts);
+        }
+
+        DWARFDie child = getFirstChild();
+        if (DumpOpts.ShowChildren && DumpOpts.ChildRecurseDepth > 0 && child) {
+          DumpOpts.ChildRecurseDepth--;
+          DIDumpOptions ChildDumpOpts = DumpOpts;
+          ChildDumpOpts.ShowParents = false;
+          while (child) {
+            child.dump(OS, Indent + 2, ChildDumpOpts);
+            child = child.getSibling();
+          }
+        }
+      } else {
+        OS << "Abbreviation code not found in 'debug_abbrev' class for code: "
+           << abbrCode << '\n';
+      }
+    } else {
+      OS.indent(Indent) << "NULL\n";
+    }
+  }
+}
+
+LLVM_DUMP_METHOD void DWARFDie::dump() const { dump(llvm::errs(), 0); }
+
+DWARFDie DWARFDie::getParent() const {
+  if (isValid())
+    return U->getParent(Die);
+  return DWARFDie();
+}
+
+DWARFDie DWARFDie::getSibling() const {
+  if (isValid())
+    return U->getSibling(Die);
+  return DWARFDie();
+}
+
+DWARFDie DWARFDie::getPreviousSibling() const {
+  if (isValid())
+    return U->getPreviousSibling(Die);
+  return DWARFDie();
+}
+
+DWARFDie DWARFDie::getFirstChild() const {
+  if (isValid())
+    return U->getFirstChild(Die);
+  return DWARFDie();
+}
+
+DWARFDie DWARFDie::getLastChild() const {
+  if (isValid())
+    return U->getLastChild(Die);
+  return DWARFDie();
+}
+
+iterator_range<DWARFDie::attribute_iterator> DWARFDie::attributes() const {
+  return make_range(attribute_iterator(*this, false),
+                    attribute_iterator(*this, true));
+}
+
+DWARFDie::attribute_iterator::attribute_iterator(DWARFDie D, bool End)
+    : Die(D), Index(0) {
+  auto AbbrDecl = Die.getAbbreviationDeclarationPtr();
+  assert(AbbrDecl && "Must have abbreviation declaration");
+  if (End) {
+    // This is the end iterator so we set the index to the attribute count.
+    Index = AbbrDecl->getNumAttributes();
+  } else {
+    // This is the begin iterator so we extract the value for this->Index.
+    AttrValue.Offset = D.getOffset() + AbbrDecl->getCodeByteSize();
+    updateForIndex(*AbbrDecl, 0);
+  }
+}
+
+void DWARFDie::attribute_iterator::updateForIndex(
+    const DWARFAbbreviationDeclaration &AbbrDecl, uint32_t I) {
+  Index = I;
+  // AbbrDecl must be valid before calling this function.
+  auto NumAttrs = AbbrDecl.getNumAttributes();
+  if (Index < NumAttrs) {
+    AttrValue.Attr = AbbrDecl.getAttrByIndex(Index);
+    // Add the previous byte size of any previous attribute value.
+    AttrValue.Offset += AttrValue.ByteSize;
+    uint64_t ParseOffset = AttrValue.Offset;
+    auto U = Die.getDwarfUnit();
+    assert(U && "Die must have valid DWARF unit");
+    AttrValue.Value = DWARFFormValue::createFromUnit(
+        AbbrDecl.getFormByIndex(Index), U, &ParseOffset);
+    AttrValue.ByteSize = ParseOffset - AttrValue.Offset;
+  } else {
+    assert(Index == NumAttrs && "Indexes should be [0, NumAttrs) only");
+    AttrValue = {};
+  }
+}
+
+DWARFDie::attribute_iterator &DWARFDie::attribute_iterator::operator++() {
+  if (auto AbbrDecl = Die.getAbbreviationDeclarationPtr())
+    updateForIndex(*AbbrDecl, Index + 1);
+  return *this;
+}
+
+bool DWARFAttribute::mayHaveLocationDescription(dwarf::Attribute Attr) {
+  switch (Attr) {
+  // From the DWARF v5 specification.
+  case DW_AT_location:
+  case DW_AT_byte_size:
+  case DW_AT_bit_size:
+  case DW_AT_string_length:
+  case DW_AT_lower_bound:
+  case DW_AT_return_addr:
+  case DW_AT_bit_stride:
+  case DW_AT_upper_bound:
+  case DW_AT_count:
+  case DW_AT_data_member_location:
+  case DW_AT_frame_base:
+  case DW_AT_segment:
+  case DW_AT_static_link:
+  case DW_AT_use_location:
+  case DW_AT_vtable_elem_location:
+  case DW_AT_allocated:
+  case DW_AT_associated:
+  case DW_AT_byte_stride:
+  case DW_AT_rank:
+  case DW_AT_call_value:
+  case DW_AT_call_origin:
+  case DW_AT_call_target:
+  case DW_AT_call_target_clobbered:
+  case DW_AT_call_data_location:
+  case DW_AT_call_data_value:
+  // Extensions.
+  case DW_AT_GNU_call_site_value:
+  case DW_AT_GNU_call_site_target:
+    return true;
+  default:
+    return false;
+  }
+}
