@@ -436,4 +436,398 @@ void replace_extension(SmallVectorImpl<char> &path, const Twine &extension,
                        Style style) {
   StringRef p(path.begin(), path.size());
   SmallString<32> ext_storage;
-  StringRef ext
+  StringRef ext = extension.toStringRef(ext_storage);
+
+  // Erase existing extension.
+  size_t pos = p.find_last_of('.');
+  if (pos != StringRef::npos && pos >= filename_pos(p, style))
+    path.set_size(pos);
+
+  // Append '.' if needed.
+  if (ext.size() > 0 && ext[0] != '.')
+    path.push_back('.');
+
+  // Append extension.
+  path.append(ext.begin(), ext.end());
+}
+
+void replace_path_prefix(SmallVectorImpl<char> &Path,
+                         const StringRef &OldPrefix, const StringRef &NewPrefix,
+                         Style style) {
+  if (OldPrefix.empty() && NewPrefix.empty())
+    return;
+
+  StringRef OrigPath(Path.begin(), Path.size());
+  if (!OrigPath.startswith(OldPrefix))
+    return;
+
+  // If prefixes have the same size we can simply copy the new one over.
+  if (OldPrefix.size() == NewPrefix.size()) {
+    llvm::copy(NewPrefix, Path.begin());
+    return;
+  }
+
+  StringRef RelPath = OrigPath.substr(OldPrefix.size());
+  SmallString<256> NewPath;
+  path::append(NewPath, style, NewPrefix);
+  path::append(NewPath, style, RelPath);
+  Path.swap(NewPath);
+}
+
+void native(const Twine &path, SmallVectorImpl<char> &result, Style style) {
+  assert((!path.isSingleStringRef() ||
+          path.getSingleStringRef().data() != result.data()) &&
+         "path and result are not allowed to overlap!");
+  // Clear result.
+  result.clear();
+  path.toVector(result);
+  native(result, style);
+}
+
+void native(SmallVectorImpl<char> &Path, Style style) {
+  if (Path.empty())
+    return;
+  if (real_style(style) == Style::windows) {
+    std::replace(Path.begin(), Path.end(), '/', '\\');
+    if (Path[0] == '~' && (Path.size() == 1 || is_separator(Path[1], style))) {
+      llvm_unreachable("BINARYEN native");
+#if 0
+      SmallString<128> PathHome;
+      home_directory(PathHome);
+      PathHome.append(Path.begin() + 1, Path.end());
+      Path = PathHome;
+#endif
+    }
+  } else {
+    for (auto PI = Path.begin(), PE = Path.end(); PI < PE; ++PI) {
+      if (*PI == '\\') {
+        auto PN = PI + 1;
+        if (PN < PE && *PN == '\\')
+          ++PI; // increment once, the for loop will move over the escaped slash
+        else
+          *PI = '/';
+      }
+    }
+  }
+}
+
+std::string convert_to_slash(StringRef path, Style style) {
+  if (real_style(style) != Style::windows)
+    return path;
+
+  std::string s = path.str();
+  std::replace(s.begin(), s.end(), '\\', '/');
+  return s;
+}
+
+StringRef filename(StringRef path, Style style) { return *rbegin(path, style); }
+
+StringRef stem(StringRef path, Style style) {
+  StringRef fname = filename(path, style);
+  size_t pos = fname.find_last_of('.');
+  if (pos == StringRef::npos)
+    return fname;
+  else
+    if ((fname.size() == 1 && fname == ".") ||
+        (fname.size() == 2 && fname == ".."))
+      return fname;
+    else
+      return fname.substr(0, pos);
+}
+
+StringRef extension(StringRef path, Style style) {
+  StringRef fname = filename(path, style);
+  size_t pos = fname.find_last_of('.');
+  if (pos == StringRef::npos)
+    return StringRef();
+  else
+    if ((fname.size() == 1 && fname == ".") ||
+        (fname.size() == 2 && fname == ".."))
+      return StringRef();
+    else
+      return fname.substr(pos);
+}
+
+bool is_separator(char value, Style style) {
+  if (value == '/')
+    return true;
+  if (real_style(style) == Style::windows)
+    return value == '\\';
+  return false;
+}
+
+StringRef get_separator(Style style) {
+  if (real_style(style) == Style::windows)
+    return "\\";
+  return "/";
+}
+
+bool has_root_name(const Twine &path, Style style) {
+  SmallString<128> path_storage;
+  StringRef p = path.toStringRef(path_storage);
+
+  return !root_name(p, style).empty();
+}
+
+bool has_root_directory(const Twine &path, Style style) {
+  SmallString<128> path_storage;
+  StringRef p = path.toStringRef(path_storage);
+
+  return !root_directory(p, style).empty();
+}
+
+bool has_root_path(const Twine &path, Style style) {
+  SmallString<128> path_storage;
+  StringRef p = path.toStringRef(path_storage);
+
+  return !root_path(p, style).empty();
+}
+
+bool has_relative_path(const Twine &path, Style style) {
+  SmallString<128> path_storage;
+  StringRef p = path.toStringRef(path_storage);
+
+  return !relative_path(p, style).empty();
+}
+
+bool has_filename(const Twine &path, Style style) {
+  SmallString<128> path_storage;
+  StringRef p = path.toStringRef(path_storage);
+
+  return !filename(p, style).empty();
+}
+
+bool has_parent_path(const Twine &path, Style style) {
+  SmallString<128> path_storage;
+  StringRef p = path.toStringRef(path_storage);
+
+  return !parent_path(p, style).empty();
+}
+
+bool has_stem(const Twine &path, Style style) {
+  SmallString<128> path_storage;
+  StringRef p = path.toStringRef(path_storage);
+
+  return !stem(p, style).empty();
+}
+
+bool has_extension(const Twine &path, Style style) {
+  SmallString<128> path_storage;
+  StringRef p = path.toStringRef(path_storage);
+
+  return !extension(p, style).empty();
+}
+
+bool is_absolute(const Twine &path, Style style) {
+  SmallString<128> path_storage;
+  StringRef p = path.toStringRef(path_storage);
+
+  bool rootDir = has_root_directory(p, style);
+  bool rootName =
+      (real_style(style) != Style::windows) || has_root_name(p, style);
+
+  return rootDir && rootName;
+}
+
+bool is_relative(const Twine &path, Style style) {
+  return !is_absolute(path, style);
+}
+
+StringRef remove_leading_dotslash(StringRef Path, Style style) {
+  // Remove leading "./" (or ".//" or "././" etc.)
+  while (Path.size() > 2 && Path[0] == '.' && is_separator(Path[1], style)) {
+    Path = Path.substr(2);
+    while (Path.size() > 0 && is_separator(Path[0], style))
+      Path = Path.substr(1);
+  }
+  return Path;
+}
+
+static SmallString<256> remove_dots(StringRef path, bool remove_dot_dot,
+                                    Style style) {
+  SmallVector<StringRef, 16> components;
+
+  // Skip the root path, then look for traversal in the components.
+  StringRef rel = path::relative_path(path, style);
+  for (StringRef C :
+       llvm::make_range(path::begin(rel, style), path::end(rel))) {
+    if (C == ".")
+      continue;
+    // Leading ".." will remain in the path unless it's at the root.
+    if (remove_dot_dot && C == "..") {
+      if (!components.empty() && components.back() != "..") {
+        components.pop_back();
+        continue;
+      }
+      if (path::is_absolute(path, style))
+        continue;
+    }
+    components.push_back(C);
+  }
+
+  SmallString<256> buffer = path::root_path(path, style);
+  for (StringRef C : components)
+    path::append(buffer, style, C);
+  return buffer;
+}
+
+bool remove_dots(SmallVectorImpl<char> &path, bool remove_dot_dot,
+                 Style style) {
+  StringRef p(path.data(), path.size());
+
+  SmallString<256> result = remove_dots(p, remove_dot_dot, style);
+  if (result == path)
+    return false;
+
+  path.swap(result);
+  return true;
+}
+
+} // end namespace path
+
+#if 0 // XXX BINARYEN
+
+namespace fs {
+
+std::error_code getUniqueID(const Twine Path, UniqueID &Result) {
+  file_status Status;
+  std::error_code EC = status(Path, Status);
+  if (EC)
+    return EC;
+  Result = Status.getUniqueID();
+  return std::error_code();
+}
+
+void createUniquePath(const Twine &Model, SmallVectorImpl<char> &ResultPath,
+                      bool MakeAbsolute) {
+  SmallString<128> ModelStorage;
+  Model.toVector(ModelStorage);
+
+  if (MakeAbsolute) {
+    // Make model absolute by prepending a temp directory if it's not already.
+    if (!sys::path::is_absolute(Twine(ModelStorage))) {
+      SmallString<128> TDir;
+      sys::path::system_temp_directory(true, TDir);
+      sys::path::append(TDir, Twine(ModelStorage));
+      ModelStorage.swap(TDir);
+    }
+  }
+
+  ResultPath = ModelStorage;
+  ResultPath.push_back(0);
+  ResultPath.pop_back();
+
+  // Replace '%' with random chars.
+  for (unsigned i = 0, e = ModelStorage.size(); i != e; ++i) {
+    if (ModelStorage[i] == '%')
+      ResultPath[i] = "0123456789abcdef"[sys::Process::GetRandomNumber() & 15];
+  }
+}
+
+std::error_code createUniqueFile(const Twine &Model, int &ResultFd,
+                                 SmallVectorImpl<char> &ResultPath,
+                                 unsigned Mode) {
+  return createUniqueEntity(Model, ResultFd, ResultPath, false, Mode, FS_File);
+}
+
+static std::error_code createUniqueFile(const Twine &Model, int &ResultFd,
+                                        SmallVectorImpl<char> &ResultPath,
+                                        unsigned Mode, OpenFlags Flags) {
+  return createUniqueEntity(Model, ResultFd, ResultPath, false, Mode, FS_File,
+                            Flags);
+}
+
+std::error_code createUniqueFile(const Twine &Model,
+                                 SmallVectorImpl<char> &ResultPath,
+                                 unsigned Mode) {
+  int FD;
+  auto EC = createUniqueFile(Model, FD, ResultPath, Mode);
+  if (EC)
+    return EC;
+  // FD is only needed to avoid race conditions. Close it right away.
+  close(FD);
+  return EC;
+}
+
+static std::error_code
+createTemporaryFile(const Twine &Model, int &ResultFD,
+                    llvm::SmallVectorImpl<char> &ResultPath, FSEntity Type) {
+  SmallString<128> Storage;
+  StringRef P = Model.toNullTerminatedStringRef(Storage);
+  assert(P.find_first_of(separators(Style::native)) == StringRef::npos &&
+         "Model must be a simple filename.");
+  // Use P.begin() so that createUniqueEntity doesn't need to recreate Storage.
+  return createUniqueEntity(P.begin(), ResultFD, ResultPath, true,
+                            owner_read | owner_write, Type);
+}
+
+static std::error_code
+createTemporaryFile(const Twine &Prefix, StringRef Suffix, int &ResultFD,
+                    llvm::SmallVectorImpl<char> &ResultPath, FSEntity Type) {
+  const char *Middle = Suffix.empty() ? "-%%%%%%" : "-%%%%%%.";
+  return createTemporaryFile(Prefix + Middle + Suffix, ResultFD, ResultPath,
+                             Type);
+}
+
+std::error_code createTemporaryFile(const Twine &Prefix, StringRef Suffix,
+                                    int &ResultFD,
+                                    SmallVectorImpl<char> &ResultPath) {
+  return createTemporaryFile(Prefix, Suffix, ResultFD, ResultPath, FS_File);
+}
+
+std::error_code createTemporaryFile(const Twine &Prefix, StringRef Suffix,
+                                    SmallVectorImpl<char> &ResultPath) {
+  int FD;
+  auto EC = createTemporaryFile(Prefix, Suffix, FD, ResultPath);
+  if (EC)
+    return EC;
+  // FD is only needed to avoid race conditions. Close it right away.
+  close(FD);
+  return EC;
+}
+
+
+// This is a mkdtemp with a different pattern. We use createUniqueEntity mostly
+// for consistency. We should try using mkdtemp.
+std::error_code createUniqueDirectory(const Twine &Prefix,
+                                      SmallVectorImpl<char> &ResultPath) {
+  int Dummy;
+  return createUniqueEntity(Prefix + "-%%%%%%", Dummy, ResultPath, true, 0,
+                            FS_Dir);
+}
+
+std::error_code
+getPotentiallyUniqueFileName(const Twine &Model,
+                             SmallVectorImpl<char> &ResultPath) {
+  int Dummy;
+  return createUniqueEntity(Model, Dummy, ResultPath, false, 0, FS_Name);
+}
+
+std::error_code
+getPotentiallyUniqueTempFileName(const Twine &Prefix, StringRef Suffix,
+                                 SmallVectorImpl<char> &ResultPath) {
+  int Dummy;
+  return createTemporaryFile(Prefix, Suffix, Dummy, ResultPath, FS_Name);
+}
+
+void make_absolute(const Twine &current_directory,
+                   SmallVectorImpl<char> &path) {
+  StringRef p(path.data(), path.size());
+
+  bool rootDirectory = path::has_root_directory(p);
+  bool rootName = path::has_root_name(p);
+
+  // Already absolute.
+  if ((rootName || real_style(Style::native) != Style::windows) &&
+      rootDirectory)
+    return;
+
+  // All of the following conditions will need the current directory.
+  SmallString<128> current_dir;
+  current_directory.toVector(current_dir);
+
+  // Relative path. Prepend the current directory.
+  if (!rootName && !rootDirectory) {
+    // Append path to the current directory.
+    path::append(current_dir, p);
+ 
