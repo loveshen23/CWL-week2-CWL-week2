@@ -830,4 +830,388 @@ void make_absolute(const Twine &current_directory,
   if (!rootName && !rootDirectory) {
     // Append path to the current directory.
     path::append(current_dir, p);
- 
+    // Set path to the result.
+    path.swap(current_dir);
+    return;
+  }
+
+  if (!rootName && rootDirectory) {
+    StringRef cdrn = path::root_name(current_dir);
+    SmallString<128> curDirRootName(cdrn.begin(), cdrn.end());
+    path::append(curDirRootName, p);
+    // Set path to the result.
+    path.swap(curDirRootName);
+    return;
+  }
+
+  if (rootName && !rootDirectory) {
+    StringRef pRootName      = path::root_name(p);
+    StringRef bRootDirectory = path::root_directory(current_dir);
+    StringRef bRelativePath  = path::relative_path(current_dir);
+    StringRef pRelativePath  = path::relative_path(p);
+
+    SmallString<128> res;
+    path::append(res, pRootName, bRootDirectory, bRelativePath, pRelativePath);
+    path.swap(res);
+    return;
+  }
+
+  llvm_unreachable("All rootName and rootDirectory combinations should have "
+                   "occurred above!");
+}
+
+std::error_code make_absolute(SmallVectorImpl<char> &path) {
+  if (path::is_absolute(path))
+    return {};
+
+  SmallString<128> current_dir;
+  if (std::error_code ec = current_path(current_dir))
+    return ec;
+
+  make_absolute(current_dir, path);
+  return {};
+}
+
+std::error_code create_directories(const Twine &Path, bool IgnoreExisting,
+                                   perms Perms) {
+  SmallString<128> PathStorage;
+  StringRef P = Path.toStringRef(PathStorage);
+
+  // Be optimistic and try to create the directory
+  std::error_code EC = create_directory(P, IgnoreExisting, Perms);
+  // If we succeeded, or had any error other than the parent not existing, just
+  // return it.
+  if (EC != errc::no_such_file_or_directory)
+    return EC;
+
+  // We failed because of a no_such_file_or_directory, try to create the
+  // parent.
+  StringRef Parent = path::parent_path(P);
+  if (Parent.empty())
+    return EC;
+
+  if ((EC = create_directories(Parent, IgnoreExisting, Perms)))
+      return EC;
+
+  return create_directory(P, IgnoreExisting, Perms);
+}
+
+static std::error_code copy_file_internal(int ReadFD, int WriteFD) {
+  const size_t BufSize = 4096;
+  char *Buf = new char[BufSize];
+  int BytesRead = 0, BytesWritten = 0;
+  for (;;) {
+    BytesRead = read(ReadFD, Buf, BufSize);
+    if (BytesRead <= 0)
+      break;
+    while (BytesRead) {
+      BytesWritten = write(WriteFD, Buf, BytesRead);
+      if (BytesWritten < 0)
+        break;
+      BytesRead -= BytesWritten;
+    }
+    if (BytesWritten < 0)
+      break;
+  }
+  delete[] Buf;
+
+  if (BytesRead < 0 || BytesWritten < 0)
+    return std::error_code(errno, std::generic_category());
+  return std::error_code();
+}
+
+#ifndef __APPLE__
+std::error_code copy_file(const Twine &From, const Twine &To) {
+  int ReadFD, WriteFD;
+  if (std::error_code EC = openFileForRead(From, ReadFD, OF_None))
+    return EC;
+  if (std::error_code EC =
+          openFileForWrite(To, WriteFD, CD_CreateAlways, OF_None)) {
+    close(ReadFD);
+    return EC;
+  }
+
+  std::error_code EC = copy_file_internal(ReadFD, WriteFD);
+
+  close(ReadFD);
+  close(WriteFD);
+
+  return EC;
+}
+#endif
+
+std::error_code copy_file(const Twine &From, int ToFD) {
+  int ReadFD;
+  if (std::error_code EC = openFileForRead(From, ReadFD, OF_None))
+    return EC;
+
+  std::error_code EC = copy_file_internal(ReadFD, ToFD);
+
+  close(ReadFD);
+
+  return EC;
+}
+
+ErrorOr<MD5::MD5Result> md5_contents(int FD) {
+  MD5 Hash;
+
+  constexpr size_t BufSize = 4096;
+  std::vector<uint8_t> Buf(BufSize);
+  int BytesRead = 0;
+  for (;;) {
+    BytesRead = read(FD, Buf.data(), BufSize);
+    if (BytesRead <= 0)
+      break;
+    Hash.update(makeArrayRef(Buf.data(), BytesRead));
+  }
+
+  if (BytesRead < 0)
+    return std::error_code(errno, std::generic_category());
+  MD5::MD5Result Result;
+  Hash.final(Result);
+  return Result;
+}
+
+ErrorOr<MD5::MD5Result> md5_contents(const Twine &Path) {
+  int FD;
+  if (auto EC = openFileForRead(Path, FD, OF_None))
+    return EC;
+
+  auto Result = md5_contents(FD);
+  close(FD);
+  return Result;
+}
+
+bool exists(const basic_file_status &status) {
+  return status_known(status) && status.type() != file_type::file_not_found;
+}
+
+bool status_known(const basic_file_status &s) {
+  return s.type() != file_type::status_error;
+}
+
+file_type get_file_type(const Twine &Path, bool Follow) {
+  file_status st;
+  if (status(Path, st, Follow))
+    return file_type::status_error;
+  return st.type();
+}
+
+bool is_directory(const basic_file_status &status) {
+  return status.type() == file_type::directory_file;
+}
+
+std::error_code is_directory(const Twine &path, bool &result) {
+  file_status st;
+  if (std::error_code ec = status(path, st))
+    return ec;
+  result = is_directory(st);
+  return std::error_code();
+}
+
+bool is_regular_file(const basic_file_status &status) {
+  return status.type() == file_type::regular_file;
+}
+
+std::error_code is_regular_file(const Twine &path, bool &result) {
+  file_status st;
+  if (std::error_code ec = status(path, st))
+    return ec;
+  result = is_regular_file(st);
+  return std::error_code();
+}
+
+bool is_symlink_file(const basic_file_status &status) {
+  return status.type() == file_type::symlink_file;
+}
+
+std::error_code is_symlink_file(const Twine &path, bool &result) {
+  file_status st;
+  if (std::error_code ec = status(path, st, false))
+    return ec;
+  result = is_symlink_file(st);
+  return std::error_code();
+}
+
+bool is_other(const basic_file_status &status) {
+  return exists(status) &&
+         !is_regular_file(status) &&
+         !is_directory(status);
+}
+
+std::error_code is_other(const Twine &Path, bool &Result) {
+  file_status FileStatus;
+  if (std::error_code EC = status(Path, FileStatus))
+    return EC;
+  Result = is_other(FileStatus);
+  return std::error_code();
+}
+
+void directory_entry::replace_filename(const Twine &Filename, file_type Type,
+                                       basic_file_status Status) {
+  SmallString<128> PathStr = path::parent_path(Path);
+  path::append(PathStr, Filename);
+  this->Path = PathStr.str();
+  this->Type = Type;
+  this->Status = Status;
+}
+
+ErrorOr<perms> getPermissions(const Twine &Path) {
+  file_status Status;
+  if (std::error_code EC = status(Path, Status))
+    return EC;
+
+  return Status.permissions();
+}
+
+} // end namespace fs
+
+#endif // XXX BINARYEN
+
+} // end namespace sys
+} // end namespace llvm
+
+// Include the truly platform-specific parts.
+#if 0 // XXX BINARYEN - we don't need platform-specific parts.
+#if defined(LLVM_ON_UNIX)
+#include "Unix/Path.inc"
+#endif
+#if defined(_WIN32)
+#include "Windows/Path.inc"
+#endif
+#endif
+
+#if 0 // XXX BINARYEN
+
+namespace llvm {
+namespace sys {
+namespace fs {
+TempFile::TempFile(StringRef Name, int FD) : TmpName(Name), FD(FD) {}
+TempFile::TempFile(TempFile &&Other) { *this = std::move(Other); }
+TempFile &TempFile::operator=(TempFile &&Other) {
+  TmpName = std::move(Other.TmpName);
+  FD = Other.FD;
+  Other.Done = true;
+  Other.FD = -1;
+  return *this;
+}
+
+TempFile::~TempFile() { assert(Done); }
+
+Error TempFile::discard() {
+  Done = true;
+  if (FD != -1 && close(FD) == -1) {
+    std::error_code EC = std::error_code(errno, std::generic_category());
+    return errorCodeToError(EC);
+  }
+  FD = -1;
+
+#ifdef _WIN32
+  // On windows closing will remove the file.
+  TmpName = "";
+  return Error::success();
+#else
+  // Always try to close and remove.
+  std::error_code RemoveEC;
+  if (!TmpName.empty()) {
+    RemoveEC = fs::remove(TmpName);
+    sys::DontRemoveFileOnSignal(TmpName);
+    if (!RemoveEC)
+      TmpName = "";
+  }
+  return errorCodeToError(RemoveEC);
+#endif
+}
+
+Error TempFile::keep(const Twine &Name) {
+  assert(!Done);
+  Done = true;
+  // Always try to close and rename.
+#ifdef _WIN32
+  // If we can't cancel the delete don't rename.
+  auto H = reinterpret_cast<HANDLE>(_get_osfhandle(FD));
+  std::error_code RenameEC = setDeleteDisposition(H, false);
+  if (!RenameEC) {
+    RenameEC = rename_fd(FD, Name);
+    // If rename failed because it's cross-device, copy instead
+    if (RenameEC ==
+      std::error_code(ERROR_NOT_SAME_DEVICE, std::system_category())) {
+      RenameEC = copy_file(TmpName, Name);
+      setDeleteDisposition(H, true);
+    }
+  }
+
+  // If we can't rename, discard the temporary file.
+  if (RenameEC)
+    setDeleteDisposition(H, true);
+#else
+  std::error_code RenameEC = fs::rename(TmpName, Name);
+  if (RenameEC) {
+    // If we can't rename, try to copy to work around cross-device link issues.
+    RenameEC = sys::fs::copy_file(TmpName, Name);
+    // If we can't rename or copy, discard the temporary file.
+    if (RenameEC)
+      remove(TmpName);
+  }
+  sys::DontRemoveFileOnSignal(TmpName);
+#endif
+
+  if (!RenameEC)
+    TmpName = "";
+
+  if (close(FD) == -1) {
+    std::error_code EC(errno, std::generic_category());
+    return errorCodeToError(EC);
+  }
+  FD = -1;
+
+  return errorCodeToError(RenameEC);
+}
+
+Error TempFile::keep() {
+  assert(!Done);
+  Done = true;
+
+#ifdef _WIN32
+  auto H = reinterpret_cast<HANDLE>(_get_osfhandle(FD));
+  if (std::error_code EC = setDeleteDisposition(H, false))
+    return errorCodeToError(EC);
+#else
+  sys::DontRemoveFileOnSignal(TmpName);
+#endif
+
+  TmpName = "";
+
+  if (close(FD) == -1) {
+    std::error_code EC(errno, std::generic_category());
+    return errorCodeToError(EC);
+  }
+  FD = -1;
+
+  return Error::success();
+}
+
+Expected<TempFile> TempFile::create(const Twine &Model, unsigned Mode) {
+  int FD;
+  SmallString<128> ResultPath;
+  if (std::error_code EC =
+          createUniqueFile(Model, FD, ResultPath, Mode, OF_Delete))
+    return errorCodeToError(EC);
+
+  TempFile Ret(ResultPath, FD);
+#ifndef _WIN32
+  if (sys::RemoveFileOnSignal(ResultPath)) {
+    // Make sure we delete the file when RemoveFileOnSignal fails.
+    consumeError(Ret.discard());
+    std::error_code EC(errc::operation_not_permitted);
+    return errorCodeToError(EC);
+  }
+#endif
+  return std::move(Ret);
+}
+}
+
+} // end namsspace sys
+} // end namespace llvm
+
+#endif
