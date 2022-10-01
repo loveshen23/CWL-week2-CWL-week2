@@ -1051,4 +1051,163 @@ static std::error_code remove_directories_impl(const T &Entry,
     if (EC && !IgnoreErrors)
       return EC;
 
-    
+    Begin.increment(EC);
+    if (EC && !IgnoreErrors)
+      return EC;
+  }
+  return std::error_code();
+}
+
+std::error_code remove_directories(const Twine &path, bool IgnoreErrors) {
+  auto EC = remove_directories_impl(path, IgnoreErrors);
+  if (EC && !IgnoreErrors)
+    return EC;
+  EC = fs::remove(path, true);
+  if (EC && !IgnoreErrors)
+    return EC;
+  return std::error_code();
+}
+
+std::error_code real_path(const Twine &path, SmallVectorImpl<char> &dest,
+                          bool expand_tilde) {
+  dest.clear();
+  if (path.isTriviallyEmpty())
+    return std::error_code();
+
+  if (expand_tilde) {
+    SmallString<128> Storage;
+    path.toVector(Storage);
+    expandTildeExpr(Storage);
+    return real_path(Storage, dest, false);
+  }
+
+  SmallString<128> Storage;
+  StringRef P = path.toNullTerminatedStringRef(Storage);
+  char Buffer[PATH_MAX];
+  if (::realpath(P.begin(), Buffer) == nullptr)
+    return std::error_code(errno, std::generic_category());
+  dest.append(Buffer, Buffer + strlen(Buffer));
+  return std::error_code();
+}
+
+} // end namespace fs
+
+namespace path {
+
+bool home_directory(SmallVectorImpl<char> &result) {
+  char *RequestedDir = getenv("HOME");
+  if (!RequestedDir) {
+    struct passwd *pw = getpwuid(getuid());
+    if (pw && pw->pw_dir)
+      RequestedDir = pw->pw_dir;
+  }
+  if (!RequestedDir)
+    return false;
+
+  result.clear();
+  result.append(RequestedDir, RequestedDir + strlen(RequestedDir));
+  return true;
+}
+
+static bool getDarwinConfDir(bool TempDir, SmallVectorImpl<char> &Result) {
+  #if defined(_CS_DARWIN_USER_TEMP_DIR) && defined(_CS_DARWIN_USER_CACHE_DIR)
+  // On Darwin, use DARWIN_USER_TEMP_DIR or DARWIN_USER_CACHE_DIR.
+  // macros defined in <unistd.h> on darwin >= 9
+  int ConfName = TempDir ? _CS_DARWIN_USER_TEMP_DIR
+                         : _CS_DARWIN_USER_CACHE_DIR;
+  size_t ConfLen = confstr(ConfName, nullptr, 0);
+  if (ConfLen > 0) {
+    do {
+      Result.resize(ConfLen);
+      ConfLen = confstr(ConfName, Result.data(), Result.size());
+    } while (ConfLen > 0 && ConfLen != Result.size());
+
+    if (ConfLen > 0) {
+      assert(Result.back() == 0);
+      Result.pop_back();
+      return true;
+    }
+
+    Result.clear();
+  }
+  #endif
+  return false;
+}
+
+static const char *getEnvTempDir() {
+  // Check whether the temporary directory is specified by an environment
+  // variable.
+  const char *EnvironmentVariables[] = {"TMPDIR", "TMP", "TEMP", "TEMPDIR"};
+  for (const char *Env : EnvironmentVariables) {
+    if (const char *Dir = std::getenv(Env))
+      return Dir;
+  }
+
+  return nullptr;
+}
+
+static const char *getDefaultTempDir(bool ErasedOnReboot) {
+#ifdef P_tmpdir
+  if ((bool)P_tmpdir)
+    return P_tmpdir;
+#endif
+
+  if (ErasedOnReboot)
+    return "/tmp";
+  return "/var/tmp";
+}
+
+void system_temp_directory(bool ErasedOnReboot, SmallVectorImpl<char> &Result) {
+  Result.clear();
+
+  if (ErasedOnReboot) {
+    // There is no env variable for the cache directory.
+    if (const char *RequestedDir = getEnvTempDir()) {
+      Result.append(RequestedDir, RequestedDir + strlen(RequestedDir));
+      return;
+    }
+  }
+
+  if (getDarwinConfDir(ErasedOnReboot, Result))
+    return;
+
+  const char *RequestedDir = getDefaultTempDir(ErasedOnReboot);
+  Result.append(RequestedDir, RequestedDir + strlen(RequestedDir));
+}
+
+} // end namespace path
+
+namespace fs {
+
+#ifdef __APPLE__
+/// This implementation tries to perform an APFS CoW clone of the file,
+/// which can be much faster and uses less space.
+/// Unfortunately fcopyfile(3) does not support COPYFILE_CLONE, so the
+/// file descriptor variant of this function still uses the default
+/// implementation.
+std::error_code copy_file(const Twine &From, const Twine &To) {
+  uint32_t Flag = COPYFILE_DATA;
+#if __has_builtin(__builtin_available) && defined(COPYFILE_CLONE)
+  if (__builtin_available(macos 10.12, *)) {
+    bool IsSymlink;
+    if (std::error_code Error = is_symlink_file(From, IsSymlink))
+      return Error;
+    // COPYFILE_CLONE clones the symlink instead of following it
+    // and returns EEXISTS if the target file already exists.
+    if (!IsSymlink && !exists(To))
+      Flag = COPYFILE_CLONE;
+  }
+#endif
+  int Status =
+      copyfile(From.str().c_str(), To.str().c_str(), /* State */ NULL, Flag);
+
+  if (Status == 0)
+    return std::error_code();
+  return std::error_code(errno, std::generic_category());
+}
+#endif // __APPLE__
+
+} // end namespace fs
+
+} // end namespace sys
+} // end namespace llvm
