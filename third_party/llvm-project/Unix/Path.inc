@@ -691,4 +691,364 @@ std::error_code status(const Twine &Path, file_status &Result, bool Follow) {
 std::error_code status(int FD, file_status &Result) {
   struct stat Status;
   int StatRet = ::fstat(FD, &Status);
-  return fillStatus(Stat
+  return fillStatus(StatRet, Status, Result);
+}
+
+unsigned getUmask() {
+  // Chose arbitary new mask and reset the umask to the old mask.
+  // umask(2) never fails so ignore the return of the second call.
+  unsigned Mask = ::umask(0);
+  (void) ::umask(Mask);
+  return Mask;
+}
+
+std::error_code setPermissions(const Twine &Path, perms Permissions) {
+  SmallString<128> PathStorage;
+  StringRef P = Path.toNullTerminatedStringRef(PathStorage);
+
+  if (::chmod(P.begin(), Permissions))
+    return std::error_code(errno, std::generic_category());
+  return std::error_code();
+}
+
+std::error_code setPermissions(int FD, perms Permissions) {
+  if (::fchmod(FD, Permissions))
+    return std::error_code(errno, std::generic_category());
+  return std::error_code();
+}
+
+std::error_code setLastAccessAndModificationTime(int FD, TimePoint<> AccessTime,
+                                                 TimePoint<> ModificationTime) {
+#if defined(HAVE_FUTIMENS)
+  timespec Times[2];
+  Times[0] = sys::toTimeSpec(AccessTime);
+  Times[1] = sys::toTimeSpec(ModificationTime);
+  if (::futimens(FD, Times))
+    return std::error_code(errno, std::generic_category());
+  return std::error_code();
+#elif defined(HAVE_FUTIMES)
+  timeval Times[2];
+  Times[0] = sys::toTimeVal(
+      std::chrono::time_point_cast<std::chrono::microseconds>(AccessTime));
+  Times[1] =
+      sys::toTimeVal(std::chrono::time_point_cast<std::chrono::microseconds>(
+          ModificationTime));
+  if (::futimes(FD, Times))
+    return std::error_code(errno, std::generic_category());
+  return std::error_code();
+#else
+#warning Missing futimes() and futimens()
+  return make_error_code(errc::function_not_supported);
+#endif
+}
+
+std::error_code mapped_file_region::init(int FD, uint64_t Offset,
+                                         mapmode Mode) {
+  assert(Size != 0);
+
+  int flags = (Mode == readwrite) ? MAP_SHARED : MAP_PRIVATE;
+  int prot = (Mode == readonly) ? PROT_READ : (PROT_READ | PROT_WRITE);
+#if defined(__APPLE__)
+  //----------------------------------------------------------------------
+  // Newer versions of MacOSX have a flag that will allow us to read from
+  // binaries whose code signature is invalid without crashing by using
+  // the MAP_RESILIENT_CODESIGN flag. Also if a file from removable media
+  // is mapped we can avoid crashing and return zeroes to any pages we try
+  // to read if the media becomes unavailable by using the
+  // MAP_RESILIENT_MEDIA flag.  These flags are only usable when mapping
+  // with PROT_READ, so take care not to specify them otherwise.
+  //----------------------------------------------------------------------
+  if (Mode == readonly) {
+#if defined(MAP_RESILIENT_CODESIGN)
+    flags |= MAP_RESILIENT_CODESIGN;
+#endif
+#if defined(MAP_RESILIENT_MEDIA)
+    flags |= MAP_RESILIENT_MEDIA;
+#endif
+  }
+#endif // #if defined (__APPLE__)
+
+  Mapping = ::mmap(nullptr, Size, prot, flags, FD, Offset);
+  if (Mapping == MAP_FAILED)
+    return std::error_code(errno, std::generic_category());
+  return std::error_code();
+}
+
+mapped_file_region::mapped_file_region(int fd, mapmode mode, size_t length,
+                                       uint64_t offset, std::error_code &ec)
+    : Size(length), Mapping(), Mode(mode) {
+  (void)Mode;
+  ec = init(fd, offset, mode);
+  if (ec)
+    Mapping = nullptr;
+}
+
+mapped_file_region::~mapped_file_region() {
+  if (Mapping)
+    ::munmap(Mapping, Size);
+}
+
+size_t mapped_file_region::size() const {
+  assert(Mapping && "Mapping failed but used anyway!");
+  return Size;
+}
+
+char *mapped_file_region::data() const {
+  assert(Mapping && "Mapping failed but used anyway!");
+  return reinterpret_cast<char*>(Mapping);
+}
+
+const char *mapped_file_region::const_data() const {
+  assert(Mapping && "Mapping failed but used anyway!");
+  return reinterpret_cast<const char*>(Mapping);
+}
+
+int mapped_file_region::alignment() {
+  return Process::getPageSizeEstimate();
+}
+
+std::error_code detail::directory_iterator_construct(detail::DirIterState &it,
+                                                     StringRef path,
+                                                     bool follow_symlinks) {
+  SmallString<128> path_null(path);
+  DIR *directory = ::opendir(path_null.c_str());
+  if (!directory)
+    return std::error_code(errno, std::generic_category());
+
+  it.IterationHandle = reinterpret_cast<intptr_t>(directory);
+  // Add something for replace_filename to replace.
+  path::append(path_null, ".");
+  it.CurrentEntry = directory_entry(path_null.str(), follow_symlinks);
+  return directory_iterator_increment(it);
+}
+
+std::error_code detail::directory_iterator_destruct(detail::DirIterState &it) {
+  if (it.IterationHandle)
+    ::closedir(reinterpret_cast<DIR *>(it.IterationHandle));
+  it.IterationHandle = 0;
+  it.CurrentEntry = directory_entry();
+  return std::error_code();
+}
+
+static file_type direntType(dirent* Entry) {
+  // Most platforms provide the file type in the dirent: Linux/BSD/Mac.
+  // The DTTOIF macro lets us reuse our status -> type conversion.
+  // Note that while glibc provides a macro to see if this is supported,
+  // _DIRENT_HAVE_D_TYPE, it's not defined on BSD/Mac, so we test for the
+  // d_type-to-mode_t conversion macro instead.
+#if defined(DTTOIF)
+  return typeForMode(DTTOIF(Entry->d_type));
+#else
+  // Other platforms such as Solaris require a stat() to get the type.
+  return file_type::type_unknown;
+#endif
+}
+
+std::error_code detail::directory_iterator_increment(detail::DirIterState &It) {
+  errno = 0;
+  dirent *CurDir = ::readdir(reinterpret_cast<DIR *>(It.IterationHandle));
+  if (CurDir == nullptr && errno != 0) {
+    return std::error_code(errno, std::generic_category());
+  } else if (CurDir != nullptr) {
+    StringRef Name(CurDir->d_name);
+    if ((Name.size() == 1 && Name[0] == '.') ||
+        (Name.size() == 2 && Name[0] == '.' && Name[1] == '.'))
+      return directory_iterator_increment(It);
+    It.CurrentEntry.replace_filename(Name, direntType(CurDir));
+  } else
+    return directory_iterator_destruct(It);
+
+  return std::error_code();
+}
+
+ErrorOr<basic_file_status> directory_entry::status() const {
+  file_status s;
+  if (auto EC = fs::status(Path, s, FollowSymlinks))
+    return EC;
+  return s;
+}
+
+#if !defined(F_GETPATH)
+static bool hasProcSelfFD() {
+  // If we have a /proc filesystem mounted, we can quickly establish the
+  // real name of the file with readlink
+  static const bool Result = (::access("/proc/self/fd", R_OK) == 0);
+  return Result;
+}
+#endif
+
+static int nativeOpenFlags(CreationDisposition Disp, OpenFlags Flags,
+                           FileAccess Access) {
+  int Result = 0;
+  if (Access == FA_Read)
+    Result |= O_RDONLY;
+  else if (Access == FA_Write)
+    Result |= O_WRONLY;
+  else if (Access == (FA_Read | FA_Write))
+    Result |= O_RDWR;
+
+  // This is for compatibility with old code that assumed OF_Append implied
+  // would open an existing file.  See Windows/Path.inc for a longer comment.
+  if (Flags & OF_Append)
+    Disp = CD_OpenAlways;
+
+  if (Disp == CD_CreateNew) {
+    Result |= O_CREAT; // Create if it doesn't exist.
+    Result |= O_EXCL;  // Fail if it does.
+  } else if (Disp == CD_CreateAlways) {
+    Result |= O_CREAT; // Create if it doesn't exist.
+    Result |= O_TRUNC; // Truncate if it does.
+  } else if (Disp == CD_OpenAlways) {
+    Result |= O_CREAT; // Create if it doesn't exist.
+  } else if (Disp == CD_OpenExisting) {
+    // Nothing special, just don't add O_CREAT and we get these semantics.
+  }
+
+  if (Flags & OF_Append)
+    Result |= O_APPEND;
+
+#ifdef O_CLOEXEC
+  if (!(Flags & OF_ChildInherit))
+    Result |= O_CLOEXEC;
+#endif
+
+  return Result;
+}
+
+std::error_code openFile(const Twine &Name, int &ResultFD,
+                         CreationDisposition Disp, FileAccess Access,
+                         OpenFlags Flags, unsigned Mode) {
+  int OpenFlags = nativeOpenFlags(Disp, Flags, Access);
+
+  SmallString<128> Storage;
+  StringRef P = Name.toNullTerminatedStringRef(Storage);
+  // Call ::open in a lambda to avoid overload resolution in RetryAfterSignal
+  // when open is overloaded, such as in Bionic.
+  auto Open = [&]() { return ::open(P.begin(), OpenFlags, Mode); };
+  if ((ResultFD = sys::RetryAfterSignal(-1, Open)) < 0)
+    return std::error_code(errno, std::generic_category());
+#ifndef O_CLOEXEC
+  if (!(Flags & OF_ChildInherit)) {
+    int r = fcntl(ResultFD, F_SETFD, FD_CLOEXEC);
+    (void)r;
+    assert(r == 0 && "fcntl(F_SETFD, FD_CLOEXEC) failed");
+  }
+#endif
+  return std::error_code();
+}
+
+Expected<int> openNativeFile(const Twine &Name, CreationDisposition Disp,
+                             FileAccess Access, OpenFlags Flags,
+                             unsigned Mode) {
+
+  int FD;
+  std::error_code EC = openFile(Name, FD, Disp, Access, Flags, Mode);
+  if (EC)
+    return errorCodeToError(EC);
+  return FD;
+}
+
+std::error_code openFileForRead(const Twine &Name, int &ResultFD,
+                                OpenFlags Flags,
+                                SmallVectorImpl<char> *RealPath) {
+  std::error_code EC =
+      openFile(Name, ResultFD, CD_OpenExisting, FA_Read, Flags, 0666);
+  if (EC)
+    return EC;
+
+  // Attempt to get the real name of the file, if the user asked
+  if(!RealPath)
+    return std::error_code();
+  RealPath->clear();
+#if defined(F_GETPATH)
+  // When F_GETPATH is availble, it is the quickest way to get
+  // the real path name.
+  char Buffer[MAXPATHLEN];
+  if (::fcntl(ResultFD, F_GETPATH, Buffer) != -1)
+    RealPath->append(Buffer, Buffer + strlen(Buffer));
+#else
+  char Buffer[PATH_MAX];
+  if (hasProcSelfFD()) {
+    char ProcPath[64];
+    snprintf(ProcPath, sizeof(ProcPath), "/proc/self/fd/%d", ResultFD);
+    ssize_t CharCount = ::readlink(ProcPath, Buffer, sizeof(Buffer));
+    if (CharCount > 0)
+      RealPath->append(Buffer, Buffer + CharCount);
+  } else {
+    SmallString<128> Storage;
+    StringRef P = Name.toNullTerminatedStringRef(Storage);
+
+    // Use ::realpath to get the real path name
+    if (::realpath(P.begin(), Buffer) != nullptr)
+      RealPath->append(Buffer, Buffer + strlen(Buffer));
+  }
+#endif
+  return std::error_code();
+}
+
+Expected<file_t> openNativeFileForRead(const Twine &Name, OpenFlags Flags,
+                                       SmallVectorImpl<char> *RealPath) {
+  file_t ResultFD;
+  std::error_code EC = openFileForRead(Name, ResultFD, Flags, RealPath);
+  if (EC)
+    return errorCodeToError(EC);
+  return ResultFD;
+}
+
+file_t getStdinHandle() { return 0; }
+file_t getStdoutHandle() { return 1; }
+file_t getStderrHandle() { return 2; }
+
+Expected<size_t> readNativeFile(file_t FD, MutableArrayRef<char> Buf) {
+  ssize_t NumRead =
+      sys::RetryAfterSignal(-1, ::read, FD, Buf.data(), Buf.size());
+  if (ssize_t(NumRead) == -1)
+    return errorCodeToError(std::error_code(errno, std::generic_category()));
+  return NumRead;
+}
+
+Expected<size_t> readNativeFileSlice(file_t FD, MutableArrayRef<char> Buf,
+                                     uint64_t Offset) {
+#ifdef HAVE_PREAD
+  ssize_t NumRead =
+      sys::RetryAfterSignal(-1, ::pread, FD, Buf.data(), Buf.size(), Offset);
+#else
+  if (lseek(FD, Offset, SEEK_SET) == -1)
+    return errorCodeToError(std::error_code(errno, std::generic_category()));
+  ssize_t NumRead =
+      sys::RetryAfterSignal(-1, ::read, FD, Buf.data(), Buf.size());
+#endif
+  if (NumRead == -1)
+    return errorCodeToError(std::error_code(errno, std::generic_category()));
+  return NumRead;
+}
+
+std::error_code closeFile(file_t &F) {
+  file_t TmpF = F;
+  F = kInvalidFile;
+  return Process::SafelyCloseFileDescriptor(TmpF);
+}
+
+template <typename T>
+static std::error_code remove_directories_impl(const T &Entry,
+                                               bool IgnoreErrors) {
+  std::error_code EC;
+  directory_iterator Begin(Entry, EC, false);
+  directory_iterator End;
+  while (Begin != End) {
+    auto &Item = *Begin;
+    ErrorOr<basic_file_status> st = Item.status();
+    if (!st && !IgnoreErrors)
+      return st.getError();
+
+    if (is_directory(*st)) {
+      EC = remove_directories_impl(Item, IgnoreErrors);
+      if (EC && !IgnoreErrors)
+        return EC;
+    }
+
+    EC = fs::remove(Item.path(), true);
+    if (EC && !IgnoreErrors)
+      return EC;
+
+    
