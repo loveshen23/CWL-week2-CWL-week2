@@ -299,4 +299,396 @@ std::error_code current_path(SmallVectorImpl<char> &result) {
   result.reserve(MAXPATHLEN);
 #else
 // For GNU Hurd
-  result.re
+  result.reserve(1024);
+#endif
+
+  while (true) {
+    if (::getcwd(result.data(), result.capacity()) == nullptr) {
+      // See if there was a real error.
+      if (errno != ENOMEM)
+        return std::error_code(errno, std::generic_category());
+      // Otherwise there just wasn't enough space.
+      result.reserve(result.capacity() * 2);
+    } else
+      break;
+  }
+
+  result.set_size(strlen(result.data()));
+  return std::error_code();
+}
+
+std::error_code set_current_path(const Twine &path) {
+  SmallString<128> path_storage;
+  StringRef p = path.toNullTerminatedStringRef(path_storage);
+
+  if (::chdir(p.begin()) == -1)
+    return std::error_code(errno, std::generic_category());
+
+  return std::error_code();
+}
+
+std::error_code create_directory(const Twine &path, bool IgnoreExisting,
+                                 perms Perms) {
+  SmallString<128> path_storage;
+  StringRef p = path.toNullTerminatedStringRef(path_storage);
+
+  if (::mkdir(p.begin(), Perms) == -1) {
+    if (errno != EEXIST || !IgnoreExisting)
+      return std::error_code(errno, std::generic_category());
+  }
+
+  return std::error_code();
+}
+
+// Note that we are using symbolic link because hard links are not supported by
+// all filesystems (SMB doesn't).
+std::error_code create_link(const Twine &to, const Twine &from) {
+  // Get arguments.
+  SmallString<128> from_storage;
+  SmallString<128> to_storage;
+  StringRef f = from.toNullTerminatedStringRef(from_storage);
+  StringRef t = to.toNullTerminatedStringRef(to_storage);
+
+  if (::symlink(t.begin(), f.begin()) == -1)
+    return std::error_code(errno, std::generic_category());
+
+  return std::error_code();
+}
+
+std::error_code create_hard_link(const Twine &to, const Twine &from) {
+  // Get arguments.
+  SmallString<128> from_storage;
+  SmallString<128> to_storage;
+  StringRef f = from.toNullTerminatedStringRef(from_storage);
+  StringRef t = to.toNullTerminatedStringRef(to_storage);
+
+  if (::link(t.begin(), f.begin()) == -1)
+    return std::error_code(errno, std::generic_category());
+
+  return std::error_code();
+}
+
+std::error_code remove(const Twine &path, bool IgnoreNonExisting) {
+  SmallString<128> path_storage;
+  StringRef p = path.toNullTerminatedStringRef(path_storage);
+
+  struct stat buf;
+  if (lstat(p.begin(), &buf) != 0) {
+    if (errno != ENOENT || !IgnoreNonExisting)
+      return std::error_code(errno, std::generic_category());
+    return std::error_code();
+  }
+
+  // Note: this check catches strange situations. In all cases, LLVM should
+  // only be involved in the creation and deletion of regular files.  This
+  // check ensures that what we're trying to erase is a regular file. It
+  // effectively prevents LLVM from erasing things like /dev/null, any block
+  // special file, or other things that aren't "regular" files.
+  if (!S_ISREG(buf.st_mode) && !S_ISDIR(buf.st_mode) && !S_ISLNK(buf.st_mode))
+    return make_error_code(errc::operation_not_permitted);
+
+  if (::remove(p.begin()) == -1) {
+    if (errno != ENOENT || !IgnoreNonExisting)
+      return std::error_code(errno, std::generic_category());
+  }
+
+  return std::error_code();
+}
+
+static bool is_local_impl(struct STATVFS &Vfs) {
+#if defined(__linux__) || defined(__GNU__)
+#ifndef NFS_SUPER_MAGIC
+#define NFS_SUPER_MAGIC 0x6969
+#endif
+#ifndef SMB_SUPER_MAGIC
+#define SMB_SUPER_MAGIC 0x517B
+#endif
+#ifndef CIFS_MAGIC_NUMBER
+#define CIFS_MAGIC_NUMBER 0xFF534D42
+#endif
+#ifdef __GNU__
+  switch ((uint32_t)Vfs.__f_type) {
+#else
+  switch ((uint32_t)Vfs.f_type) {
+#endif
+  case NFS_SUPER_MAGIC:
+  case SMB_SUPER_MAGIC:
+  case CIFS_MAGIC_NUMBER:
+    return false;
+  default:
+    return true;
+  }
+#elif defined(__CYGWIN__)
+  // Cygwin doesn't expose this information; would need to use Win32 API.
+  return false;
+#elif defined(__Fuchsia__)
+  // Fuchsia doesn't yet support remote filesystem mounts.
+  return true;
+#elif defined(__EMSCRIPTEN__)
+  // Emscripten doesn't currently support remote filesystem mounts.
+  return true;
+#elif defined(__HAIKU__)
+  // Haiku doesn't expose this information.
+  return false;
+#elif defined(__sun)
+  // statvfs::f_basetype contains a null-terminated FSType name of the mounted target
+  StringRef fstype(Vfs.f_basetype);
+  // NFS is the only non-local fstype??
+  return !fstype.equals("nfs");
+#elif defined(_AIX)
+  // Call mntctl; try more than twice in case of timing issues with a concurrent
+  // mount.
+  int Ret;
+  size_t BufSize = 2048u;
+  std::unique_ptr<char[]> Buf;
+  int Tries = 3;
+  while (Tries--) {
+    Buf = std::make_unique<char[]>(BufSize);
+    Ret = mntctl(MCTL_QUERY, BufSize, Buf.get());
+    if (Ret != 0)
+      break;
+    BufSize = *reinterpret_cast<unsigned int *>(Buf.get());
+    Buf.reset();
+  }
+
+  if (Ret == -1)
+    // There was an error; "remote" is the conservative answer.
+    return false;
+
+  // Look for the correct vmount entry.
+  char *CurObjPtr = Buf.get();
+  while (Ret--) {
+    struct vmount *Vp = reinterpret_cast<struct vmount *>(CurObjPtr);
+    static_assert(sizeof(Vfs.f_fsid) == sizeof(Vp->vmt_fsid),
+                  "fsid length mismatch");
+    if (memcmp(&Vfs.f_fsid, &Vp->vmt_fsid, sizeof Vfs.f_fsid) == 0)
+      return (Vp->vmt_flags & MNT_REMOTE) == 0;
+
+    CurObjPtr += Vp->vmt_length;
+  }
+
+  // vmount entry not found; "remote" is the conservative answer.
+  return false;
+#else
+  return !!(STATVFS_F_FLAG(Vfs) & MNT_LOCAL);
+#endif
+}
+
+std::error_code is_local(const Twine &Path, bool &Result) {
+  struct STATVFS Vfs;
+  if (::STATVFS(const_cast<char *>(Path.str().c_str()), &Vfs))
+    return std::error_code(errno, std::generic_category());
+
+  Result = is_local_impl(Vfs);
+  return std::error_code();
+}
+
+std::error_code is_local(int FD, bool &Result) {
+  struct STATVFS Vfs;
+  if (::FSTATVFS(FD, &Vfs))
+    return std::error_code(errno, std::generic_category());
+
+  Result = is_local_impl(Vfs);
+  return std::error_code();
+}
+
+std::error_code rename(const Twine &from, const Twine &to) {
+  // Get arguments.
+  SmallString<128> from_storage;
+  SmallString<128> to_storage;
+  StringRef f = from.toNullTerminatedStringRef(from_storage);
+  StringRef t = to.toNullTerminatedStringRef(to_storage);
+
+  if (::rename(f.begin(), t.begin()) == -1)
+    return std::error_code(errno, std::generic_category());
+
+  return std::error_code();
+}
+
+std::error_code resize_file(int FD, uint64_t Size) {
+#if defined(HAVE_POSIX_FALLOCATE)
+  // If we have posix_fallocate use it. Unlike ftruncate it always allocates
+  // space, so we get an error if the disk is full.
+  if (int Err = ::posix_fallocate(FD, 0, Size)) {
+#ifdef _AIX
+    constexpr int NotSupportedError = ENOTSUP;
+#else
+    constexpr int NotSupportedError = EOPNOTSUPP;
+#endif
+    if (Err != EINVAL && Err != NotSupportedError)
+      return std::error_code(Err, std::generic_category());
+  }
+#endif
+  // Use ftruncate as a fallback. It may or may not allocate space. At least on
+  // OS X with HFS+ it does.
+  if (::ftruncate(FD, Size) == -1)
+    return std::error_code(errno, std::generic_category());
+
+  return std::error_code();
+}
+
+static int convertAccessMode(AccessMode Mode) {
+  switch (Mode) {
+  case AccessMode::Exist:
+    return F_OK;
+  case AccessMode::Write:
+    return W_OK;
+  case AccessMode::Execute:
+    return R_OK | X_OK; // scripts also need R_OK.
+  }
+  llvm_unreachable("invalid enum");
+}
+
+std::error_code access(const Twine &Path, AccessMode Mode) {
+  SmallString<128> PathStorage;
+  StringRef P = Path.toNullTerminatedStringRef(PathStorage);
+
+  if (::access(P.begin(), convertAccessMode(Mode)) == -1)
+    return std::error_code(errno, std::generic_category());
+
+  if (Mode == AccessMode::Execute) {
+    // Don't say that directories are executable.
+    struct stat buf;
+    if (0 != stat(P.begin(), &buf))
+      return errc::permission_denied;
+    if (!S_ISREG(buf.st_mode))
+      return errc::permission_denied;
+  }
+
+  return std::error_code();
+}
+
+bool can_execute(const Twine &Path) {
+  return !access(Path, AccessMode::Execute);
+}
+
+bool equivalent(file_status A, file_status B) {
+  assert(status_known(A) && status_known(B));
+  return A.fs_st_dev == B.fs_st_dev &&
+         A.fs_st_ino == B.fs_st_ino;
+}
+
+std::error_code equivalent(const Twine &A, const Twine &B, bool &result) {
+  file_status fsA, fsB;
+  if (std::error_code ec = status(A, fsA))
+    return ec;
+  if (std::error_code ec = status(B, fsB))
+    return ec;
+  result = equivalent(fsA, fsB);
+  return std::error_code();
+}
+
+static void expandTildeExpr(SmallVectorImpl<char> &Path) {
+  StringRef PathStr(Path.begin(), Path.size());
+  if (PathStr.empty() || !PathStr.startswith("~"))
+    return;
+
+  PathStr = PathStr.drop_front();
+  StringRef Expr =
+      PathStr.take_until([](char c) { return path::is_separator(c); });
+  StringRef Remainder = PathStr.substr(Expr.size() + 1);
+  SmallString<128> Storage;
+  if (Expr.empty()) {
+    // This is just ~/..., resolve it to the current user's home dir.
+    if (!path::home_directory(Storage)) {
+      // For some reason we couldn't get the home directory.  Just exit.
+      return;
+    }
+
+    // Overwrite the first character and insert the rest.
+    Path[0] = Storage[0];
+    Path.insert(Path.begin() + 1, Storage.begin() + 1, Storage.end());
+    return;
+  }
+
+  // This is a string of the form ~username/, look up this user's entry in the
+  // password database.
+  struct passwd *Entry = nullptr;
+  std::string User = Expr.str();
+  Entry = ::getpwnam(User.c_str());
+
+  if (!Entry) {
+    // Unable to look up the entry, just return back the original path.
+    return;
+  }
+
+  Storage = Remainder;
+  Path.clear();
+  Path.append(Entry->pw_dir, Entry->pw_dir + strlen(Entry->pw_dir));
+  llvm::sys::path::append(Path, Storage);
+}
+
+
+void expand_tilde(const Twine &path, SmallVectorImpl<char> &dest) {
+  dest.clear();
+  if (path.isTriviallyEmpty())
+    return;
+
+  path.toVector(dest);
+  expandTildeExpr(dest);
+
+  return;
+}
+
+static file_type typeForMode(mode_t Mode) {
+  if (S_ISDIR(Mode))
+    return file_type::directory_file;
+  else if (S_ISREG(Mode))
+    return file_type::regular_file;
+  else if (S_ISBLK(Mode))
+    return file_type::block_file;
+  else if (S_ISCHR(Mode))
+    return file_type::character_file;
+  else if (S_ISFIFO(Mode))
+    return file_type::fifo_file;
+  else if (S_ISSOCK(Mode))
+    return file_type::socket_file;
+  else if (S_ISLNK(Mode))
+    return file_type::symlink_file;
+  return file_type::type_unknown;
+}
+
+static std::error_code fillStatus(int StatRet, const struct stat &Status,
+                                  file_status &Result) {
+  if (StatRet != 0) {
+    std::error_code EC(errno, std::generic_category());
+    if (EC == errc::no_such_file_or_directory)
+      Result = file_status(file_type::file_not_found);
+    else
+      Result = file_status(file_type::status_error);
+    return EC;
+  }
+
+  uint32_t atime_nsec, mtime_nsec;
+#if defined(HAVE_STRUCT_STAT_ST_MTIMESPEC_TV_NSEC)
+  atime_nsec = Status.st_atimespec.tv_nsec;
+  mtime_nsec = Status.st_mtimespec.tv_nsec;
+#elif defined(HAVE_STRUCT_STAT_ST_MTIM_TV_NSEC)
+  atime_nsec = Status.st_atim.tv_nsec;
+  mtime_nsec = Status.st_mtim.tv_nsec;
+#else
+  atime_nsec = mtime_nsec = 0;
+#endif
+
+  perms Perms = static_cast<perms>(Status.st_mode) & all_perms;
+  Result = file_status(typeForMode(Status.st_mode), Perms, Status.st_dev,
+                       Status.st_nlink, Status.st_ino,
+                       Status.st_atime, atime_nsec, Status.st_mtime, mtime_nsec,
+                       Status.st_uid, Status.st_gid, Status.st_size);
+
+  return std::error_code();
+}
+
+std::error_code status(const Twine &Path, file_status &Result, bool Follow) {
+  SmallString<128> PathStorage;
+  StringRef P = Path.toNullTerminatedStringRef(PathStorage);
+
+  struct stat Status;
+  int StatRet = (Follow ? ::stat : ::lstat)(P.begin(), &Status);
+  return fillStatus(StatRet, Status, Result);
+}
+
+std::error_code status(int FD, file_status &Result) {
+  struct stat Status;
+  int StatRet = ::fstat(FD, &Status);
+  return fillStatus(Stat
