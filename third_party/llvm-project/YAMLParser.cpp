@@ -508,4 +508,447 @@ private:
   /// Dispatch to the next scanning function based on \a *Cur.
   bool fetchMoreTokens();
 
-  /// The Source
+  /// The SourceMgr used for diagnostics and buffer management.
+  SourceMgr &SM;
+
+  /// The original input.
+  MemoryBufferRef InputBuffer;
+
+  /// The current position of the scanner.
+  StringRef::iterator Current;
+
+  /// The end of the input (one past the last character).
+  StringRef::iterator End;
+
+  /// Current YAML indentation level in spaces.
+  int Indent;
+
+  /// Current column number in Unicode code points.
+  unsigned Column;
+
+  /// Current line number.
+  unsigned Line;
+
+  /// How deep we are in flow style containers. 0 Means at block level.
+  unsigned FlowLevel;
+
+  /// Are we at the start of the stream?
+  bool IsStartOfStream;
+
+  /// Can the next token be the start of a simple key?
+  bool IsSimpleKeyAllowed;
+
+  /// True if an error has occurred.
+  bool Failed;
+
+  /// Should colors be used when printing out the diagnostic messages?
+  bool ShowColors;
+
+  /// Queue of tokens. This is required to queue up tokens while looking
+  ///        for the end of a simple key. And for cases where a single character
+  ///        can produce multiple tokens (e.g. BlockEnd).
+  TokenQueueT TokenQueue;
+
+  /// Indentation levels.
+  SmallVector<int, 4> Indents;
+
+  /// Potential simple keys.
+  SmallVector<SimpleKey, 4> SimpleKeys;
+
+  std::error_code *EC;
+};
+
+} // end namespace yaml
+} // end namespace llvm
+
+/// encodeUTF8 - Encode \a UnicodeScalarValue in UTF-8 and append it to result.
+static void encodeUTF8( uint32_t UnicodeScalarValue
+                      , SmallVectorImpl<char> &Result) {
+  if (UnicodeScalarValue <= 0x7F) {
+    Result.push_back(UnicodeScalarValue & 0x7F);
+  } else if (UnicodeScalarValue <= 0x7FF) {
+    uint8_t FirstByte = 0xC0 | ((UnicodeScalarValue & 0x7C0) >> 6);
+    uint8_t SecondByte = 0x80 | (UnicodeScalarValue & 0x3F);
+    Result.push_back(FirstByte);
+    Result.push_back(SecondByte);
+  } else if (UnicodeScalarValue <= 0xFFFF) {
+    uint8_t FirstByte = 0xE0 | ((UnicodeScalarValue & 0xF000) >> 12);
+    uint8_t SecondByte = 0x80 | ((UnicodeScalarValue & 0xFC0) >> 6);
+    uint8_t ThirdByte = 0x80 | (UnicodeScalarValue & 0x3F);
+    Result.push_back(FirstByte);
+    Result.push_back(SecondByte);
+    Result.push_back(ThirdByte);
+  } else if (UnicodeScalarValue <= 0x10FFFF) {
+    uint8_t FirstByte = 0xF0 | ((UnicodeScalarValue & 0x1F0000) >> 18);
+    uint8_t SecondByte = 0x80 | ((UnicodeScalarValue & 0x3F000) >> 12);
+    uint8_t ThirdByte = 0x80 | ((UnicodeScalarValue & 0xFC0) >> 6);
+    uint8_t FourthByte = 0x80 | (UnicodeScalarValue & 0x3F);
+    Result.push_back(FirstByte);
+    Result.push_back(SecondByte);
+    Result.push_back(ThirdByte);
+    Result.push_back(FourthByte);
+  }
+}
+
+bool yaml::dumpTokens(StringRef Input, raw_ostream &OS) {
+  SourceMgr SM;
+  Scanner scanner(Input, SM);
+  while (true) {
+    Token T = scanner.getNext();
+    switch (T.Kind) {
+    case Token::TK_StreamStart:
+      OS << "Stream-Start: ";
+      break;
+    case Token::TK_StreamEnd:
+      OS << "Stream-End: ";
+      break;
+    case Token::TK_VersionDirective:
+      OS << "Version-Directive: ";
+      break;
+    case Token::TK_TagDirective:
+      OS << "Tag-Directive: ";
+      break;
+    case Token::TK_DocumentStart:
+      OS << "Document-Start: ";
+      break;
+    case Token::TK_DocumentEnd:
+      OS << "Document-End: ";
+      break;
+    case Token::TK_BlockEntry:
+      OS << "Block-Entry: ";
+      break;
+    case Token::TK_BlockEnd:
+      OS << "Block-End: ";
+      break;
+    case Token::TK_BlockSequenceStart:
+      OS << "Block-Sequence-Start: ";
+      break;
+    case Token::TK_BlockMappingStart:
+      OS << "Block-Mapping-Start: ";
+      break;
+    case Token::TK_FlowEntry:
+      OS << "Flow-Entry: ";
+      break;
+    case Token::TK_FlowSequenceStart:
+      OS << "Flow-Sequence-Start: ";
+      break;
+    case Token::TK_FlowSequenceEnd:
+      OS << "Flow-Sequence-End: ";
+      break;
+    case Token::TK_FlowMappingStart:
+      OS << "Flow-Mapping-Start: ";
+      break;
+    case Token::TK_FlowMappingEnd:
+      OS << "Flow-Mapping-End: ";
+      break;
+    case Token::TK_Key:
+      OS << "Key: ";
+      break;
+    case Token::TK_Value:
+      OS << "Value: ";
+      break;
+    case Token::TK_Scalar:
+      OS << "Scalar: ";
+      break;
+    case Token::TK_BlockScalar:
+      OS << "Block Scalar: ";
+      break;
+    case Token::TK_Alias:
+      OS << "Alias: ";
+      break;
+    case Token::TK_Anchor:
+      OS << "Anchor: ";
+      break;
+    case Token::TK_Tag:
+      OS << "Tag: ";
+      break;
+    case Token::TK_Error:
+      break;
+    }
+    OS << T.Range << "\n";
+    if (T.Kind == Token::TK_StreamEnd)
+      break;
+    else if (T.Kind == Token::TK_Error)
+      return false;
+  }
+  return true;
+}
+
+bool yaml::scanTokens(StringRef Input) {
+  SourceMgr SM;
+  Scanner scanner(Input, SM);
+  while (true) {
+    Token T = scanner.getNext();
+    if (T.Kind == Token::TK_StreamEnd)
+      break;
+    else if (T.Kind == Token::TK_Error)
+      return false;
+  }
+  return true;
+}
+
+std::string yaml::escape(StringRef Input, bool EscapePrintable) {
+  llvm_unreachable("BYN yaml::escape");
+}
+
+Scanner::Scanner(StringRef Input, SourceMgr &sm, bool ShowColors,
+                 std::error_code *EC)
+    : SM(sm), ShowColors(ShowColors), EC(EC) {
+  init(MemoryBufferRef(Input, "YAML"));
+}
+
+Scanner::Scanner(MemoryBufferRef Buffer, SourceMgr &SM_, bool ShowColors,
+                 std::error_code *EC)
+    : SM(SM_), ShowColors(ShowColors), EC(EC) {
+  init(Buffer);
+}
+
+void Scanner::init(MemoryBufferRef Buffer) {
+  InputBuffer = Buffer;
+  Current = InputBuffer.getBufferStart();
+  End = InputBuffer.getBufferEnd();
+  Indent = -1;
+  Column = 0;
+  Line = 0;
+  FlowLevel = 0;
+  IsStartOfStream = true;
+  IsSimpleKeyAllowed = true;
+  Failed = false;
+  std::unique_ptr<MemoryBuffer> InputBufferOwner =
+      MemoryBuffer::getMemBuffer(Buffer);
+  SM.AddNewSourceBuffer(std::move(InputBufferOwner), SMLoc());
+}
+
+Token &Scanner::peekNext() {
+  // If the current token is a possible simple key, keep parsing until we
+  // can confirm.
+  bool NeedMore = false;
+  while (true) {
+    if (TokenQueue.empty() || NeedMore) {
+      if (!fetchMoreTokens()) {
+        TokenQueue.clear();
+        SimpleKeys.clear();
+        TokenQueue.push_back(Token());
+        return TokenQueue.front();
+      }
+    }
+    assert(!TokenQueue.empty() &&
+            "fetchMoreTokens lied about getting tokens!");
+
+    removeStaleSimpleKeyCandidates();
+    SimpleKey SK;
+    SK.Tok = TokenQueue.begin();
+    if (!is_contained(SimpleKeys, SK))
+      break;
+    else
+      NeedMore = true;
+  }
+  return TokenQueue.front();
+}
+
+Token Scanner::getNext() {
+  Token Ret = peekNext();
+  // TokenQueue can be empty if there was an error getting the next token.
+  if (!TokenQueue.empty())
+    TokenQueue.pop_front();
+
+  // There cannot be any referenced Token's if the TokenQueue is empty. So do a
+  // quick deallocation of them all.
+  if (TokenQueue.empty())
+    TokenQueue.resetAlloc();
+
+  return Ret;
+}
+
+StringRef::iterator Scanner::skip_nb_char(StringRef::iterator Position) {
+  if (Position == End)
+    return Position;
+  // Check 7 bit c-printable - b-char.
+  if (   *Position == 0x09
+      || (*Position >= 0x20 && *Position <= 0x7E))
+    return Position + 1;
+
+  // Check for valid UTF-8.
+  if (uint8_t(*Position) & 0x80) {
+    UTF8Decoded u8d = decodeUTF8(Position);
+    if (   u8d.second != 0
+        && u8d.first != 0xFEFF
+        && ( u8d.first == 0x85
+          || ( u8d.first >= 0xA0
+            && u8d.first <= 0xD7FF)
+          || ( u8d.first >= 0xE000
+            && u8d.first <= 0xFFFD)
+          || ( u8d.first >= 0x10000
+            && u8d.first <= 0x10FFFF)))
+      return Position + u8d.second;
+  }
+  return Position;
+}
+
+StringRef::iterator Scanner::skip_b_break(StringRef::iterator Position) {
+  if (Position == End)
+    return Position;
+  if (*Position == 0x0D) {
+    if (Position + 1 != End && *(Position + 1) == 0x0A)
+      return Position + 2;
+    return Position + 1;
+  }
+
+  if (*Position == 0x0A)
+    return Position + 1;
+  return Position;
+}
+
+StringRef::iterator Scanner::skip_s_space(StringRef::iterator Position) {
+  if (Position == End)
+    return Position;
+  if (*Position == ' ')
+    return Position + 1;
+  return Position;
+}
+
+StringRef::iterator Scanner::skip_s_white(StringRef::iterator Position) {
+  if (Position == End)
+    return Position;
+  if (*Position == ' ' || *Position == '\t')
+    return Position + 1;
+  return Position;
+}
+
+StringRef::iterator Scanner::skip_ns_char(StringRef::iterator Position) {
+  if (Position == End)
+    return Position;
+  if (*Position == ' ' || *Position == '\t')
+    return Position;
+  return skip_nb_char(Position);
+}
+
+StringRef::iterator Scanner::skip_while( SkipWhileFunc Func
+                                       , StringRef::iterator Position) {
+  while (true) {
+    StringRef::iterator i = (this->*Func)(Position);
+    if (i == Position)
+      break;
+    Position = i;
+  }
+  return Position;
+}
+
+void Scanner::advanceWhile(SkipWhileFunc Func) {
+  auto Final = skip_while(Func, Current);
+  Column += Final - Current;
+  Current = Final;
+}
+
+static bool is_ns_hex_digit(const char C) {
+  return    (C >= '0' && C <= '9')
+         || (C >= 'a' && C <= 'z')
+         || (C >= 'A' && C <= 'Z');
+}
+
+static bool is_ns_word_char(const char C) {
+  return    C == '-'
+         || (C >= 'a' && C <= 'z')
+         || (C >= 'A' && C <= 'Z');
+}
+
+void Scanner::scan_ns_uri_char() {
+  while (true) {
+    if (Current == End)
+      break;
+    if ((   *Current == '%'
+          && Current + 2 < End
+          && is_ns_hex_digit(*(Current + 1))
+          && is_ns_hex_digit(*(Current + 2)))
+        || is_ns_word_char(*Current)
+        || StringRef(Current, 1).find_first_of("#;/?:@&=+$,_.!~*'()[]")
+          != StringRef::npos) {
+      ++Current;
+      ++Column;
+    } else
+      break;
+  }
+}
+
+bool Scanner::consume(uint32_t Expected) {
+  if (Expected >= 0x80) {
+    setError("Cannot consume non-ascii characters");
+    return false;
+  }
+  if (Current == End)
+    return false;
+  if (uint8_t(*Current) >= 0x80) {
+    setError("Cannot consume non-ascii characters");
+    return false;
+  }
+  if (uint8_t(*Current) == Expected) {
+    ++Current;
+    ++Column;
+    return true;
+  }
+  return false;
+}
+
+void Scanner::skip(uint32_t Distance) {
+  Current += Distance;
+  Column += Distance;
+  assert(Current <= End && "Skipped past the end");
+}
+
+bool Scanner::isBlankOrBreak(StringRef::iterator Position) {
+  if (Position == End)
+    return false;
+  return *Position == ' ' || *Position == '\t' || *Position == '\r' ||
+         *Position == '\n';
+}
+
+bool Scanner::consumeLineBreakIfPresent() {
+  auto Next = skip_b_break(Current);
+  if (Next == Current)
+    return false;
+  Column = 0;
+  ++Line;
+  Current = Next;
+  return true;
+}
+
+void Scanner::saveSimpleKeyCandidate( TokenQueueT::iterator Tok
+                                    , unsigned AtColumn
+                                    , bool IsRequired) {
+  if (IsSimpleKeyAllowed) {
+    SimpleKey SK;
+    SK.Tok = Tok;
+    SK.Line = Line;
+    SK.Column = AtColumn;
+    SK.IsRequired = IsRequired;
+    SK.FlowLevel = FlowLevel;
+    SimpleKeys.push_back(SK);
+  }
+}
+
+void Scanner::removeStaleSimpleKeyCandidates() {
+  for (SmallVectorImpl<SimpleKey>::iterator i = SimpleKeys.begin();
+                                            i != SimpleKeys.end();) {
+    if (i->Line != Line || i->Column + 1024 < Column) {
+      if (i->IsRequired)
+        setError( "Could not find expected : for simple key"
+                , i->Tok->Range.begin());
+      i = SimpleKeys.erase(i);
+    } else
+      ++i;
+  }
+}
+
+void Scanner::removeSimpleKeyCandidatesOnFlowLevel(unsigned Level) {
+  if (!SimpleKeys.empty() && (SimpleKeys.end() - 1)->FlowLevel == Level)
+    SimpleKeys.pop_back();
+}
+
+bool Scanner::unrollIndent(int ToColumn) {
+  Token T;
+  // Indentation is ignored in flow.
+  if (FlowLevel != 0)
+    return true;
+
+  while (Indent > ToColumn) {
+    T.Kind 
