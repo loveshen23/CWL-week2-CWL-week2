@@ -1408,4 +1408,439 @@ static unsigned getChompedLineBreaks(char ChompingIndicator,
 
 unsigned Scanner::scanBlockIndentationIndicator() {
   unsigned Indent = 0;
-  if (Current != End &
+  if (Current != End && (*Current >= '1' && *Current <= '9')) {
+    Indent = unsigned(*Current - '0');
+    skip(1);
+  }
+  return Indent;
+}
+
+bool Scanner::scanBlockScalarHeader(char &ChompingIndicator,
+                                    unsigned &IndentIndicator, bool &IsDone) {
+  auto Start = Current;
+
+  ChompingIndicator = scanBlockChompingIndicator();
+  IndentIndicator = scanBlockIndentationIndicator();
+  // Check for the chomping indicator once again.
+  if (ChompingIndicator == ' ')
+    ChompingIndicator = scanBlockChompingIndicator();
+  Current = skip_while(&Scanner::skip_s_white, Current);
+  skipComment();
+
+  if (Current == End) { // EOF, we have an empty scalar.
+    Token T;
+    T.Kind = Token::TK_BlockScalar;
+    T.Range = StringRef(Start, Current - Start);
+    TokenQueue.push_back(T);
+    IsDone = true;
+    return true;
+  }
+
+  if (!consumeLineBreakIfPresent()) {
+    setError("Expected a line break after block scalar header", Current);
+    return false;
+  }
+  return true;
+}
+
+bool Scanner::findBlockScalarIndent(unsigned &BlockIndent,
+                                    unsigned BlockExitIndent,
+                                    unsigned &LineBreaks, bool &IsDone) {
+  unsigned MaxAllSpaceLineCharacters = 0;
+  StringRef::iterator LongestAllSpaceLine;
+
+  while (true) {
+    advanceWhile(&Scanner::skip_s_space);
+    if (skip_nb_char(Current) != Current) {
+      // This line isn't empty, so try and find the indentation.
+      if (Column <= BlockExitIndent) { // End of the block literal.
+        IsDone = true;
+        return true;
+      }
+      // We found the block's indentation.
+      BlockIndent = Column;
+      if (MaxAllSpaceLineCharacters > BlockIndent) {
+        setError(
+            "Leading all-spaces line must be smaller than the block indent",
+            LongestAllSpaceLine);
+        return false;
+      }
+      return true;
+    }
+    if (skip_b_break(Current) != Current &&
+        Column > MaxAllSpaceLineCharacters) {
+      // Record the longest all-space line in case it's longer than the
+      // discovered block indent.
+      MaxAllSpaceLineCharacters = Column;
+      LongestAllSpaceLine = Current;
+    }
+
+    // Check for EOF.
+    if (Current == End) {
+      IsDone = true;
+      return true;
+    }
+
+    if (!consumeLineBreakIfPresent()) {
+      IsDone = true;
+      return true;
+    }
+    ++LineBreaks;
+  }
+  return true;
+}
+
+bool Scanner::scanBlockScalarIndent(unsigned BlockIndent,
+                                    unsigned BlockExitIndent, bool &IsDone) {
+  // Skip the indentation.
+  while (Column < BlockIndent) {
+    auto I = skip_s_space(Current);
+    if (I == Current)
+      break;
+    Current = I;
+    ++Column;
+  }
+
+  if (skip_nb_char(Current) == Current)
+    return true;
+
+  if (Column <= BlockExitIndent) { // End of the block literal.
+    IsDone = true;
+    return true;
+  }
+
+  if (Column < BlockIndent) {
+    if (Current != End && *Current == '#') { // Trailing comment.
+      IsDone = true;
+      return true;
+    }
+    setError("A text line is less indented than the block scalar", Current);
+    return false;
+  }
+  return true; // A normal text line.
+}
+
+bool Scanner::scanBlockScalar(bool IsLiteral) {
+  // Eat '|' or '>'
+  assert(*Current == '|' || *Current == '>');
+  skip(1);
+
+  char ChompingIndicator;
+  unsigned BlockIndent;
+  bool IsDone = false;
+  if (!scanBlockScalarHeader(ChompingIndicator, BlockIndent, IsDone))
+    return false;
+  if (IsDone)
+    return true;
+
+  auto Start = Current;
+  unsigned BlockExitIndent = Indent < 0 ? 0 : (unsigned)Indent;
+  unsigned LineBreaks = 0;
+  if (BlockIndent == 0) {
+    if (!findBlockScalarIndent(BlockIndent, BlockExitIndent, LineBreaks,
+                               IsDone))
+      return false;
+  }
+
+  // Scan the block's scalars body.
+  SmallString<256> Str;
+  while (!IsDone) {
+    if (!scanBlockScalarIndent(BlockIndent, BlockExitIndent, IsDone))
+      return false;
+    if (IsDone)
+      break;
+
+    // Parse the current line.
+    auto LineStart = Current;
+    advanceWhile(&Scanner::skip_nb_char);
+    if (LineStart != Current) {
+      Str.append(LineBreaks, '\n');
+      Str.append(StringRef(LineStart, Current - LineStart));
+      LineBreaks = 0;
+    }
+
+    // Check for EOF.
+    if (Current == End)
+      break;
+
+    if (!consumeLineBreakIfPresent())
+      break;
+    ++LineBreaks;
+  }
+
+  if (Current == End && !LineBreaks)
+    // Ensure that there is at least one line break before the end of file.
+    LineBreaks = 1;
+  Str.append(getChompedLineBreaks(ChompingIndicator, LineBreaks, Str), '\n');
+
+  // New lines may start a simple key.
+  if (!FlowLevel)
+    IsSimpleKeyAllowed = true;
+
+  Token T;
+  T.Kind = Token::TK_BlockScalar;
+  T.Range = StringRef(Start, Current - Start);
+  T.Value = Str.str().str();
+  TokenQueue.push_back(T);
+  return true;
+}
+
+bool Scanner::scanTag() {
+  StringRef::iterator Start = Current;
+  unsigned ColStart = Column;
+  skip(1); // Eat !.
+  if (Current == End || isBlankOrBreak(Current)); // An empty tag.
+  else if (*Current == '<') {
+    skip(1);
+    scan_ns_uri_char();
+    if (!consume('>'))
+      return false;
+  } else {
+    // FIXME: Actually parse the c-ns-shorthand-tag rule.
+    Current = skip_while(&Scanner::skip_ns_char, Current);
+  }
+
+  Token T;
+  T.Kind = Token::TK_Tag;
+  T.Range = StringRef(Start, Current - Start);
+  TokenQueue.push_back(T);
+
+  // Tags can be simple keys.
+  saveSimpleKeyCandidate(--TokenQueue.end(), ColStart, false);
+
+  IsSimpleKeyAllowed = false;
+
+  return true;
+}
+
+bool Scanner::fetchMoreTokens() {
+  if (IsStartOfStream)
+    return scanStreamStart();
+
+  scanToNextToken();
+
+  if (Current == End)
+    return scanStreamEnd();
+
+  removeStaleSimpleKeyCandidates();
+
+  unrollIndent(Column);
+
+  if (Column == 0 && *Current == '%')
+    return scanDirective();
+
+  if (Column == 0 && Current + 4 <= End
+      && *Current == '-'
+      && *(Current + 1) == '-'
+      && *(Current + 2) == '-'
+      && (Current + 3 == End || isBlankOrBreak(Current + 3)))
+    return scanDocumentIndicator(true);
+
+  if (Column == 0 && Current + 4 <= End
+      && *Current == '.'
+      && *(Current + 1) == '.'
+      && *(Current + 2) == '.'
+      && (Current + 3 == End || isBlankOrBreak(Current + 3)))
+    return scanDocumentIndicator(false);
+
+  if (*Current == '[')
+    return scanFlowCollectionStart(true);
+
+  if (*Current == '{')
+    return scanFlowCollectionStart(false);
+
+  if (*Current == ']')
+    return scanFlowCollectionEnd(true);
+
+  if (*Current == '}')
+    return scanFlowCollectionEnd(false);
+
+  if (*Current == ',')
+    return scanFlowEntry();
+
+  if (*Current == '-' && isBlankOrBreak(Current + 1))
+    return scanBlockEntry();
+
+  if (*Current == '?' && (FlowLevel || isBlankOrBreak(Current + 1)))
+    return scanKey();
+
+  if (*Current == ':' && (FlowLevel || isBlankOrBreak(Current + 1)))
+    return scanValue();
+
+  if (*Current == '*')
+    return scanAliasOrAnchor(true);
+
+  if (*Current == '&')
+    return scanAliasOrAnchor(false);
+
+  if (*Current == '!')
+    return scanTag();
+
+  if (*Current == '|' && !FlowLevel)
+    return scanBlockScalar(true);
+
+  if (*Current == '>' && !FlowLevel)
+    return scanBlockScalar(false);
+
+  if (*Current == '\'')
+    return scanFlowScalar(false);
+
+  if (*Current == '"')
+    return scanFlowScalar(true);
+
+  // Get a plain scalar.
+  StringRef FirstChar(Current, 1);
+  if (!(isBlankOrBreak(Current)
+        || FirstChar.find_first_of("-?:,[]{}#&*!|>'\"%@`") != StringRef::npos)
+      || (*Current == '-' && !isBlankOrBreak(Current + 1))
+      || (!FlowLevel && (*Current == '?' || *Current == ':')
+          && isBlankOrBreak(Current + 1))
+      || (!FlowLevel && *Current == ':'
+                      && Current + 2 < End
+                      && *(Current + 1) == ':'
+                      && !isBlankOrBreak(Current + 2)))
+    return scanPlainScalar();
+
+  setError("Unrecognized character while tokenizing.");
+  return false;
+}
+
+Stream::Stream(StringRef Input, SourceMgr &SM, bool ShowColors,
+               std::error_code *EC)
+    : scanner(new Scanner(Input, SM, ShowColors, EC)), CurrentDoc() {}
+
+Stream::Stream(MemoryBufferRef InputBuffer, SourceMgr &SM, bool ShowColors,
+               std::error_code *EC)
+    : scanner(new Scanner(InputBuffer, SM, ShowColors, EC)), CurrentDoc() {}
+
+Stream::~Stream() = default;
+
+bool Stream::failed() { return scanner->failed(); }
+
+void Stream::printError(Node *N, const Twine &Msg) {
+  SMRange Range = N ? N->getSourceRange() : SMRange();
+  scanner->printError( Range.Start
+                     , SourceMgr::DK_Error
+                     , Msg
+                     , Range);
+}
+
+document_iterator Stream::begin() {
+  if (CurrentDoc)
+    report_fatal_error("Can only iterate over the stream once");
+
+  // Skip Stream-Start.
+  scanner->getNext();
+
+  CurrentDoc.reset(new Document(*this));
+  return document_iterator(CurrentDoc);
+}
+
+document_iterator Stream::end() {
+  return document_iterator();
+}
+
+void Stream::skip() {
+  for (document_iterator i = begin(), e = end(); i != e; ++i)
+    i->skip();
+}
+
+Node::Node(unsigned int Type, std::unique_ptr<Document> &D, StringRef A,
+           StringRef T)
+    : Doc(D), TypeID(Type), Anchor(A), Tag(T) {
+  SMLoc Start = SMLoc::getFromPointer(peekNext().Range.begin());
+  SourceRange = SMRange(Start, Start);
+}
+
+std::string Node::getVerbatimTag() const {
+  StringRef Raw = getRawTag();
+  if (!Raw.empty() && Raw != "!") {
+    std::string Ret;
+    if (Raw.find_last_of('!') == 0) {
+      Ret = Doc->getTagMap().find("!")->second;
+      Ret += Raw.substr(1);
+      return Ret;
+    } else if (Raw.startswith("!!")) {
+      Ret = Doc->getTagMap().find("!!")->second;
+      Ret += Raw.substr(2);
+      return Ret;
+    } else {
+      StringRef TagHandle = Raw.substr(0, Raw.find_last_of('!') + 1);
+      std::map<StringRef, StringRef>::const_iterator It =
+          Doc->getTagMap().find(TagHandle);
+      if (It != Doc->getTagMap().end())
+        Ret = It->second;
+      else {
+        Token T;
+        T.Kind = Token::TK_Tag;
+        T.Range = TagHandle;
+        setError(Twine("Unknown tag handle ") + TagHandle, T);
+      }
+      Ret += Raw.substr(Raw.find_last_of('!') + 1);
+      return Ret;
+    }
+  }
+
+  switch (getType()) {
+  case NK_Null:
+    return "tag:yaml.org,2002:null";
+  case NK_Scalar:
+  case NK_BlockScalar:
+    // TODO: Tag resolution.
+    return "tag:yaml.org,2002:str";
+  case NK_Mapping:
+    return "tag:yaml.org,2002:map";
+  case NK_Sequence:
+    return "tag:yaml.org,2002:seq";
+  }
+
+  return "";
+}
+
+Token &Node::peekNext() {
+  return Doc->peekNext();
+}
+
+Token Node::getNext() {
+  return Doc->getNext();
+}
+
+Node *Node::parseBlockNode() {
+  return Doc->parseBlockNode();
+}
+
+BumpPtrAllocator &Node::getAllocator() {
+  return Doc->NodeAllocator;
+}
+
+void Node::setError(const Twine &Msg, Token &Tok) const {
+  Doc->setError(Msg, Tok);
+}
+
+bool Node::failed() const {
+  return Doc->failed();
+}
+
+StringRef ScalarNode::getValue(SmallVectorImpl<char> &Storage) const {
+  // TODO: Handle newlines properly. We need to remove leading whitespace.
+  if (Value[0] == '"') { // Double quoted.
+    // Pull off the leading and trailing "s.
+    StringRef UnquotedValue = Value.substr(1, Value.size() - 2);
+    // Search for characters that would require unescaping the value.
+    StringRef::size_type i = UnquotedValue.find_first_of("\\\r\n");
+    if (i != StringRef::npos)
+      return unescapeDoubleQuoted(UnquotedValue, i, Storage);
+    return UnquotedValue;
+  } else if (Value[0] == '\'') { // Single quoted.
+    // Pull off the leading and trailing 's.
+    StringRef UnquotedValue = Value.substr(1, Value.size() - 2);
+    StringRef::size_type i = UnquotedValue.find('\'');
+    if (i != StringRef::npos) {
+      // We're going to need Storage.
+      Storage.clear();
+      Storage.reserve(UnquotedValue.size());
+      for (; i != StringRef::npos; i = UnquotedValue.find('\'')) {
+        StringRef Valid(UnquotedValue.begin(), i);
+        Storage.insert(Storage.end(), Valid.begin(), Valid.end());
+        Storage.push_back('\'');
+        Unq
