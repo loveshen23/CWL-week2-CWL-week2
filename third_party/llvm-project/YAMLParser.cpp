@@ -951,4 +951,461 @@ bool Scanner::unrollIndent(int ToColumn) {
     return true;
 
   while (Indent > ToColumn) {
-    T.Kind 
+    T.Kind = Token::TK_BlockEnd;
+    T.Range = StringRef(Current, 1);
+    TokenQueue.push_back(T);
+    Indent = Indents.pop_back_val();
+  }
+
+  return true;
+}
+
+bool Scanner::rollIndent( int ToColumn
+                        , Token::TokenKind Kind
+                        , TokenQueueT::iterator InsertPoint) {
+  if (FlowLevel)
+    return true;
+  if (Indent < ToColumn) {
+    Indents.push_back(Indent);
+    Indent = ToColumn;
+
+    Token T;
+    T.Kind = Kind;
+    T.Range = StringRef(Current, 0);
+    TokenQueue.insert(InsertPoint, T);
+  }
+  return true;
+}
+
+void Scanner::skipComment() {
+  if (*Current != '#')
+    return;
+  while (true) {
+    // This may skip more than one byte, thus Column is only incremented
+    // for code points.
+    StringRef::iterator I = skip_nb_char(Current);
+    if (I == Current)
+      break;
+    Current = I;
+    ++Column;
+  }
+}
+
+void Scanner::scanToNextToken() {
+  while (true) {
+    while (*Current == ' ' || *Current == '\t') {
+      skip(1);
+    }
+
+    skipComment();
+
+    // Skip EOL.
+    StringRef::iterator i = skip_b_break(Current);
+    if (i == Current)
+      break;
+    Current = i;
+    ++Line;
+    Column = 0;
+    // New lines may start a simple key.
+    if (!FlowLevel)
+      IsSimpleKeyAllowed = true;
+  }
+}
+
+bool Scanner::scanStreamStart() {
+  IsStartOfStream = false;
+
+  EncodingInfo EI = getUnicodeEncoding(currentInput());
+
+  Token T;
+  T.Kind = Token::TK_StreamStart;
+  T.Range = StringRef(Current, EI.second);
+  TokenQueue.push_back(T);
+  Current += EI.second;
+  return true;
+}
+
+bool Scanner::scanStreamEnd() {
+  // Force an ending new line if one isn't present.
+  if (Column != 0) {
+    Column = 0;
+    ++Line;
+  }
+
+  unrollIndent(-1);
+  SimpleKeys.clear();
+  IsSimpleKeyAllowed = false;
+
+  Token T;
+  T.Kind = Token::TK_StreamEnd;
+  T.Range = StringRef(Current, 0);
+  TokenQueue.push_back(T);
+  return true;
+}
+
+bool Scanner::scanDirective() {
+  // Reset the indentation level.
+  unrollIndent(-1);
+  SimpleKeys.clear();
+  IsSimpleKeyAllowed = false;
+
+  StringRef::iterator Start = Current;
+  consume('%');
+  StringRef::iterator NameStart = Current;
+  Current = skip_while(&Scanner::skip_ns_char, Current);
+  StringRef Name(NameStart, Current - NameStart);
+  Current = skip_while(&Scanner::skip_s_white, Current);
+
+  Token T;
+  if (Name == "YAML") {
+    Current = skip_while(&Scanner::skip_ns_char, Current);
+    T.Kind = Token::TK_VersionDirective;
+    T.Range = StringRef(Start, Current - Start);
+    TokenQueue.push_back(T);
+    return true;
+  } else if(Name == "TAG") {
+    Current = skip_while(&Scanner::skip_ns_char, Current);
+    Current = skip_while(&Scanner::skip_s_white, Current);
+    Current = skip_while(&Scanner::skip_ns_char, Current);
+    T.Kind = Token::TK_TagDirective;
+    T.Range = StringRef(Start, Current - Start);
+    TokenQueue.push_back(T);
+    return true;
+  }
+  return false;
+}
+
+bool Scanner::scanDocumentIndicator(bool IsStart) {
+  unrollIndent(-1);
+  SimpleKeys.clear();
+  IsSimpleKeyAllowed = false;
+
+  Token T;
+  T.Kind = IsStart ? Token::TK_DocumentStart : Token::TK_DocumentEnd;
+  T.Range = StringRef(Current, 3);
+  skip(3);
+  TokenQueue.push_back(T);
+  return true;
+}
+
+bool Scanner::scanFlowCollectionStart(bool IsSequence) {
+  Token T;
+  T.Kind = IsSequence ? Token::TK_FlowSequenceStart
+                      : Token::TK_FlowMappingStart;
+  T.Range = StringRef(Current, 1);
+  skip(1);
+  TokenQueue.push_back(T);
+
+  // [ and { may begin a simple key.
+  saveSimpleKeyCandidate(--TokenQueue.end(), Column - 1, false);
+
+  // And may also be followed by a simple key.
+  IsSimpleKeyAllowed = true;
+  ++FlowLevel;
+  return true;
+}
+
+bool Scanner::scanFlowCollectionEnd(bool IsSequence) {
+  removeSimpleKeyCandidatesOnFlowLevel(FlowLevel);
+  IsSimpleKeyAllowed = false;
+  Token T;
+  T.Kind = IsSequence ? Token::TK_FlowSequenceEnd
+                      : Token::TK_FlowMappingEnd;
+  T.Range = StringRef(Current, 1);
+  skip(1);
+  TokenQueue.push_back(T);
+  if (FlowLevel)
+    --FlowLevel;
+  return true;
+}
+
+bool Scanner::scanFlowEntry() {
+  removeSimpleKeyCandidatesOnFlowLevel(FlowLevel);
+  IsSimpleKeyAllowed = true;
+  Token T;
+  T.Kind = Token::TK_FlowEntry;
+  T.Range = StringRef(Current, 1);
+  skip(1);
+  TokenQueue.push_back(T);
+  return true;
+}
+
+bool Scanner::scanBlockEntry() {
+  rollIndent(Column, Token::TK_BlockSequenceStart, TokenQueue.end());
+  removeSimpleKeyCandidatesOnFlowLevel(FlowLevel);
+  IsSimpleKeyAllowed = true;
+  Token T;
+  T.Kind = Token::TK_BlockEntry;
+  T.Range = StringRef(Current, 1);
+  skip(1);
+  TokenQueue.push_back(T);
+  return true;
+}
+
+bool Scanner::scanKey() {
+  if (!FlowLevel)
+    rollIndent(Column, Token::TK_BlockMappingStart, TokenQueue.end());
+
+  removeSimpleKeyCandidatesOnFlowLevel(FlowLevel);
+  IsSimpleKeyAllowed = !FlowLevel;
+
+  Token T;
+  T.Kind = Token::TK_Key;
+  T.Range = StringRef(Current, 1);
+  skip(1);
+  TokenQueue.push_back(T);
+  return true;
+}
+
+bool Scanner::scanValue() {
+  // If the previous token could have been a simple key, insert the key token
+  // into the token queue.
+  if (!SimpleKeys.empty()) {
+    SimpleKey SK = SimpleKeys.pop_back_val();
+    Token T;
+    T.Kind = Token::TK_Key;
+    T.Range = SK.Tok->Range;
+    TokenQueueT::iterator i, e;
+    for (i = TokenQueue.begin(), e = TokenQueue.end(); i != e; ++i) {
+      if (i == SK.Tok)
+        break;
+    }
+    if (i == e) {
+      Failed = true;
+      return false;
+    }
+    i = TokenQueue.insert(i, T);
+
+    // We may also need to add a Block-Mapping-Start token.
+    rollIndent(SK.Column, Token::TK_BlockMappingStart, i);
+
+    IsSimpleKeyAllowed = false;
+  } else {
+    if (!FlowLevel)
+      rollIndent(Column, Token::TK_BlockMappingStart, TokenQueue.end());
+    IsSimpleKeyAllowed = !FlowLevel;
+  }
+
+  Token T;
+  T.Kind = Token::TK_Value;
+  T.Range = StringRef(Current, 1);
+  skip(1);
+  TokenQueue.push_back(T);
+  return true;
+}
+
+// Forbidding inlining improves performance by roughly 20%.
+// FIXME: Remove once llvm optimizes this to the faster version without hints.
+LLVM_ATTRIBUTE_NOINLINE static bool
+wasEscaped(StringRef::iterator First, StringRef::iterator Position);
+
+// Returns whether a character at 'Position' was escaped with a leading '\'.
+// 'First' specifies the position of the first character in the string.
+static bool wasEscaped(StringRef::iterator First,
+                       StringRef::iterator Position) {
+  assert(Position - 1 >= First);
+  StringRef::iterator I = Position - 1;
+  // We calculate the number of consecutive '\'s before the current position
+  // by iterating backwards through our string.
+  while (I >= First && *I == '\\') --I;
+  // (Position - 1 - I) now contains the number of '\'s before the current
+  // position. If it is odd, the character at 'Position' was escaped.
+  return (Position - 1 - I) % 2 == 1;
+}
+
+bool Scanner::scanFlowScalar(bool IsDoubleQuoted) {
+  StringRef::iterator Start = Current;
+  unsigned ColStart = Column;
+  if (IsDoubleQuoted) {
+    do {
+      ++Current;
+      while (Current != End && *Current != '"')
+        ++Current;
+      // Repeat until the previous character was not a '\' or was an escaped
+      // backslash.
+    } while (   Current != End
+             && *(Current - 1) == '\\'
+             && wasEscaped(Start + 1, Current));
+  } else {
+    skip(1);
+    while (true) {
+      // Skip a ' followed by another '.
+      if (Current + 1 < End && *Current == '\'' && *(Current + 1) == '\'') {
+        skip(2);
+        continue;
+      } else if (*Current == '\'')
+        break;
+      StringRef::iterator i = skip_nb_char(Current);
+      if (i == Current) {
+        i = skip_b_break(Current);
+        if (i == Current)
+          break;
+        Current = i;
+        Column = 0;
+        ++Line;
+      } else {
+        if (i == End)
+          break;
+        Current = i;
+        ++Column;
+      }
+    }
+  }
+
+  if (Current == End) {
+    setError("Expected quote at end of scalar", Current);
+    return false;
+  }
+
+  skip(1); // Skip ending quote.
+  Token T;
+  T.Kind = Token::TK_Scalar;
+  T.Range = StringRef(Start, Current - Start);
+  TokenQueue.push_back(T);
+
+  saveSimpleKeyCandidate(--TokenQueue.end(), ColStart, false);
+
+  IsSimpleKeyAllowed = false;
+
+  return true;
+}
+
+bool Scanner::scanPlainScalar() {
+  StringRef::iterator Start = Current;
+  unsigned ColStart = Column;
+  unsigned LeadingBlanks = 0;
+  assert(Indent >= -1 && "Indent must be >= -1 !");
+  unsigned indent = static_cast<unsigned>(Indent + 1);
+  while (true) {
+    if (*Current == '#')
+      break;
+
+    while (!isBlankOrBreak(Current)) {
+      if (  FlowLevel && *Current == ':'
+          && !(isBlankOrBreak(Current + 1) || *(Current + 1) == ',')) {
+        setError("Found unexpected ':' while scanning a plain scalar", Current);
+        return false;
+      }
+
+      // Check for the end of the plain scalar.
+      if (  (*Current == ':' && isBlankOrBreak(Current + 1))
+          || (  FlowLevel
+          && (StringRef(Current, 1).find_first_of(",:?[]{}")
+              != StringRef::npos)))
+        break;
+
+      StringRef::iterator i = skip_nb_char(Current);
+      if (i == Current)
+        break;
+      Current = i;
+      ++Column;
+    }
+
+    // Are we at the end?
+    if (!isBlankOrBreak(Current))
+      break;
+
+    // Eat blanks.
+    StringRef::iterator Tmp = Current;
+    while (isBlankOrBreak(Tmp)) {
+      StringRef::iterator i = skip_s_white(Tmp);
+      if (i != Tmp) {
+        if (LeadingBlanks && (Column < indent) && *Tmp == '\t') {
+          setError("Found invalid tab character in indentation", Tmp);
+          return false;
+        }
+        Tmp = i;
+        ++Column;
+      } else {
+        i = skip_b_break(Tmp);
+        if (!LeadingBlanks)
+          LeadingBlanks = 1;
+        Tmp = i;
+        Column = 0;
+        ++Line;
+      }
+    }
+
+    if (!FlowLevel && Column < indent)
+      break;
+
+    Current = Tmp;
+  }
+  if (Start == Current) {
+    setError("Got empty plain scalar", Start);
+    return false;
+  }
+  Token T;
+  T.Kind = Token::TK_Scalar;
+  T.Range = StringRef(Start, Current - Start);
+  TokenQueue.push_back(T);
+
+  // Plain scalars can be simple keys.
+  saveSimpleKeyCandidate(--TokenQueue.end(), ColStart, false);
+
+  IsSimpleKeyAllowed = false;
+
+  return true;
+}
+
+bool Scanner::scanAliasOrAnchor(bool IsAlias) {
+  StringRef::iterator Start = Current;
+  unsigned ColStart = Column;
+  skip(1);
+  while(true) {
+    if (   *Current == '[' || *Current == ']'
+        || *Current == '{' || *Current == '}'
+        || *Current == ','
+        || *Current == ':')
+      break;
+    StringRef::iterator i = skip_ns_char(Current);
+    if (i == Current)
+      break;
+    Current = i;
+    ++Column;
+  }
+
+  if (Start == Current) {
+    setError("Got empty alias or anchor", Start);
+    return false;
+  }
+
+  Token T;
+  T.Kind = IsAlias ? Token::TK_Alias : Token::TK_Anchor;
+  T.Range = StringRef(Start, Current - Start);
+  TokenQueue.push_back(T);
+
+  // Alias and anchors can be simple keys.
+  saveSimpleKeyCandidate(--TokenQueue.end(), ColStart, false);
+
+  IsSimpleKeyAllowed = false;
+
+  return true;
+}
+
+char Scanner::scanBlockChompingIndicator() {
+  char Indicator = ' ';
+  if (Current != End && (*Current == '+' || *Current == '-')) {
+    Indicator = *Current;
+    skip(1);
+  }
+  return Indicator;
+}
+
+/// Get the number of line breaks after chomping.
+///
+/// Return the number of trailing line breaks to emit, depending on
+/// \p ChompingIndicator.
+static unsigned getChompedLineBreaks(char ChompingIndicator,
+                                     unsigned LineBreaks, StringRef Str) {
+  if (ChompingIndicator == '-') // Strip all line breaks.
+    return 0;
+  if (ChompingIndicator == '+') // Keep all line breaks.
+    return LineBreaks;
+  // Clip trailing lines.
+  return Str.empty() ? 0 : 1;
+}
+
+unsigned Scanner::scanBlockIndentationIndicator() {
+  unsigned Indent = 0;
+  if (Current != End &
