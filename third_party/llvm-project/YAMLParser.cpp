@@ -2290,4 +2290,119 @@ parse_property:
     // We got an unindented BlockEntry sequence. This is not terminated with
     // a BlockEnd.
     // Don't eat the TK_BlockEntry, SequenceNode needs it.
-    return new (NodeAllocator) SequenceNo
+    return new (NodeAllocator) SequenceNode( stream.CurrentDoc
+                                           , AnchorInfo.Range.substr(1)
+                                           , TagInfo.Range
+                                           , SequenceNode::ST_Indentless);
+  case Token::TK_BlockSequenceStart:
+    getNext();
+    return new (NodeAllocator)
+      SequenceNode( stream.CurrentDoc
+                  , AnchorInfo.Range.substr(1)
+                  , TagInfo.Range
+                  , SequenceNode::ST_Block);
+  case Token::TK_BlockMappingStart:
+    getNext();
+    return new (NodeAllocator)
+      MappingNode( stream.CurrentDoc
+                 , AnchorInfo.Range.substr(1)
+                 , TagInfo.Range
+                 , MappingNode::MT_Block);
+  case Token::TK_FlowSequenceStart:
+    getNext();
+    return new (NodeAllocator)
+      SequenceNode( stream.CurrentDoc
+                  , AnchorInfo.Range.substr(1)
+                  , TagInfo.Range
+                  , SequenceNode::ST_Flow);
+  case Token::TK_FlowMappingStart:
+    getNext();
+    return new (NodeAllocator)
+      MappingNode( stream.CurrentDoc
+                 , AnchorInfo.Range.substr(1)
+                 , TagInfo.Range
+                 , MappingNode::MT_Flow);
+  case Token::TK_Scalar:
+    getNext();
+    return new (NodeAllocator)
+      ScalarNode( stream.CurrentDoc
+                , AnchorInfo.Range.substr(1)
+                , TagInfo.Range
+                , T.Range);
+  case Token::TK_BlockScalar: {
+    getNext();
+    StringRef NullTerminatedStr(T.Value.c_str(), T.Value.length() + 1);
+    StringRef StrCopy = NullTerminatedStr.copy(NodeAllocator).drop_back();
+    return new (NodeAllocator)
+        BlockScalarNode(stream.CurrentDoc, AnchorInfo.Range.substr(1),
+                        TagInfo.Range, StrCopy, T.Range);
+  }
+  case Token::TK_Key:
+    // Don't eat the TK_Key, KeyValueNode expects it.
+    return new (NodeAllocator)
+      MappingNode( stream.CurrentDoc
+                 , AnchorInfo.Range.substr(1)
+                 , TagInfo.Range
+                 , MappingNode::MT_Inline);
+  case Token::TK_DocumentStart:
+  case Token::TK_DocumentEnd:
+  case Token::TK_StreamEnd:
+  default:
+    // TODO: Properly handle tags. "[!!str ]" should resolve to !!str "", not
+    //       !!null null.
+    return new (NodeAllocator) NullNode(stream.CurrentDoc);
+  case Token::TK_FlowMappingEnd:
+  case Token::TK_FlowSequenceEnd:
+  case Token::TK_FlowEntry: {
+    if (Root && (isa<MappingNode>(Root) || isa<SequenceNode>(Root)))
+      return new (NodeAllocator) NullNode(stream.CurrentDoc);
+
+    setError("Unexpected token", T);
+    return nullptr;
+  }
+  case Token::TK_Error:
+    return nullptr;
+  }
+  llvm_unreachable("Control flow shouldn't reach here.");
+  return nullptr;
+}
+
+bool Document::parseDirectives() {
+  bool isDirective = false;
+  while (true) {
+    Token T = peekNext();
+    if (T.Kind == Token::TK_TagDirective) {
+      parseTAGDirective();
+      isDirective = true;
+    } else if (T.Kind == Token::TK_VersionDirective) {
+      parseYAMLDirective();
+      isDirective = true;
+    } else
+      break;
+  }
+  return isDirective;
+}
+
+void Document::parseYAMLDirective() {
+  getNext(); // Eat %YAML <version>
+}
+
+void Document::parseTAGDirective() {
+  Token Tag = getNext(); // %TAG <handle> <prefix>
+  StringRef T = Tag.Range;
+  // Strip %TAG
+  T = T.substr(T.find_first_of(" \t")).ltrim(" \t");
+  std::size_t HandleEnd = T.find_first_of(" \t");
+  StringRef TagHandle = T.substr(0, HandleEnd);
+  StringRef TagPrefix = T.substr(HandleEnd).ltrim(" \t");
+  TagMap[TagHandle] = TagPrefix;
+}
+
+bool Document::expectToken(int TK) {
+  Token T = getNext();
+  if (T.Kind != TK) {
+    setError("Unexpected token", T);
+    return false;
+  }
+  return true;
+}
