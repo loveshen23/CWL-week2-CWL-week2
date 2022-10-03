@@ -1843,4 +1843,451 @@ StringRef ScalarNode::getValue(SmallVectorImpl<char> &Storage) const {
         StringRef Valid(UnquotedValue.begin(), i);
         Storage.insert(Storage.end(), Valid.begin(), Valid.end());
         Storage.push_back('\'');
-        Unq
+        UnquotedValue = UnquotedValue.substr(i + 2);
+      }
+      Storage.insert(Storage.end(), UnquotedValue.begin(), UnquotedValue.end());
+      return StringRef(Storage.begin(), Storage.size());
+    }
+    return UnquotedValue;
+  }
+  // Plain or block.
+  return Value.rtrim(' ');
+}
+
+StringRef ScalarNode::unescapeDoubleQuoted( StringRef UnquotedValue
+                                          , StringRef::size_type i
+                                          , SmallVectorImpl<char> &Storage)
+                                          const {
+  // Use Storage to build proper value.
+  Storage.clear();
+  Storage.reserve(UnquotedValue.size());
+  for (; i != StringRef::npos; i = UnquotedValue.find_first_of("\\\r\n")) {
+    // Insert all previous chars into Storage.
+    StringRef Valid(UnquotedValue.begin(), i);
+    Storage.insert(Storage.end(), Valid.begin(), Valid.end());
+    // Chop off inserted chars.
+    UnquotedValue = UnquotedValue.substr(i);
+
+    assert(!UnquotedValue.empty() && "Can't be empty!");
+
+    // Parse escape or line break.
+    switch (UnquotedValue[0]) {
+    case '\r':
+    case '\n':
+      Storage.push_back('\n');
+      if (   UnquotedValue.size() > 1
+          && (UnquotedValue[1] == '\r' || UnquotedValue[1] == '\n'))
+        UnquotedValue = UnquotedValue.substr(1);
+      UnquotedValue = UnquotedValue.substr(1);
+      break;
+    default:
+      if (UnquotedValue.size() == 1) {
+        Token T;
+        T.Range = StringRef(UnquotedValue.begin(), 1);
+        setError("Unrecognized escape code", T);
+        return "";
+      }
+      UnquotedValue = UnquotedValue.substr(1);
+      switch (UnquotedValue[0]) {
+      default: {
+          Token T;
+          T.Range = StringRef(UnquotedValue.begin(), 1);
+          setError("Unrecognized escape code", T);
+          return "";
+        }
+      case '\r':
+      case '\n':
+        // Remove the new line.
+        if (   UnquotedValue.size() > 1
+            && (UnquotedValue[1] == '\r' || UnquotedValue[1] == '\n'))
+          UnquotedValue = UnquotedValue.substr(1);
+        // If this was just a single byte newline, it will get skipped
+        // below.
+        break;
+      case '0':
+        Storage.push_back(0x00);
+        break;
+      case 'a':
+        Storage.push_back(0x07);
+        break;
+      case 'b':
+        Storage.push_back(0x08);
+        break;
+      case 't':
+      case 0x09:
+        Storage.push_back(0x09);
+        break;
+      case 'n':
+        Storage.push_back(0x0A);
+        break;
+      case 'v':
+        Storage.push_back(0x0B);
+        break;
+      case 'f':
+        Storage.push_back(0x0C);
+        break;
+      case 'r':
+        Storage.push_back(0x0D);
+        break;
+      case 'e':
+        Storage.push_back(0x1B);
+        break;
+      case ' ':
+        Storage.push_back(0x20);
+        break;
+      case '"':
+        Storage.push_back(0x22);
+        break;
+      case '/':
+        Storage.push_back(0x2F);
+        break;
+      case '\\':
+        Storage.push_back(0x5C);
+        break;
+      case 'N':
+        encodeUTF8(0x85, Storage);
+        break;
+      case '_':
+        encodeUTF8(0xA0, Storage);
+        break;
+      case 'L':
+        encodeUTF8(0x2028, Storage);
+        break;
+      case 'P':
+        encodeUTF8(0x2029, Storage);
+        break;
+      case 'x': {
+          if (UnquotedValue.size() < 3)
+            // TODO: Report error.
+            break;
+          unsigned int UnicodeScalarValue;
+          if (UnquotedValue.substr(1, 2).getAsInteger(16, UnicodeScalarValue))
+            // TODO: Report error.
+            UnicodeScalarValue = 0xFFFD;
+          encodeUTF8(UnicodeScalarValue, Storage);
+          UnquotedValue = UnquotedValue.substr(2);
+          break;
+        }
+      case 'u': {
+          if (UnquotedValue.size() < 5)
+            // TODO: Report error.
+            break;
+          unsigned int UnicodeScalarValue;
+          if (UnquotedValue.substr(1, 4).getAsInteger(16, UnicodeScalarValue))
+            // TODO: Report error.
+            UnicodeScalarValue = 0xFFFD;
+          encodeUTF8(UnicodeScalarValue, Storage);
+          UnquotedValue = UnquotedValue.substr(4);
+          break;
+        }
+      case 'U': {
+          if (UnquotedValue.size() < 9)
+            // TODO: Report error.
+            break;
+          unsigned int UnicodeScalarValue;
+          if (UnquotedValue.substr(1, 8).getAsInteger(16, UnicodeScalarValue))
+            // TODO: Report error.
+            UnicodeScalarValue = 0xFFFD;
+          encodeUTF8(UnicodeScalarValue, Storage);
+          UnquotedValue = UnquotedValue.substr(8);
+          break;
+        }
+      }
+      UnquotedValue = UnquotedValue.substr(1);
+    }
+  }
+  Storage.insert(Storage.end(), UnquotedValue.begin(), UnquotedValue.end());
+  return StringRef(Storage.begin(), Storage.size());
+}
+
+Node *KeyValueNode::getKey() {
+  if (Key)
+    return Key;
+  // Handle implicit null keys.
+  {
+    Token &t = peekNext();
+    if (   t.Kind == Token::TK_BlockEnd
+        || t.Kind == Token::TK_Value
+        || t.Kind == Token::TK_Error) {
+      return Key = new (getAllocator()) NullNode(Doc);
+    }
+    if (t.Kind == Token::TK_Key)
+      getNext(); // skip TK_Key.
+  }
+
+  // Handle explicit null keys.
+  Token &t = peekNext();
+  if (t.Kind == Token::TK_BlockEnd || t.Kind == Token::TK_Value) {
+    return Key = new (getAllocator()) NullNode(Doc);
+  }
+
+  // We've got a normal key.
+  return Key = parseBlockNode();
+}
+
+Node *KeyValueNode::getValue() {
+  if (Value)
+    return Value;
+
+  if (Node* Key = getKey())
+    Key->skip();
+  else {
+    setError("Null key in Key Value.", peekNext());
+    return Value = new (getAllocator()) NullNode(Doc);
+  }
+
+  if (failed())
+    return Value = new (getAllocator()) NullNode(Doc);
+
+  // Handle implicit null values.
+  {
+    Token &t = peekNext();
+    if (   t.Kind == Token::TK_BlockEnd
+        || t.Kind == Token::TK_FlowMappingEnd
+        || t.Kind == Token::TK_Key
+        || t.Kind == Token::TK_FlowEntry
+        || t.Kind == Token::TK_Error) {
+      return Value = new (getAllocator()) NullNode(Doc);
+    }
+
+    if (t.Kind != Token::TK_Value) {
+      setError("Unexpected token in Key Value.", t);
+      return Value = new (getAllocator()) NullNode(Doc);
+    }
+    getNext(); // skip TK_Value.
+  }
+
+  // Handle explicit null values.
+  Token &t = peekNext();
+  if (t.Kind == Token::TK_BlockEnd || t.Kind == Token::TK_Key) {
+    return Value = new (getAllocator()) NullNode(Doc);
+  }
+
+  // We got a normal value.
+  return Value = parseBlockNode();
+}
+
+void MappingNode::increment() {
+  if (failed()) {
+    IsAtEnd = true;
+    CurrentEntry = nullptr;
+    return;
+  }
+  if (CurrentEntry) {
+    CurrentEntry->skip();
+    if (Type == MT_Inline) {
+      IsAtEnd = true;
+      CurrentEntry = nullptr;
+      return;
+    }
+  }
+  Token T = peekNext();
+  if (T.Kind == Token::TK_Key || T.Kind == Token::TK_Scalar) {
+    // KeyValueNode eats the TK_Key. That way it can detect null keys.
+    CurrentEntry = new (getAllocator()) KeyValueNode(Doc);
+  } else if (Type == MT_Block) {
+    switch (T.Kind) {
+    case Token::TK_BlockEnd:
+      getNext();
+      IsAtEnd = true;
+      CurrentEntry = nullptr;
+      break;
+    default:
+      setError("Unexpected token. Expected Key or Block End", T);
+      LLVM_FALLTHROUGH;
+    case Token::TK_Error:
+      IsAtEnd = true;
+      CurrentEntry = nullptr;
+    }
+  } else {
+    switch (T.Kind) {
+    case Token::TK_FlowEntry:
+      // Eat the flow entry and recurse.
+      getNext();
+      return increment();
+    case Token::TK_FlowMappingEnd:
+      getNext();
+      LLVM_FALLTHROUGH;
+    case Token::TK_Error:
+      // Set this to end iterator.
+      IsAtEnd = true;
+      CurrentEntry = nullptr;
+      break;
+    default:
+      setError( "Unexpected token. Expected Key, Flow Entry, or Flow "
+                "Mapping End."
+              , T);
+      IsAtEnd = true;
+      CurrentEntry = nullptr;
+    }
+  }
+}
+
+void SequenceNode::increment() {
+  if (failed()) {
+    IsAtEnd = true;
+    CurrentEntry = nullptr;
+    return;
+  }
+  if (CurrentEntry)
+    CurrentEntry->skip();
+  Token T = peekNext();
+  if (SeqType == ST_Block) {
+    switch (T.Kind) {
+    case Token::TK_BlockEntry:
+      getNext();
+      CurrentEntry = parseBlockNode();
+      if (!CurrentEntry) { // An error occurred.
+        IsAtEnd = true;
+        CurrentEntry = nullptr;
+      }
+      break;
+    case Token::TK_BlockEnd:
+      getNext();
+      IsAtEnd = true;
+      CurrentEntry = nullptr;
+      break;
+    default:
+      setError( "Unexpected token. Expected Block Entry or Block End."
+              , T);
+      LLVM_FALLTHROUGH;
+    case Token::TK_Error:
+      IsAtEnd = true;
+      CurrentEntry = nullptr;
+    }
+  } else if (SeqType == ST_Indentless) {
+    switch (T.Kind) {
+    case Token::TK_BlockEntry:
+      getNext();
+      CurrentEntry = parseBlockNode();
+      if (!CurrentEntry) { // An error occurred.
+        IsAtEnd = true;
+        CurrentEntry = nullptr;
+      }
+      break;
+    default:
+    case Token::TK_Error:
+      IsAtEnd = true;
+      CurrentEntry = nullptr;
+    }
+  } else if (SeqType == ST_Flow) {
+    switch (T.Kind) {
+    case Token::TK_FlowEntry:
+      // Eat the flow entry and recurse.
+      getNext();
+      WasPreviousTokenFlowEntry = true;
+      return increment();
+    case Token::TK_FlowSequenceEnd:
+      getNext();
+      LLVM_FALLTHROUGH;
+    case Token::TK_Error:
+      // Set this to end iterator.
+      IsAtEnd = true;
+      CurrentEntry = nullptr;
+      break;
+    case Token::TK_StreamEnd:
+    case Token::TK_DocumentEnd:
+    case Token::TK_DocumentStart:
+      setError("Could not find closing ]!", T);
+      // Set this to end iterator.
+      IsAtEnd = true;
+      CurrentEntry = nullptr;
+      break;
+    default:
+      if (!WasPreviousTokenFlowEntry) {
+        setError("Expected , between entries!", T);
+        IsAtEnd = true;
+        CurrentEntry = nullptr;
+        break;
+      }
+      // Otherwise it must be a flow entry.
+      CurrentEntry = parseBlockNode();
+      if (!CurrentEntry) {
+        IsAtEnd = true;
+      }
+      WasPreviousTokenFlowEntry = false;
+      break;
+    }
+  }
+}
+
+Document::Document(Stream &S) : stream(S), Root(nullptr) {
+  // Tag maps starts with two default mappings.
+  TagMap["!"] = "!";
+  TagMap["!!"] = "tag:yaml.org,2002:";
+
+  if (parseDirectives())
+    expectToken(Token::TK_DocumentStart);
+  Token &T = peekNext();
+  if (T.Kind == Token::TK_DocumentStart)
+    getNext();
+}
+
+bool Document::skip()  {
+  if (stream.scanner->failed())
+    return false;
+  if (!Root)
+    getRoot();
+  Root->skip();
+  Token &T = peekNext();
+  if (T.Kind == Token::TK_StreamEnd)
+    return false;
+  if (T.Kind == Token::TK_DocumentEnd) {
+    getNext();
+    return skip();
+  }
+  return true;
+}
+
+Token &Document::peekNext() {
+  return stream.scanner->peekNext();
+}
+
+Token Document::getNext() {
+  return stream.scanner->getNext();
+}
+
+void Document::setError(const Twine &Message, Token &Location) const {
+  stream.scanner->setError(Message, Location.Range.begin());
+}
+
+bool Document::failed() const {
+  return stream.scanner->failed();
+}
+
+Node *Document::parseBlockNode() {
+  Token T = peekNext();
+  // Handle properties.
+  Token AnchorInfo;
+  Token TagInfo;
+parse_property:
+  switch (T.Kind) {
+  case Token::TK_Alias:
+    getNext();
+    return new (NodeAllocator) AliasNode(stream.CurrentDoc, T.Range.substr(1));
+  case Token::TK_Anchor:
+    if (AnchorInfo.Kind == Token::TK_Anchor) {
+      setError("Already encountered an anchor for this node!", T);
+      return nullptr;
+    }
+    AnchorInfo = getNext(); // Consume TK_Anchor.
+    T = peekNext();
+    goto parse_property;
+  case Token::TK_Tag:
+    if (TagInfo.Kind == Token::TK_Tag) {
+      setError("Already encountered a tag for this node!", T);
+      return nullptr;
+    }
+    TagInfo = getNext(); // Consume TK_Tag.
+    T = peekNext();
+    goto parse_property;
+  default:
+    break;
+  }
+
+  switch (T.Kind) {
+  case Token::TK_BlockEntry:
+    // We got an unindented BlockEntry sequence. This is not terminated with
+    // a BlockEnd.
+    // Don't eat the TK_BlockEntry, SequenceNode needs it.
+    return new (NodeAllocator) SequenceNo
