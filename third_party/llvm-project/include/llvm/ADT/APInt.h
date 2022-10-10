@@ -849,4 +849,391 @@ public:
   ///
   /// \returns *this after XORing with RHS.
   APInt &operator^=(const APInt &RHS) {
-    assert(BitWidth == RHS.BitWidth && "Bit widths must be th
+    assert(BitWidth == RHS.BitWidth && "Bit widths must be the same");
+    if (isSingleWord())
+      U.VAL ^= RHS.U.VAL;
+    else
+      XorAssignSlowCase(RHS);
+    return *this;
+  }
+
+  /// Bitwise XOR assignment operator.
+  ///
+  /// Performs a bitwise XOR operation on this APInt and RHS. RHS is
+  /// logically zero-extended or truncated to match the bit-width of
+  /// the LHS.
+  APInt &operator^=(uint64_t RHS) {
+    if (isSingleWord()) {
+      U.VAL ^= RHS;
+      clearUnusedBits();
+    } else {
+      U.pVal[0] ^= RHS;
+    }
+    return *this;
+  }
+
+  /// Multiplication assignment operator.
+  ///
+  /// Multiplies this APInt by RHS and assigns the result to *this.
+  ///
+  /// \returns *this
+  APInt &operator*=(const APInt &RHS);
+  APInt &operator*=(uint64_t RHS);
+
+  /// Addition assignment operator.
+  ///
+  /// Adds RHS to *this and assigns the result to *this.
+  ///
+  /// \returns *this
+  APInt &operator+=(const APInt &RHS);
+  APInt &operator+=(uint64_t RHS);
+
+  /// Subtraction assignment operator.
+  ///
+  /// Subtracts RHS from *this and assigns the result to *this.
+  ///
+  /// \returns *this
+  APInt &operator-=(const APInt &RHS);
+  APInt &operator-=(uint64_t RHS);
+
+  /// Left-shift assignment function.
+  ///
+  /// Shifts *this left by shiftAmt and assigns the result to *this.
+  ///
+  /// \returns *this after shifting left by ShiftAmt
+  APInt &operator<<=(unsigned ShiftAmt) {
+    assert(ShiftAmt <= BitWidth && "Invalid shift amount");
+    if (isSingleWord()) {
+      if (ShiftAmt == BitWidth)
+        U.VAL = 0;
+      else
+        U.VAL <<= ShiftAmt;
+      return clearUnusedBits();
+    }
+    shlSlowCase(ShiftAmt);
+    return *this;
+  }
+
+  /// Left-shift assignment function.
+  ///
+  /// Shifts *this left by shiftAmt and assigns the result to *this.
+  ///
+  /// \returns *this after shifting left by ShiftAmt
+  APInt &operator<<=(const APInt &ShiftAmt);
+
+  /// @}
+  /// \name Binary Operators
+  /// @{
+
+  /// Multiplication operator.
+  ///
+  /// Multiplies this APInt by RHS and returns the result.
+  APInt operator*(const APInt &RHS) const;
+
+  /// Left logical shift operator.
+  ///
+  /// Shifts this APInt left by \p Bits and returns the result.
+  APInt operator<<(unsigned Bits) const { return shl(Bits); }
+
+  /// Left logical shift operator.
+  ///
+  /// Shifts this APInt left by \p Bits and returns the result.
+  APInt operator<<(const APInt &Bits) const { return shl(Bits); }
+
+  /// Arithmetic right-shift function.
+  ///
+  /// Arithmetic right-shift this APInt by shiftAmt.
+  APInt ashr(unsigned ShiftAmt) const {
+    APInt R(*this);
+    R.ashrInPlace(ShiftAmt);
+    return R;
+  }
+
+  /// Arithmetic right-shift this APInt by ShiftAmt in place.
+  void ashrInPlace(unsigned ShiftAmt) {
+    assert(ShiftAmt <= BitWidth && "Invalid shift amount");
+    if (isSingleWord()) {
+      int64_t SExtVAL = SignExtend64(U.VAL, BitWidth);
+      if (ShiftAmt == BitWidth)
+        U.VAL = SExtVAL >> (APINT_BITS_PER_WORD - 1); // Fill with sign bit.
+      else
+        U.VAL = SExtVAL >> ShiftAmt;
+      clearUnusedBits();
+      return;
+    }
+    ashrSlowCase(ShiftAmt);
+  }
+
+  /// Logical right-shift function.
+  ///
+  /// Logical right-shift this APInt by shiftAmt.
+  APInt lshr(unsigned shiftAmt) const {
+    APInt R(*this);
+    R.lshrInPlace(shiftAmt);
+    return R;
+  }
+
+  /// Logical right-shift this APInt by ShiftAmt in place.
+  void lshrInPlace(unsigned ShiftAmt) {
+    assert(ShiftAmt <= BitWidth && "Invalid shift amount");
+    if (isSingleWord()) {
+      if (ShiftAmt == BitWidth)
+        U.VAL = 0;
+      else
+        U.VAL >>= ShiftAmt;
+      return;
+    }
+    lshrSlowCase(ShiftAmt);
+  }
+
+  /// Left-shift function.
+  ///
+  /// Left-shift this APInt by shiftAmt.
+  APInt shl(unsigned shiftAmt) const {
+    APInt R(*this);
+    R <<= shiftAmt;
+    return R;
+  }
+
+  /// Rotate left by rotateAmt.
+  APInt rotl(unsigned rotateAmt) const;
+
+  /// Rotate right by rotateAmt.
+  APInt rotr(unsigned rotateAmt) const;
+
+  /// Arithmetic right-shift function.
+  ///
+  /// Arithmetic right-shift this APInt by shiftAmt.
+  APInt ashr(const APInt &ShiftAmt) const {
+    APInt R(*this);
+    R.ashrInPlace(ShiftAmt);
+    return R;
+  }
+
+  /// Arithmetic right-shift this APInt by shiftAmt in place.
+  void ashrInPlace(const APInt &shiftAmt);
+
+  /// Logical right-shift function.
+  ///
+  /// Logical right-shift this APInt by shiftAmt.
+  APInt lshr(const APInt &ShiftAmt) const {
+    APInt R(*this);
+    R.lshrInPlace(ShiftAmt);
+    return R;
+  }
+
+  /// Logical right-shift this APInt by ShiftAmt in place.
+  void lshrInPlace(const APInt &ShiftAmt);
+
+  /// Left-shift function.
+  ///
+  /// Left-shift this APInt by shiftAmt.
+  APInt shl(const APInt &ShiftAmt) const {
+    APInt R(*this);
+    R <<= ShiftAmt;
+    return R;
+  }
+
+  /// Rotate left by rotateAmt.
+  APInt rotl(const APInt &rotateAmt) const;
+
+  /// Rotate right by rotateAmt.
+  APInt rotr(const APInt &rotateAmt) const;
+
+  /// Unsigned division operation.
+  ///
+  /// Perform an unsigned divide operation on this APInt by RHS. Both this and
+  /// RHS are treated as unsigned quantities for purposes of this division.
+  ///
+  /// \returns a new APInt value containing the division result, rounded towards
+  /// zero.
+  APInt udiv(const APInt &RHS) const;
+  APInt udiv(uint64_t RHS) const;
+
+  /// Signed division function for APInt.
+  ///
+  /// Signed divide this APInt by APInt RHS.
+  ///
+  /// The result is rounded towards zero.
+  APInt sdiv(const APInt &RHS) const;
+  APInt sdiv(int64_t RHS) const;
+
+  /// Unsigned remainder operation.
+  ///
+  /// Perform an unsigned remainder operation on this APInt with RHS being the
+  /// divisor. Both this and RHS are treated as unsigned quantities for purposes
+  /// of this operation. Note that this is a true remainder operation and not a
+  /// modulo operation because the sign follows the sign of the dividend which
+  /// is *this.
+  ///
+  /// \returns a new APInt value containing the remainder result
+  APInt urem(const APInt &RHS) const;
+  uint64_t urem(uint64_t RHS) const;
+
+  /// Function for signed remainder operation.
+  ///
+  /// Signed remainder operation on APInt.
+  APInt srem(const APInt &RHS) const;
+  int64_t srem(int64_t RHS) const;
+
+  /// Dual division/remainder interface.
+  ///
+  /// Sometimes it is convenient to divide two APInt values and obtain both the
+  /// quotient and remainder. This function does both operations in the same
+  /// computation making it a little more efficient. The pair of input arguments
+  /// may overlap with the pair of output arguments. It is safe to call
+  /// udivrem(X, Y, X, Y), for example.
+  static void udivrem(const APInt &LHS, const APInt &RHS, APInt &Quotient,
+                      APInt &Remainder);
+  static void udivrem(const APInt &LHS, uint64_t RHS, APInt &Quotient,
+                      uint64_t &Remainder);
+
+  static void sdivrem(const APInt &LHS, const APInt &RHS, APInt &Quotient,
+                      APInt &Remainder);
+  static void sdivrem(const APInt &LHS, int64_t RHS, APInt &Quotient,
+                      int64_t &Remainder);
+
+  // Operations that return overflow indicators.
+  APInt sadd_ov(const APInt &RHS, bool &Overflow) const;
+  APInt uadd_ov(const APInt &RHS, bool &Overflow) const;
+  APInt ssub_ov(const APInt &RHS, bool &Overflow) const;
+  APInt usub_ov(const APInt &RHS, bool &Overflow) const;
+  APInt sdiv_ov(const APInt &RHS, bool &Overflow) const;
+  APInt smul_ov(const APInt &RHS, bool &Overflow) const;
+  APInt umul_ov(const APInt &RHS, bool &Overflow) const;
+  APInt sshl_ov(const APInt &Amt, bool &Overflow) const;
+  APInt ushl_ov(const APInt &Amt, bool &Overflow) const;
+
+  // Operations that saturate
+  APInt sadd_sat(const APInt &RHS) const;
+  APInt uadd_sat(const APInt &RHS) const;
+  APInt ssub_sat(const APInt &RHS) const;
+  APInt usub_sat(const APInt &RHS) const;
+  APInt smul_sat(const APInt &RHS) const;
+  APInt umul_sat(const APInt &RHS) const;
+  APInt sshl_sat(const APInt &RHS) const;
+  APInt ushl_sat(const APInt &RHS) const;
+
+  /// Array-indexing support.
+  ///
+  /// \returns the bit value at bitPosition
+  bool operator[](unsigned bitPosition) const {
+    assert(bitPosition < getBitWidth() && "Bit position out of bounds!");
+    return (maskBit(bitPosition) & getWord(bitPosition)) != 0;
+  }
+
+  /// @}
+  /// \name Comparison Operators
+  /// @{
+
+  /// Equality operator.
+  ///
+  /// Compares this APInt with RHS for the validity of the equality
+  /// relationship.
+  bool operator==(const APInt &RHS) const {
+    assert(BitWidth == RHS.BitWidth && "Comparison requires equal bit widths");
+    if (isSingleWord())
+      return U.VAL == RHS.U.VAL;
+    return EqualSlowCase(RHS);
+  }
+
+  /// Equality operator.
+  ///
+  /// Compares this APInt with a uint64_t for the validity of the equality
+  /// relationship.
+  ///
+  /// \returns true if *this == Val
+  bool operator==(uint64_t Val) const {
+    return (isSingleWord() || getActiveBits() <= 64) && getZExtValue() == Val;
+  }
+
+  /// Equality comparison.
+  ///
+  /// Compares this APInt with RHS for the validity of the equality
+  /// relationship.
+  ///
+  /// \returns true if *this == Val
+  bool eq(const APInt &RHS) const { return (*this) == RHS; }
+
+  /// Inequality operator.
+  ///
+  /// Compares this APInt with RHS for the validity of the inequality
+  /// relationship.
+  ///
+  /// \returns true if *this != Val
+  bool operator!=(const APInt &RHS) const { return !((*this) == RHS); }
+
+  /// Inequality operator.
+  ///
+  /// Compares this APInt with a uint64_t for the validity of the inequality
+  /// relationship.
+  ///
+  /// \returns true if *this != Val
+  bool operator!=(uint64_t Val) const { return !((*this) == Val); }
+
+  /// Inequality comparison
+  ///
+  /// Compares this APInt with RHS for the validity of the inequality
+  /// relationship.
+  ///
+  /// \returns true if *this != Val
+  bool ne(const APInt &RHS) const { return !((*this) == RHS); }
+
+  /// Unsigned less than comparison
+  ///
+  /// Regards both *this and RHS as unsigned quantities and compares them for
+  /// the validity of the less-than relationship.
+  ///
+  /// \returns true if *this < RHS when both are considered unsigned.
+  bool ult(const APInt &RHS) const { return compare(RHS) < 0; }
+
+  /// Unsigned less than comparison
+  ///
+  /// Regards both *this as an unsigned quantity and compares it with RHS for
+  /// the validity of the less-than relationship.
+  ///
+  /// \returns true if *this < RHS when considered unsigned.
+  bool ult(uint64_t RHS) const {
+    // Only need to check active bits if not a single word.
+    return (isSingleWord() || getActiveBits() <= 64) && getZExtValue() < RHS;
+  }
+
+  /// Signed less than comparison
+  ///
+  /// Regards both *this and RHS as signed quantities and compares them for
+  /// validity of the less-than relationship.
+  ///
+  /// \returns true if *this < RHS when both are considered signed.
+  bool slt(const APInt &RHS) const { return compareSigned(RHS) < 0; }
+
+  /// Signed less than comparison
+  ///
+  /// Regards both *this as a signed quantity and compares it with RHS for
+  /// the validity of the less-than relationship.
+  ///
+  /// \returns true if *this < RHS when considered signed.
+  bool slt(int64_t RHS) const {
+    return (!isSingleWord() && getMinSignedBits() > 64) ? isNegative()
+                                                        : getSExtValue() < RHS;
+  }
+
+  /// Unsigned less or equal comparison
+  ///
+  /// Regards both *this and RHS as unsigned quantities and compares them for
+  /// validity of the less-or-equal relationship.
+  ///
+  /// \returns true if *this <= RHS when both are considered unsigned.
+  bool ule(const APInt &RHS) const { return compare(RHS) <= 0; }
+
+  /// Unsigned less or equal comparison
+  ///
+  /// Regards both *this as an unsigned quantity and compares it with RHS for
+  /// the validity of the less-or-equal relationship.
+  ///
+  /// \returns true if *this <= RHS when considered unsigned.
+  bool ule(uint64_t RHS) const { return !ugt(RHS); }
+
+  /// Signed less or equal comparison
+  ///
+  /// Regards both *this and RHS as signed quantities and compares them for
+  /// validity of th
