@@ -1236,4 +1236,351 @@ public:
   /// Signed less or equal comparison
   ///
   /// Regards both *this and RHS as signed quantities and compares them for
-  /// validity of th
+  /// validity of the less-or-equal relationship.
+  ///
+  /// \returns true if *this <= RHS when both are considered signed.
+  bool sle(const APInt &RHS) const { return compareSigned(RHS) <= 0; }
+
+  /// Signed less or equal comparison
+  ///
+  /// Regards both *this as a signed quantity and compares it with RHS for the
+  /// validity of the less-or-equal relationship.
+  ///
+  /// \returns true if *this <= RHS when considered signed.
+  bool sle(uint64_t RHS) const { return !sgt(RHS); }
+
+  /// Unsigned greater than comparison
+  ///
+  /// Regards both *this and RHS as unsigned quantities and compares them for
+  /// the validity of the greater-than relationship.
+  ///
+  /// \returns true if *this > RHS when both are considered unsigned.
+  bool ugt(const APInt &RHS) const { return !ule(RHS); }
+
+  /// Unsigned greater than comparison
+  ///
+  /// Regards both *this as an unsigned quantity and compares it with RHS for
+  /// the validity of the greater-than relationship.
+  ///
+  /// \returns true if *this > RHS when considered unsigned.
+  bool ugt(uint64_t RHS) const {
+    // Only need to check active bits if not a single word.
+    return (!isSingleWord() && getActiveBits() > 64) || getZExtValue() > RHS;
+  }
+
+  /// Signed greater than comparison
+  ///
+  /// Regards both *this and RHS as signed quantities and compares them for the
+  /// validity of the greater-than relationship.
+  ///
+  /// \returns true if *this > RHS when both are considered signed.
+  bool sgt(const APInt &RHS) const { return !sle(RHS); }
+
+  /// Signed greater than comparison
+  ///
+  /// Regards both *this as a signed quantity and compares it with RHS for
+  /// the validity of the greater-than relationship.
+  ///
+  /// \returns true if *this > RHS when considered signed.
+  bool sgt(int64_t RHS) const {
+    return (!isSingleWord() && getMinSignedBits() > 64) ? !isNegative()
+                                                        : getSExtValue() > RHS;
+  }
+
+  /// Unsigned greater or equal comparison
+  ///
+  /// Regards both *this and RHS as unsigned quantities and compares them for
+  /// validity of the greater-or-equal relationship.
+  ///
+  /// \returns true if *this >= RHS when both are considered unsigned.
+  bool uge(const APInt &RHS) const { return !ult(RHS); }
+
+  /// Unsigned greater or equal comparison
+  ///
+  /// Regards both *this as an unsigned quantity and compares it with RHS for
+  /// the validity of the greater-or-equal relationship.
+  ///
+  /// \returns true if *this >= RHS when considered unsigned.
+  bool uge(uint64_t RHS) const { return !ult(RHS); }
+
+  /// Signed greater or equal comparison
+  ///
+  /// Regards both *this and RHS as signed quantities and compares them for
+  /// validity of the greater-or-equal relationship.
+  ///
+  /// \returns true if *this >= RHS when both are considered signed.
+  bool sge(const APInt &RHS) const { return !slt(RHS); }
+
+  /// Signed greater or equal comparison
+  ///
+  /// Regards both *this as a signed quantity and compares it with RHS for
+  /// the validity of the greater-or-equal relationship.
+  ///
+  /// \returns true if *this >= RHS when considered signed.
+  bool sge(int64_t RHS) const { return !slt(RHS); }
+
+  /// This operation tests if there are any pairs of corresponding bits
+  /// between this APInt and RHS that are both set.
+  bool intersects(const APInt &RHS) const {
+    assert(BitWidth == RHS.BitWidth && "Bit widths must be the same");
+    if (isSingleWord())
+      return (U.VAL & RHS.U.VAL) != 0;
+    return intersectsSlowCase(RHS);
+  }
+
+  /// This operation checks that all bits set in this APInt are also set in RHS.
+  bool isSubsetOf(const APInt &RHS) const {
+    assert(BitWidth == RHS.BitWidth && "Bit widths must be the same");
+    if (isSingleWord())
+      return (U.VAL & ~RHS.U.VAL) == 0;
+    return isSubsetOfSlowCase(RHS);
+  }
+
+  /// @}
+  /// \name Resizing Operators
+  /// @{
+
+  /// Truncate to new width.
+  ///
+  /// Truncate the APInt to a specified width. It is an error to specify a width
+  /// that is greater than or equal to the current width.
+  APInt trunc(unsigned width) const;
+
+  /// Truncate to new width with unsigned saturation.
+  ///
+  /// If the APInt, treated as unsigned integer, can be losslessly truncated to
+  /// the new bitwidth, then return truncated APInt. Else, return max value.
+  APInt truncUSat(unsigned width) const;
+
+  /// Truncate to new width with signed saturation.
+  ///
+  /// If this APInt, treated as signed integer, can be losslessly truncated to
+  /// the new bitwidth, then return truncated APInt. Else, return either
+  /// signed min value if the APInt was negative, or signed max value.
+  APInt truncSSat(unsigned width) const;
+
+  /// Sign extend to a new width.
+  ///
+  /// This operation sign extends the APInt to a new width. If the high order
+  /// bit is set, the fill on the left will be done with 1 bits, otherwise zero.
+  /// It is an error to specify a width that is less than or equal to the
+  /// current width.
+  APInt sext(unsigned width) const;
+
+  /// Zero extend to a new width.
+  ///
+  /// This operation zero extends the APInt to a new width. The high order bits
+  /// are filled with 0 bits.  It is an error to specify a width that is less
+  /// than or equal to the current width.
+  APInt zext(unsigned width) const;
+
+  /// Sign extend or truncate to width
+  ///
+  /// Make this APInt have the bit width given by \p width. The value is sign
+  /// extended, truncated, or left alone to make it that width.
+  APInt sextOrTrunc(unsigned width) const;
+
+  /// Zero extend or truncate to width
+  ///
+  /// Make this APInt have the bit width given by \p width. The value is zero
+  /// extended, truncated, or left alone to make it that width.
+  APInt zextOrTrunc(unsigned width) const;
+
+  /// Sign extend or truncate to width
+  ///
+  /// Make this APInt have the bit width given by \p width. The value is sign
+  /// extended, or left alone to make it that width.
+  APInt sextOrSelf(unsigned width) const;
+
+  /// Zero extend or truncate to width
+  ///
+  /// Make this APInt have the bit width given by \p width. The value is zero
+  /// extended, or left alone to make it that width.
+  APInt zextOrSelf(unsigned width) const;
+
+  /// @}
+  /// \name Bit Manipulation Operators
+  /// @{
+
+  /// Set every bit to 1.
+  void setAllBits() {
+    if (isSingleWord())
+      U.VAL = WORDTYPE_MAX;
+    else
+      // Set all the bits in all the words.
+      memset(U.pVal, -1, getNumWords() * APINT_WORD_SIZE);
+    // Clear the unused ones
+    clearUnusedBits();
+  }
+
+  /// Set a given bit to 1.
+  ///
+  /// Set the given bit to 1 whose position is given as "bitPosition".
+  void setBit(unsigned BitPosition) {
+    assert(BitPosition < BitWidth && "BitPosition out of range");
+    WordType Mask = maskBit(BitPosition);
+    if (isSingleWord())
+      U.VAL |= Mask;
+    else
+      U.pVal[whichWord(BitPosition)] |= Mask;
+  }
+
+  /// Set the sign bit to 1.
+  void setSignBit() {
+    setBit(BitWidth - 1);
+  }
+
+  /// Set the bits from loBit (inclusive) to hiBit (exclusive) to 1.
+  void setBits(unsigned loBit, unsigned hiBit) {
+    assert(hiBit <= BitWidth && "hiBit out of range");
+    assert(loBit <= BitWidth && "loBit out of range");
+    assert(loBit <= hiBit && "loBit greater than hiBit");
+    if (loBit == hiBit)
+      return;
+    if (loBit < APINT_BITS_PER_WORD && hiBit <= APINT_BITS_PER_WORD) {
+      uint64_t mask = WORDTYPE_MAX >> (APINT_BITS_PER_WORD - (hiBit - loBit));
+      mask <<= loBit;
+      if (isSingleWord())
+        U.VAL |= mask;
+      else
+        U.pVal[0] |= mask;
+    } else {
+      setBitsSlowCase(loBit, hiBit);
+    }
+  }
+
+  /// Set the top bits starting from loBit.
+  void setBitsFrom(unsigned loBit) {
+    return setBits(loBit, BitWidth);
+  }
+
+  /// Set the bottom loBits bits.
+  void setLowBits(unsigned loBits) {
+    return setBits(0, loBits);
+  }
+
+  /// Set the top hiBits bits.
+  void setHighBits(unsigned hiBits) {
+    return setBits(BitWidth - hiBits, BitWidth);
+  }
+
+  /// Set every bit to 0.
+  void clearAllBits() {
+    if (isSingleWord())
+      U.VAL = 0;
+    else
+      memset(U.pVal, 0, getNumWords() * APINT_WORD_SIZE);
+  }
+
+  /// Set a given bit to 0.
+  ///
+  /// Set the given bit to 0 whose position is given as "bitPosition".
+  void clearBit(unsigned BitPosition) {
+    assert(BitPosition < BitWidth && "BitPosition out of range");
+    WordType Mask = ~maskBit(BitPosition);
+    if (isSingleWord())
+      U.VAL &= Mask;
+    else
+      U.pVal[whichWord(BitPosition)] &= Mask;
+  }
+
+  /// Set bottom loBits bits to 0.
+  void clearLowBits(unsigned loBits) {
+    assert(loBits <= BitWidth && "More bits than bitwidth");
+    APInt Keep = getHighBitsSet(BitWidth, BitWidth - loBits);
+    *this &= Keep;
+  }
+
+  /// Set the sign bit to 0.
+  void clearSignBit() {
+    clearBit(BitWidth - 1);
+  }
+
+  /// Toggle every bit to its opposite value.
+  void flipAllBits() {
+    if (isSingleWord()) {
+      U.VAL ^= WORDTYPE_MAX;
+      clearUnusedBits();
+    } else {
+      flipAllBitsSlowCase();
+    }
+  }
+
+  /// Toggles a given bit to its opposite value.
+  ///
+  /// Toggle a given bit to its opposite value whose position is given
+  /// as "bitPosition".
+  void flipBit(unsigned bitPosition);
+
+  /// Negate this APInt in place.
+  void negate() {
+    flipAllBits();
+    ++(*this);
+  }
+
+  /// Insert the bits from a smaller APInt starting at bitPosition.
+  void insertBits(const APInt &SubBits, unsigned bitPosition);
+  void insertBits(uint64_t SubBits, unsigned bitPosition, unsigned numBits);
+
+  /// Return an APInt with the extracted bits [bitPosition,bitPosition+numBits).
+  APInt extractBits(unsigned numBits, unsigned bitPosition) const;
+  uint64_t extractBitsAsZExtValue(unsigned numBits, unsigned bitPosition) const;
+
+  /// @}
+  /// \name Value Characterization Functions
+  /// @{
+
+  /// Return the number of bits in the APInt.
+  unsigned getBitWidth() const { return BitWidth; }
+
+  /// Get the number of words.
+  ///
+  /// Here one word's bitwidth equals to that of uint64_t.
+  ///
+  /// \returns the number of words to hold the integer value of this APInt.
+  unsigned getNumWords() const { return getNumWords(BitWidth); }
+
+  /// Get the number of words.
+  ///
+  /// *NOTE* Here one word's bitwidth equals to that of uint64_t.
+  ///
+  /// \returns the number of words to hold the integer value with a given bit
+  /// width.
+  static unsigned getNumWords(unsigned BitWidth) {
+    return ((uint64_t)BitWidth + APINT_BITS_PER_WORD - 1) / APINT_BITS_PER_WORD;
+  }
+
+  /// Compute the number of active bits in the value
+  ///
+  /// This function returns the number of active bits which is defined as the
+  /// bit width minus the number of leading zeros. This is used in several
+  /// computations to see how "wide" the value is.
+  unsigned getActiveBits() const { return BitWidth - countLeadingZeros(); }
+
+  /// Compute the number of active words in the value of this APInt.
+  ///
+  /// This is used in conjunction with getActiveData to extract the raw value of
+  /// the APInt.
+  unsigned getActiveWords() const {
+    unsigned numActiveBits = getActiveBits();
+    return numActiveBits ? whichWord(numActiveBits - 1) + 1 : 1;
+  }
+
+  /// Get the minimum bit size for this signed APInt
+  ///
+  /// Computes the minimum bit width for this APInt while considering it to be a
+  /// signed (and probably negative) value. If the value is not negative, this
+  /// function returns the same value as getActiveBits()+1. Otherwise, it
+  /// returns the smallest bit width that will retain the negative value. For
+  /// example, -1 can be written as 0b1 or 0xFFFFFFFFFF. 0b1 is shorter and so
+  /// for -1, this function will always return 1.
+  unsigned getMinSignedBits() const {
+    if (isNegative())
+      return BitWidth - countLeadingOnes() + 1;
+    return getActiveBits() + 1;
+  }
+
+  /// Get zero extended value
+  ///
+  /// This method attempts to return the value of this APInt as a zero extended
+  /// uint64_t. The bitwidth must be <=
