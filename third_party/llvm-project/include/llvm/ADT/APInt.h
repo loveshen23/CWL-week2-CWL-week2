@@ -1583,4 +1583,331 @@ public:
   /// Get zero extended value
   ///
   /// This method attempts to return the value of this APInt as a zero extended
-  /// uint64_t. The bitwidth must be <=
+  /// uint64_t. The bitwidth must be <= 64 or the value must fit within a
+  /// uint64_t. Otherwise an assertion will result.
+  uint64_t getZExtValue() const {
+    if (isSingleWord())
+      return U.VAL;
+    assert(getActiveBits() <= 64 && "Too many bits for uint64_t");
+    return U.pVal[0];
+  }
+
+  /// Get sign extended value
+  ///
+  /// This method attempts to return the value of this APInt as a sign extended
+  /// int64_t. The bit width must be <= 64 or the value must fit within an
+  /// int64_t. Otherwise an assertion will result.
+  int64_t getSExtValue() const {
+    if (isSingleWord())
+      return SignExtend64(U.VAL, BitWidth);
+    assert(getMinSignedBits() <= 64 && "Too many bits for int64_t");
+    return int64_t(U.pVal[0]);
+  }
+
+  /// Get bits required for string value.
+  ///
+  /// This method determines how many bits are required to hold the APInt
+  /// equivalent of the string given by \p str.
+  static unsigned getBitsNeeded(StringRef str, uint8_t radix);
+
+  /// The APInt version of the countLeadingZeros functions in
+  ///   MathExtras.h.
+  ///
+  /// It counts the number of zeros from the most significant bit to the first
+  /// one bit.
+  ///
+  /// \returns BitWidth if the value is zero, otherwise returns the number of
+  ///   zeros from the most significant bit to the first one bits.
+  unsigned countLeadingZeros() const {
+    if (isSingleWord()) {
+      unsigned unusedBits = APINT_BITS_PER_WORD - BitWidth;
+      return llvm::countLeadingZeros(U.VAL) - unusedBits;
+    }
+    return countLeadingZerosSlowCase();
+  }
+
+  /// Count the number of leading one bits.
+  ///
+  /// This function is an APInt version of the countLeadingOnes
+  /// functions in MathExtras.h. It counts the number of ones from the most
+  /// significant bit to the first zero bit.
+  ///
+  /// \returns 0 if the high order bit is not set, otherwise returns the number
+  /// of 1 bits from the most significant to the least
+  unsigned countLeadingOnes() const {
+    if (isSingleWord())
+      return llvm::countLeadingOnes(U.VAL << (APINT_BITS_PER_WORD - BitWidth));
+    return countLeadingOnesSlowCase();
+  }
+
+  /// Computes the number of leading bits of this APInt that are equal to its
+  /// sign bit.
+  unsigned getNumSignBits() const {
+    return isNegative() ? countLeadingOnes() : countLeadingZeros();
+  }
+
+  /// Count the number of trailing zero bits.
+  ///
+  /// This function is an APInt version of the countTrailingZeros
+  /// functions in MathExtras.h. It counts the number of zeros from the least
+  /// significant bit to the first set bit.
+  ///
+  /// \returns BitWidth if the value is zero, otherwise returns the number of
+  /// zeros from the least significant bit to the first one bit.
+  unsigned countTrailingZeros() const {
+    if (isSingleWord())
+      return std::min(unsigned(llvm::countTrailingZeros(U.VAL)), BitWidth);
+    return countTrailingZerosSlowCase();
+  }
+
+  /// Count the number of trailing one bits.
+  ///
+  /// This function is an APInt version of the countTrailingOnes
+  /// functions in MathExtras.h. It counts the number of ones from the least
+  /// significant bit to the first zero bit.
+  ///
+  /// \returns BitWidth if the value is all ones, otherwise returns the number
+  /// of ones from the least significant bit to the first zero bit.
+  unsigned countTrailingOnes() const {
+    if (isSingleWord())
+      return llvm::countTrailingOnes(U.VAL);
+    return countTrailingOnesSlowCase();
+  }
+
+  /// Count the number of bits set.
+  ///
+  /// This function is an APInt version of the countPopulation functions
+  /// in MathExtras.h. It counts the number of 1 bits in the APInt value.
+  ///
+  /// \returns 0 if the value is zero, otherwise returns the number of set bits.
+  unsigned countPopulation() const {
+    if (isSingleWord())
+      return llvm::countPopulation(U.VAL);
+    return countPopulationSlowCase();
+  }
+
+  /// @}
+  /// \name Conversion Functions
+  /// @{
+  void print(raw_ostream &OS, bool isSigned) const;
+
+  /// Converts an APInt to a string and append it to Str.  Str is commonly a
+  /// SmallString.
+  void toString(SmallVectorImpl<char> &Str, unsigned Radix, bool Signed,
+                bool formatAsCLiteral = false) const;
+
+  /// Considers the APInt to be unsigned and converts it into a string in the
+  /// radix given. The radix can be 2, 8, 10 16, or 36.
+  void toStringUnsigned(SmallVectorImpl<char> &Str, unsigned Radix = 10) const {
+    toString(Str, Radix, false, false);
+  }
+
+  /// Considers the APInt to be signed and converts it into a string in the
+  /// radix given. The radix can be 2, 8, 10, 16, or 36.
+  void toStringSigned(SmallVectorImpl<char> &Str, unsigned Radix = 10) const {
+    toString(Str, Radix, true, false);
+  }
+
+  /// Return the APInt as a std::string.
+  ///
+  /// Note that this is an inefficient method.  It is better to pass in a
+  /// SmallVector/SmallString to the methods above to avoid thrashing the heap
+  /// for the string.
+  std::string toString(unsigned Radix, bool Signed) const;
+
+  /// \returns a byte-swapped representation of this APInt Value.
+  APInt byteSwap() const;
+
+  /// \returns the value with the bit representation reversed of this APInt
+  /// Value.
+  APInt reverseBits() const;
+
+  /// Converts this APInt to a double value.
+  double roundToDouble(bool isSigned) const;
+
+  /// Converts this unsigned APInt to a double value.
+  double roundToDouble() const { return roundToDouble(false); }
+
+  /// Converts this signed APInt to a double value.
+  double signedRoundToDouble() const { return roundToDouble(true); }
+
+  /// Converts APInt bits to a double
+  ///
+  /// The conversion does not do a translation from integer to double, it just
+  /// re-interprets the bits as a double. Note that it is valid to do this on
+  /// any bit width. Exactly 64 bits will be translated.
+  double bitsToDouble() const {
+    return BitsToDouble(getWord(0));
+  }
+
+  /// Converts APInt bits to a float
+  ///
+  /// The conversion does not do a translation from integer to float, it just
+  /// re-interprets the bits as a float. Note that it is valid to do this on
+  /// any bit width. Exactly 32 bits will be translated.
+  float bitsToFloat() const {
+    return BitsToFloat(static_cast<uint32_t>(getWord(0)));
+  }
+
+  /// Converts a double to APInt bits.
+  ///
+  /// The conversion does not do a translation from double to integer, it just
+  /// re-interprets the bits of the double.
+  static APInt doubleToBits(double V) {
+    return APInt(sizeof(double) * CHAR_BIT, DoubleToBits(V));
+  }
+
+  /// Converts a float to APInt bits.
+  ///
+  /// The conversion does not do a translation from float to integer, it just
+  /// re-interprets the bits of the float.
+  static APInt floatToBits(float V) {
+    return APInt(sizeof(float) * CHAR_BIT, FloatToBits(V));
+  }
+
+  /// @}
+  /// \name Mathematics Operations
+  /// @{
+
+  /// \returns the floor log base 2 of this APInt.
+  unsigned logBase2() const { return getActiveBits() -  1; }
+
+  /// \returns the ceil log base 2 of this APInt.
+  unsigned ceilLogBase2() const {
+    APInt temp(*this);
+    --temp;
+    return temp.getActiveBits();
+  }
+
+  /// \returns the nearest log base 2 of this APInt. Ties round up.
+  ///
+  /// NOTE: When we have a BitWidth of 1, we define:
+  ///
+  ///   log2(0) = UINT32_MAX
+  ///   log2(1) = 0
+  ///
+  /// to get around any mathematical concerns resulting from
+  /// referencing 2 in a space where 2 does no exist.
+  unsigned nearestLogBase2() const {
+    // Special case when we have a bitwidth of 1. If VAL is 1, then we
+    // get 0. If VAL is 0, we get WORDTYPE_MAX which gets truncated to
+    // UINT32_MAX.
+    if (BitWidth == 1)
+      return U.VAL - 1;
+
+    // Handle the zero case.
+    if (isNullValue())
+      return UINT32_MAX;
+
+    // The non-zero case is handled by computing:
+    //
+    //   nearestLogBase2(x) = logBase2(x) + x[logBase2(x)-1].
+    //
+    // where x[i] is referring to the value of the ith bit of x.
+    unsigned lg = logBase2();
+    return lg + unsigned((*this)[lg - 1]);
+  }
+
+  /// \returns the log base 2 of this APInt if its an exact power of two, -1
+  /// otherwise
+  int32_t exactLogBase2() const {
+    if (!isPowerOf2())
+      return -1;
+    return logBase2();
+  }
+
+  /// Compute the square root
+  APInt sqrt() const;
+
+  /// Get the absolute value;
+  ///
+  /// If *this is < 0 then return -(*this), otherwise *this;
+  APInt abs() const {
+    if (isNegative())
+      return -(*this);
+    return *this;
+  }
+
+  /// \returns the multiplicative inverse for a given modulo.
+  APInt multiplicativeInverse(const APInt &modulo) const;
+
+  /// @}
+  /// \name Support for division by constant
+  /// @{
+
+  /// Calculate the magic number for signed division by a constant.
+  struct ms;
+  ms magic() const;
+
+  /// Calculate the magic number for unsigned division by a constant.
+  struct mu;
+  mu magicu(unsigned LeadingZeros = 0) const;
+
+  /// @}
+  /// \name Building-block Operations for APInt and APFloat
+  /// @{
+
+  // These building block operations operate on a representation of arbitrary
+  // precision, two's-complement, bignum integer values. They should be
+  // sufficient to implement APInt and APFloat bignum requirements. Inputs are
+  // generally a pointer to the base of an array of integer parts, representing
+  // an unsigned bignum, and a count of how many parts there are.
+
+  /// Sets the least significant part of a bignum to the input value, and zeroes
+  /// out higher parts.
+  static void tcSet(WordType *, WordType, unsigned);
+
+  /// Assign one bignum to another.
+  static void tcAssign(WordType *, const WordType *, unsigned);
+
+  /// Returns true if a bignum is zero, false otherwise.
+  static bool tcIsZero(const WordType *, unsigned);
+
+  /// Extract the given bit of a bignum; returns 0 or 1.  Zero-based.
+  static int tcExtractBit(const WordType *, unsigned bit);
+
+  /// Copy the bit vector of width srcBITS from SRC, starting at bit srcLSB, to
+  /// DST, of dstCOUNT parts, such that the bit srcLSB becomes the least
+  /// significant bit of DST.  All high bits above srcBITS in DST are
+  /// zero-filled.
+  static void tcExtract(WordType *, unsigned dstCount,
+                        const WordType *, unsigned srcBits,
+                        unsigned srcLSB);
+
+  /// Set the given bit of a bignum.  Zero-based.
+  static void tcSetBit(WordType *, unsigned bit);
+
+  /// Clear the given bit of a bignum.  Zero-based.
+  static void tcClearBit(WordType *, unsigned bit);
+
+  /// Returns the bit number of the least or most significant set bit of a
+  /// number.  If the input number has no bits set -1U is returned.
+  static unsigned tcLSB(const WordType *, unsigned n);
+  static unsigned tcMSB(const WordType *parts, unsigned n);
+
+  /// Negate a bignum in-place.
+  static void tcNegate(WordType *, unsigned);
+
+  /// DST += RHS + CARRY where CARRY is zero or one.  Returns the carry flag.
+  static WordType tcAdd(WordType *, const WordType *,
+                        WordType carry, unsigned);
+  /// DST += RHS.  Returns the carry flag.
+  static WordType tcAddPart(WordType *, WordType, unsigned);
+
+  /// DST -= RHS + CARRY where CARRY is zero or one. Returns the carry flag.
+  static WordType tcSubtract(WordType *, const WordType *,
+                             WordType carry, unsigned);
+  /// DST -= RHS.  Returns the carry flag.
+  static WordType tcSubtractPart(WordType *, WordType, unsigned);
+
+  /// DST += SRC * MULTIPLIER + PART   if add is true
+  /// DST  = SRC * MULTIPLIER + PART   if add is false
+  ///
+  /// Requires 0 <= DSTPARTS <= SRCPARTS + 1.  If DST overlaps SRC they must
+  /// start at the same point, i.e. DST == SRC.
+  ///
+  /// If DSTPARTS == SRC_PARTS + 1 no overflow occurs and zero is returned.
+  /// Otherwise DST is filled with the least significant DSTPARTS parts of the
+  /// result, and if all of the omitted higher parts were zero return zero,
+  /// otherwise overflow occurred and return one.
+  static int tcMultiplyPart(WordType 
