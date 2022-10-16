@@ -214,4 +214,79 @@ public:
 
 #ifndef NDEBUG
     // In debug builds, we also scribble across the rest of the storage.
-    memset(RHS.getInlineStorag
+    memset(RHS.getInlineStorage(), 0xAD, InlineStorageSize);
+#endif
+  }
+
+  unique_function &operator=(unique_function &&RHS) noexcept {
+    if (this == &RHS)
+      return *this;
+
+    // Because we don't try to provide any exception safety guarantees we can
+    // implement move assignment very simply by first destroying the current
+    // object and then move-constructing over top of it.
+    this->~unique_function();
+    new (this) unique_function(std::move(RHS));
+    return *this;
+  }
+
+  template <typename CallableT> unique_function(CallableT Callable) {
+    bool IsInlineStorage = true;
+    void *CallableAddr = getInlineStorage();
+    if (sizeof(CallableT) > InlineStorageSize ||
+        alignof(CallableT) > alignof(decltype(StorageUnion.InlineStorage))) {
+      IsInlineStorage = false;
+      // Allocate out-of-line storage. FIXME: Use an explicit alignment
+      // parameter in C++17 mode.
+      auto Size = sizeof(CallableT);
+      auto Alignment = alignof(CallableT);
+      CallableAddr = allocate_buffer(Size, Alignment);
+      setOutOfLineStorage(CallableAddr, Size, Alignment);
+    }
+
+    // Now move into the storage.
+    new (CallableAddr) CallableT(std::move(Callable));
+
+    // See if we can create a trivial callback. We need the callable to be
+    // trivially moved and trivially destroyed so that we don't have to store
+    // type erased callbacks for those operations.
+    //
+    // FIXME: We should use constexpr if here and below to avoid instantiating
+    // the non-trivial static objects when unnecessary. While the linker should
+    // remove them, it is still wasteful.
+    if (llvm::is_trivially_move_constructible<CallableT>::value &&
+        std::is_trivially_destructible<CallableT>::value) {
+      // We need to create a nicely aligned object. We use a static variable
+      // for this because it is a trivial struct.
+      static TrivialCallback Callback = { &CallImpl<CallableT> };
+
+      CallbackAndInlineFlag = {&Callback, IsInlineStorage};
+      return;
+    }
+
+    // Otherwise, we need to point at an object that contains all the different
+    // type erased behaviors needed. Create a static instance of the struct type
+    // here and then use a pointer to that.
+    static NonTrivialCallbacks Callbacks = {
+        &CallImpl<CallableT>, &MoveImpl<CallableT>, &DestroyImpl<CallableT>};
+
+    CallbackAndInlineFlag = {&Callbacks, IsInlineStorage};
+  }
+
+  ReturnT operator()(ParamTs... Params) {
+    void *CallableAddr =
+        isInlineStorage() ? getInlineStorage() : getOutOfLineStorage();
+
+    return (isTrivialCallback()
+                ? getTrivialCallback()
+                : getNonTrivialCallbacks()->CallPtr)(CallableAddr, Params...);
+  }
+
+  explicit operator bool() const {
+    return (bool)CallbackAndInlineFlag.getPointer();
+  }
+};
+
+} // end namespace llvm
+
+#endif // LLVM_ADT_FUNCTION_H
