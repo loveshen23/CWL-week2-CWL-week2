@@ -1910,4 +1910,349 @@ public:
   /// Otherwise DST is filled with the least significant DSTPARTS parts of the
   /// result, and if all of the omitted higher parts were zero return zero,
   /// otherwise overflow occurred and return one.
-  static int tcMultiplyPart(WordType 
+  static int tcMultiplyPart(WordType *dst, const WordType *src,
+                            WordType multiplier, WordType carry,
+                            unsigned srcParts, unsigned dstParts,
+                            bool add);
+
+  /// DST = LHS * RHS, where DST has the same width as the operands and is
+  /// filled with the least significant parts of the result.  Returns one if
+  /// overflow occurred, otherwise zero.  DST must be disjoint from both
+  /// operands.
+  static int tcMultiply(WordType *, const WordType *, const WordType *,
+                        unsigned);
+
+  /// DST = LHS * RHS, where DST has width the sum of the widths of the
+  /// operands. No overflow occurs. DST must be disjoint from both operands.
+  static void tcFullMultiply(WordType *, const WordType *,
+                             const WordType *, unsigned, unsigned);
+
+  /// If RHS is zero LHS and REMAINDER are left unchanged, return one.
+  /// Otherwise set LHS to LHS / RHS with the fractional part discarded, set
+  /// REMAINDER to the remainder, return zero.  i.e.
+  ///
+  ///  OLD_LHS = RHS * LHS + REMAINDER
+  ///
+  /// SCRATCH is a bignum of the same size as the operands and result for use by
+  /// the routine; its contents need not be initialized and are destroyed.  LHS,
+  /// REMAINDER and SCRATCH must be distinct.
+  static int tcDivide(WordType *lhs, const WordType *rhs,
+                      WordType *remainder, WordType *scratch,
+                      unsigned parts);
+
+  /// Shift a bignum left Count bits. Shifted in bits are zero. There are no
+  /// restrictions on Count.
+  static void tcShiftLeft(WordType *, unsigned Words, unsigned Count);
+
+  /// Shift a bignum right Count bits.  Shifted in bits are zero.  There are no
+  /// restrictions on Count.
+  static void tcShiftRight(WordType *, unsigned Words, unsigned Count);
+
+  /// The obvious AND, OR and XOR and complement operations.
+  static void tcAnd(WordType *, const WordType *, unsigned);
+  static void tcOr(WordType *, const WordType *, unsigned);
+  static void tcXor(WordType *, const WordType *, unsigned);
+  static void tcComplement(WordType *, unsigned);
+
+  /// Comparison (unsigned) of two bignums.
+  static int tcCompare(const WordType *, const WordType *, unsigned);
+
+  /// Increment a bignum in-place.  Return the carry flag.
+  static WordType tcIncrement(WordType *dst, unsigned parts) {
+    return tcAddPart(dst, 1, parts);
+  }
+
+  /// Decrement a bignum in-place.  Return the borrow flag.
+  static WordType tcDecrement(WordType *dst, unsigned parts) {
+    return tcSubtractPart(dst, 1, parts);
+  }
+
+  /// Set the least significant BITS and clear the rest.
+  static void tcSetLeastSignificantBits(WordType *, unsigned, unsigned bits);
+
+  /// debug method
+  void dump() const;
+
+  /// @}
+};
+
+/// Magic data for optimising signed division by a constant.
+struct APInt::ms {
+  APInt m;    ///< magic number
+  unsigned s; ///< shift amount
+};
+
+/// Magic data for optimising unsigned division by a constant.
+struct APInt::mu {
+  APInt m;    ///< magic number
+  bool a;     ///< add indicator
+  unsigned s; ///< shift amount
+};
+
+inline bool operator==(uint64_t V1, const APInt &V2) { return V2 == V1; }
+
+inline bool operator!=(uint64_t V1, const APInt &V2) { return V2 != V1; }
+
+/// Unary bitwise complement operator.
+///
+/// \returns an APInt that is the bitwise complement of \p v.
+inline APInt operator~(APInt v) {
+  v.flipAllBits();
+  return v;
+}
+
+inline APInt operator&(APInt a, const APInt &b) {
+  a &= b;
+  return a;
+}
+
+inline APInt operator&(const APInt &a, APInt &&b) {
+  b &= a;
+  return std::move(b);
+}
+
+inline APInt operator&(APInt a, uint64_t RHS) {
+  a &= RHS;
+  return a;
+}
+
+inline APInt operator&(uint64_t LHS, APInt b) {
+  b &= LHS;
+  return b;
+}
+
+inline APInt operator|(APInt a, const APInt &b) {
+  a |= b;
+  return a;
+}
+
+inline APInt operator|(const APInt &a, APInt &&b) {
+  b |= a;
+  return std::move(b);
+}
+
+inline APInt operator|(APInt a, uint64_t RHS) {
+  a |= RHS;
+  return a;
+}
+
+inline APInt operator|(uint64_t LHS, APInt b) {
+  b |= LHS;
+  return b;
+}
+
+inline APInt operator^(APInt a, const APInt &b) {
+  a ^= b;
+  return a;
+}
+
+inline APInt operator^(const APInt &a, APInt &&b) {
+  b ^= a;
+  return std::move(b);
+}
+
+inline APInt operator^(APInt a, uint64_t RHS) {
+  a ^= RHS;
+  return a;
+}
+
+inline APInt operator^(uint64_t LHS, APInt b) {
+  b ^= LHS;
+  return b;
+}
+
+inline raw_ostream &operator<<(raw_ostream &OS, const APInt &I) {
+  I.print(OS, true);
+  return OS;
+}
+
+inline APInt operator-(APInt v) {
+  v.negate();
+  return v;
+}
+
+inline APInt operator+(APInt a, const APInt &b) {
+  a += b;
+  return a;
+}
+
+inline APInt operator+(const APInt &a, APInt &&b) {
+  b += a;
+  return std::move(b);
+}
+
+inline APInt operator+(APInt a, uint64_t RHS) {
+  a += RHS;
+  return a;
+}
+
+inline APInt operator+(uint64_t LHS, APInt b) {
+  b += LHS;
+  return b;
+}
+
+inline APInt operator-(APInt a, const APInt &b) {
+  a -= b;
+  return a;
+}
+
+inline APInt operator-(const APInt &a, APInt &&b) {
+  b.negate();
+  b += a;
+  return std::move(b);
+}
+
+inline APInt operator-(APInt a, uint64_t RHS) {
+  a -= RHS;
+  return a;
+}
+
+inline APInt operator-(uint64_t LHS, APInt b) {
+  b.negate();
+  b += LHS;
+  return b;
+}
+
+inline APInt operator*(APInt a, uint64_t RHS) {
+  a *= RHS;
+  return a;
+}
+
+inline APInt operator*(uint64_t LHS, APInt b) {
+  b *= LHS;
+  return b;
+}
+
+
+namespace APIntOps {
+
+/// Determine the smaller of two APInts considered to be signed.
+inline const APInt &smin(const APInt &A, const APInt &B) {
+  return A.slt(B) ? A : B;
+}
+
+/// Determine the larger of two APInts considered to be signed.
+inline const APInt &smax(const APInt &A, const APInt &B) {
+  return A.sgt(B) ? A : B;
+}
+
+/// Determine the smaller of two APInts considered to be signed.
+inline const APInt &umin(const APInt &A, const APInt &B) {
+  return A.ult(B) ? A : B;
+}
+
+/// Determine the larger of two APInts considered to be unsigned.
+inline const APInt &umax(const APInt &A, const APInt &B) {
+  return A.ugt(B) ? A : B;
+}
+
+/// Compute GCD of two unsigned APInt values.
+///
+/// This function returns the greatest common divisor of the two APInt values
+/// using Stein's algorithm.
+///
+/// \returns the greatest common divisor of A and B.
+APInt GreatestCommonDivisor(APInt A, APInt B);
+
+/// Converts the given APInt to a double value.
+///
+/// Treats the APInt as an unsigned value for conversion purposes.
+inline double RoundAPIntToDouble(const APInt &APIVal) {
+  return APIVal.roundToDouble();
+}
+
+/// Converts the given APInt to a double value.
+///
+/// Treats the APInt as a signed value for conversion purposes.
+inline double RoundSignedAPIntToDouble(const APInt &APIVal) {
+  return APIVal.signedRoundToDouble();
+}
+
+/// Converts the given APInt to a float vlalue.
+inline float RoundAPIntToFloat(const APInt &APIVal) {
+  return float(RoundAPIntToDouble(APIVal));
+}
+
+/// Converts the given APInt to a float value.
+///
+/// Treats the APInt as a signed value for conversion purposes.
+inline float RoundSignedAPIntToFloat(const APInt &APIVal) {
+  return float(APIVal.signedRoundToDouble());
+}
+
+/// Converts the given double value into a APInt.
+///
+/// This function convert a double value to an APInt value.
+APInt RoundDoubleToAPInt(double Double, unsigned width);
+
+/// Converts a float value into a APInt.
+///
+/// Converts a float value into an APInt value.
+inline APInt RoundFloatToAPInt(float Float, unsigned width) {
+  return RoundDoubleToAPInt(double(Float), width);
+}
+
+/// Return A unsign-divided by B, rounded by the given rounding mode.
+APInt RoundingUDiv(const APInt &A, const APInt &B, APInt::Rounding RM);
+
+/// Return A sign-divided by B, rounded by the given rounding mode.
+APInt RoundingSDiv(const APInt &A, const APInt &B, APInt::Rounding RM);
+
+/// Let q(n) = An^2 + Bn + C, and BW = bit width of the value range
+/// (e.g. 32 for i32).
+/// This function finds the smallest number n, such that
+/// (a) n >= 0 and q(n) = 0, or
+/// (b) n >= 1 and q(n-1) and q(n), when evaluated in the set of all
+///     integers, belong to two different intervals [Rk, Rk+R),
+///     where R = 2^BW, and k is an integer.
+/// The idea here is to find when q(n) "overflows" 2^BW, while at the
+/// same time "allowing" subtraction. In unsigned modulo arithmetic a
+/// subtraction (treated as addition of negated numbers) would always
+/// count as an overflow, but here we want to allow values to decrease
+/// and increase as long as they are within the same interval.
+/// Specifically, adding of two negative numbers should not cause an
+/// overflow (as long as the magnitude does not exceed the bit width).
+/// On the other hand, given a positive number, adding a negative
+/// number to it can give a negative result, which would cause the
+/// value to go from [-2^BW, 0) to [0, 2^BW). In that sense, zero is
+/// treated as a special case of an overflow.
+///
+/// This function returns None if after finding k that minimizes the
+/// positive solution to q(n) = kR, both solutions are contained between
+/// two consecutive integers.
+///
+/// There are cases where q(n) > T, and q(n+1) < T (assuming evaluation
+/// in arithmetic modulo 2^BW, and treating the values as signed) by the
+/// virtue of *signed* overflow. This function will *not* find such an n,
+/// however it may find a value of n satisfying the inequalities due to
+/// an *unsigned* overflow (if the values are treated as unsigned).
+/// To find a solution for a signed overflow, treat it as a problem of
+/// finding an unsigned overflow with a range with of BW-1.
+///
+/// The returned value may have a different bit width from the input
+/// coefficients.
+Optional<APInt> SolveQuadraticEquationWrap(APInt A, APInt B, APInt C,
+                                           unsigned RangeWidth);
+
+/// Compare two values, and if they are different, return the position of the
+/// most significant bit that is different in the values.
+Optional<unsigned> GetMostSignificantDifferentBit(const APInt &A,
+                                                  const APInt &B);
+
+} // End of APIntOps namespace
+
+// See friend declaration above. This additional declaration is required in
+// order to compile LLVM with IBM xlC compiler.
+hash_code hash_value(const APInt &Arg);
+
+/// StoreIntToMemory - Fills the StoreBytes bytes of memory starting from Dst
+/// with the integer held in IntVal.
+void StoreIntToMemory(const APInt &IntVal, uint8_t *Dst, unsigned StoreBytes);
+
+/// LoadIntFromMemory - Loads the integer stored in the LoadBytes bytes starting
+/// from Src into IntVal, which is assumed to be wide enough and to hold zero.
+void LoadIntFromMemory(APInt &IntVal, uint8_t *Src, unsigned LoadBytes);
+
+} // namespace llvm
+
+#endif
