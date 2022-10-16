@@ -506,4 +506,35 @@ namespace llvm {
   /// Construct a MutableArrayRef from a single element.
   template<typename T>
   MutableArrayRef<T> makeMutableArrayRef(T &OneElt) {
-    return OneE
+    return OneElt;
+  }
+
+  /// Construct a MutableArrayRef from a pointer and length.
+  template<typename T>
+  MutableArrayRef<T> makeMutableArrayRef(T *data, size_t length) {
+    return MutableArrayRef<T>(data, length);
+  }
+
+  /// @}
+  /// @name ArrayRef Comparison Operators
+  /// @{
+
+  template<typename T>
+  inline bool operator==(ArrayRef<T> LHS, ArrayRef<T> RHS) {
+    return LHS.equals(RHS);
+  }
+
+  template<typename T>
+  inline bool operator!=(ArrayRef<T> LHS, ArrayRef<T> RHS) {
+    return !(LHS == RHS);
+  }
+
+  /// @}
+
+  template <typename T> hash_code hash_value(ArrayRef<T> S) {
+    return hash_combine_range(S.begin(), S.end());
+  }
+
+} // end namespace llvm
+
+#endif // LLVM_ADT_ARRAYREF_H
