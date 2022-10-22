@@ -407,3 +407,105 @@ private:
       return iterator(P == EndPointer() ? CurArray : P + 1, CurArray, *this);
     return iterator(P, EndPointer(), *this);
   }
+};
+
+/// Equality comparison for SmallPtrSet.
+///
+/// Iterates over elements of LHS confirming that each value from LHS is also in
+/// RHS, and that no additional values are in RHS.
+template <typename PtrType>
+bool operator==(const SmallPtrSetImpl<PtrType> &LHS,
+                const SmallPtrSetImpl<PtrType> &RHS) {
+  if (LHS.size() != RHS.size())
+    return false;
+
+  for (const auto *KV : LHS)
+    if (!RHS.count(KV))
+      return false;
+
+  return true;
+}
+
+/// Inequality comparison for SmallPtrSet.
+///
+/// Equivalent to !(LHS == RHS).
+template <typename PtrType>
+bool operator!=(const SmallPtrSetImpl<PtrType> &LHS,
+                const SmallPtrSetImpl<PtrType> &RHS) {
+  return !(LHS == RHS);
+}
+
+/// SmallPtrSet - This class implements a set which is optimized for holding
+/// SmallSize or less elements.  This internally rounds up SmallSize to the next
+/// power of two if it is not already a power of two.  See the comments above
+/// SmallPtrSetImplBase for details of the algorithm.
+template<class PtrType, unsigned SmallSize>
+class SmallPtrSet : public SmallPtrSetImpl<PtrType> {
+  // In small mode SmallPtrSet uses linear search for the elements, so it is
+  // not a good idea to choose this value too high. You may consider using a
+  // DenseSet<> instead if you expect many elements in the set.
+  static_assert(SmallSize <= 32, "SmallSize should be small");
+
+  using BaseT = SmallPtrSetImpl<PtrType>;
+
+  // Make sure that SmallSize is a power of two, round up if not.
+  enum { SmallSizePowTwo = RoundUpToPowerOfTwo<SmallSize>::Val };
+  /// SmallStorage - Fixed size storage used in 'small mode'.
+  const void *SmallStorage[SmallSizePowTwo];
+
+public:
+  SmallPtrSet() : BaseT(SmallStorage, SmallSizePowTwo) {}
+  SmallPtrSet(const SmallPtrSet &that) : BaseT(SmallStorage, that) {}
+  SmallPtrSet(SmallPtrSet &&that)
+      : BaseT(SmallStorage, SmallSizePowTwo, std::move(that)) {}
+
+  template<typename It>
+  SmallPtrSet(It I, It E) : BaseT(SmallStorage, SmallSizePowTwo) {
+    this->insert(I, E);
+  }
+
+  SmallPtrSet(std::initializer_list<PtrType> IL)
+      : BaseT(SmallStorage, SmallSizePowTwo) {
+    this->insert(IL.begin(), IL.end());
+  }
+
+  SmallPtrSet<PtrType, SmallSize> &
+  operator=(const SmallPtrSet<PtrType, SmallSize> &RHS) {
+    if (&RHS != this)
+      this->CopyFrom(RHS);
+    return *this;
+  }
+
+  SmallPtrSet<PtrType, SmallSize> &
+  operator=(SmallPtrSet<PtrType, SmallSize> &&RHS) {
+    if (&RHS != this)
+      this->MoveFrom(SmallSizePowTwo, std::move(RHS));
+    return *this;
+  }
+
+  SmallPtrSet<PtrType, SmallSize> &
+  operator=(std::initializer_list<PtrType> IL) {
+    this->clear();
+    this->insert(IL.begin(), IL.end());
+    return *this;
+  }
+
+  /// swap - Swaps the elements of two sets.
+  void swap(SmallPtrSet<PtrType, SmallSize> &RHS) {
+    SmallPtrSetImplBase::swap(RHS);
+  }
+};
+
+} // end namespace llvm
+
+namespace std {
+
+  /// Implement std::swap in terms of SmallPtrSet swap.
+  template<class T, unsigned N>
+  inline void swap(llvm::SmallPtrSet<T, N> &LHS, llvm::SmallPtrSet<T, N> &RHS) {
+    LHS.swap(RHS);
+  }
+
+} // end namespace std
+
+#endif // LLVM_ADT_SMALLPTRSET_H
