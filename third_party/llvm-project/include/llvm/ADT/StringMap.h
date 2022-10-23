@@ -547,4 +547,47 @@ public:
 template <typename ValueTy>
 class StringMapIterator : public StringMapIterBase<StringMapIterator<ValueTy>,
                                                    StringMapEntry<ValueTy>> {
-  using base
+  using base =
+      StringMapIterBase<StringMapIterator<ValueTy>, StringMapEntry<ValueTy>>;
+
+public:
+  StringMapIterator() = default;
+  explicit StringMapIterator(StringMapEntryBase **Bucket,
+                             bool NoAdvance = false)
+      : base(Bucket, NoAdvance) {}
+
+  StringMapEntry<ValueTy> &operator*() const {
+    return *static_cast<StringMapEntry<ValueTy> *>(*this->Ptr);
+  }
+
+  operator StringMapConstIterator<ValueTy>() const {
+    return StringMapConstIterator<ValueTy>(this->Ptr, true);
+  }
+};
+
+template <typename ValueTy>
+class StringMapKeyIterator
+    : public iterator_adaptor_base<StringMapKeyIterator<ValueTy>,
+                                   StringMapConstIterator<ValueTy>,
+                                   std::forward_iterator_tag, StringRef> {
+  using base = iterator_adaptor_base<StringMapKeyIterator<ValueTy>,
+                                     StringMapConstIterator<ValueTy>,
+                                     std::forward_iterator_tag, StringRef>;
+
+public:
+  StringMapKeyIterator() = default;
+  explicit StringMapKeyIterator(StringMapConstIterator<ValueTy> Iter)
+      : base(std::move(Iter)) {}
+
+  StringRef &operator*() {
+    Key = this->wrapped()->getKey();
+    return Key;
+  }
+
+private:
+  StringRef Key;
+};
+
+} // end namespace llvm
+
+#endif // LLVM_ADT_STRINGMAP_H
