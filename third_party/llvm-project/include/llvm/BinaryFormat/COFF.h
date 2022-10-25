@@ -231,4 +231,382 @@ enum SymbolStorageClass {
   IMAGE_SYM_CLASS_FILE = 103,          ///< File name
   /// Line number, reformatted as symbol
   IMAGE_SYM_CLASS_SECTION = 104,
-  IMAGE_S
+  IMAGE_SYM_CLASS_WEAK_EXTERNAL = 105, ///< Duplicate tag
+  /// External symbol in dmert public lib
+  IMAGE_SYM_CLASS_CLR_TOKEN = 107
+};
+
+enum SymbolBaseType : unsigned {
+  IMAGE_SYM_TYPE_NULL = 0,   ///< No type information or unknown base type.
+  IMAGE_SYM_TYPE_VOID = 1,   ///< Used with void pointers and functions.
+  IMAGE_SYM_TYPE_CHAR = 2,   ///< A character (signed byte).
+  IMAGE_SYM_TYPE_SHORT = 3,  ///< A 2-byte signed integer.
+  IMAGE_SYM_TYPE_INT = 4,    ///< A natural integer type on the target.
+  IMAGE_SYM_TYPE_LONG = 5,   ///< A 4-byte signed integer.
+  IMAGE_SYM_TYPE_FLOAT = 6,  ///< A 4-byte floating-point number.
+  IMAGE_SYM_TYPE_DOUBLE = 7, ///< An 8-byte floating-point number.
+  IMAGE_SYM_TYPE_STRUCT = 8, ///< A structure.
+  IMAGE_SYM_TYPE_UNION = 9,  ///< An union.
+  IMAGE_SYM_TYPE_ENUM = 10,  ///< An enumerated type.
+  IMAGE_SYM_TYPE_MOE = 11,   ///< A member of enumeration (a specific value).
+  IMAGE_SYM_TYPE_BYTE = 12,  ///< A byte; unsigned 1-byte integer.
+  IMAGE_SYM_TYPE_WORD = 13,  ///< A word; unsigned 2-byte integer.
+  IMAGE_SYM_TYPE_UINT = 14,  ///< An unsigned integer of natural size.
+  IMAGE_SYM_TYPE_DWORD = 15  ///< An unsigned 4-byte integer.
+};
+
+enum SymbolComplexType : unsigned {
+  IMAGE_SYM_DTYPE_NULL = 0,     ///< No complex type; simple scalar variable.
+  IMAGE_SYM_DTYPE_POINTER = 1,  ///< A pointer to base type.
+  IMAGE_SYM_DTYPE_FUNCTION = 2, ///< A function that returns a base type.
+  IMAGE_SYM_DTYPE_ARRAY = 3,    ///< An array of base type.
+
+  /// Type is formed as (base + (derived << SCT_COMPLEX_TYPE_SHIFT))
+  SCT_COMPLEX_TYPE_SHIFT = 4
+};
+
+enum AuxSymbolType { IMAGE_AUX_SYMBOL_TYPE_TOKEN_DEF = 1 };
+
+struct section {
+  char Name[NameSize];
+  uint32_t VirtualSize;
+  uint32_t VirtualAddress;
+  uint32_t SizeOfRawData;
+  uint32_t PointerToRawData;
+  uint32_t PointerToRelocations;
+  uint32_t PointerToLineNumbers;
+  uint16_t NumberOfRelocations;
+  uint16_t NumberOfLineNumbers;
+  uint32_t Characteristics;
+};
+
+enum SectionCharacteristics : uint32_t {
+  SC_Invalid = 0xffffffff,
+
+  IMAGE_SCN_TYPE_NOLOAD = 0x00000002,
+  IMAGE_SCN_TYPE_NO_PAD = 0x00000008,
+  IMAGE_SCN_CNT_CODE = 0x00000020,
+  IMAGE_SCN_CNT_INITIALIZED_DATA = 0x00000040,
+  IMAGE_SCN_CNT_UNINITIALIZED_DATA = 0x00000080,
+  IMAGE_SCN_LNK_OTHER = 0x00000100,
+  IMAGE_SCN_LNK_INFO = 0x00000200,
+  IMAGE_SCN_LNK_REMOVE = 0x00000800,
+  IMAGE_SCN_LNK_COMDAT = 0x00001000,
+  IMAGE_SCN_GPREL = 0x00008000,
+  IMAGE_SCN_MEM_PURGEABLE = 0x00020000,
+  IMAGE_SCN_MEM_16BIT = 0x00020000,
+  IMAGE_SCN_MEM_LOCKED = 0x00040000,
+  IMAGE_SCN_MEM_PRELOAD = 0x00080000,
+  IMAGE_SCN_ALIGN_1BYTES = 0x00100000,
+  IMAGE_SCN_ALIGN_2BYTES = 0x00200000,
+  IMAGE_SCN_ALIGN_4BYTES = 0x00300000,
+  IMAGE_SCN_ALIGN_8BYTES = 0x00400000,
+  IMAGE_SCN_ALIGN_16BYTES = 0x00500000,
+  IMAGE_SCN_ALIGN_32BYTES = 0x00600000,
+  IMAGE_SCN_ALIGN_64BYTES = 0x00700000,
+  IMAGE_SCN_ALIGN_128BYTES = 0x00800000,
+  IMAGE_SCN_ALIGN_256BYTES = 0x00900000,
+  IMAGE_SCN_ALIGN_512BYTES = 0x00A00000,
+  IMAGE_SCN_ALIGN_1024BYTES = 0x00B00000,
+  IMAGE_SCN_ALIGN_2048BYTES = 0x00C00000,
+  IMAGE_SCN_ALIGN_4096BYTES = 0x00D00000,
+  IMAGE_SCN_ALIGN_8192BYTES = 0x00E00000,
+  IMAGE_SCN_LNK_NRELOC_OVFL = 0x01000000,
+  IMAGE_SCN_MEM_DISCARDABLE = 0x02000000,
+  IMAGE_SCN_MEM_NOT_CACHED = 0x04000000,
+  IMAGE_SCN_MEM_NOT_PAGED = 0x08000000,
+  IMAGE_SCN_MEM_SHARED = 0x10000000,
+  IMAGE_SCN_MEM_EXECUTE = 0x20000000,
+  IMAGE_SCN_MEM_READ = 0x40000000,
+  IMAGE_SCN_MEM_WRITE = 0x80000000
+};
+
+struct relocation {
+  uint32_t VirtualAddress;
+  uint32_t SymbolTableIndex;
+  uint16_t Type;
+};
+
+enum RelocationTypeI386 : unsigned {
+  IMAGE_REL_I386_ABSOLUTE = 0x0000,
+  IMAGE_REL_I386_DIR16 = 0x0001,
+  IMAGE_REL_I386_REL16 = 0x0002,
+  IMAGE_REL_I386_DIR32 = 0x0006,
+  IMAGE_REL_I386_DIR32NB = 0x0007,
+  IMAGE_REL_I386_SEG12 = 0x0009,
+  IMAGE_REL_I386_SECTION = 0x000A,
+  IMAGE_REL_I386_SECREL = 0x000B,
+  IMAGE_REL_I386_TOKEN = 0x000C,
+  IMAGE_REL_I386_SECREL7 = 0x000D,
+  IMAGE_REL_I386_REL32 = 0x0014
+};
+
+enum RelocationTypeAMD64 : unsigned {
+  IMAGE_REL_AMD64_ABSOLUTE = 0x0000,
+  IMAGE_REL_AMD64_ADDR64 = 0x0001,
+  IMAGE_REL_AMD64_ADDR32 = 0x0002,
+  IMAGE_REL_AMD64_ADDR32NB = 0x0003,
+  IMAGE_REL_AMD64_REL32 = 0x0004,
+  IMAGE_REL_AMD64_REL32_1 = 0x0005,
+  IMAGE_REL_AMD64_REL32_2 = 0x0006,
+  IMAGE_REL_AMD64_REL32_3 = 0x0007,
+  IMAGE_REL_AMD64_REL32_4 = 0x0008,
+  IMAGE_REL_AMD64_REL32_5 = 0x0009,
+  IMAGE_REL_AMD64_SECTION = 0x000A,
+  IMAGE_REL_AMD64_SECREL = 0x000B,
+  IMAGE_REL_AMD64_SECREL7 = 0x000C,
+  IMAGE_REL_AMD64_TOKEN = 0x000D,
+  IMAGE_REL_AMD64_SREL32 = 0x000E,
+  IMAGE_REL_AMD64_PAIR = 0x000F,
+  IMAGE_REL_AMD64_SSPAN32 = 0x0010
+};
+
+enum RelocationTypesARM : unsigned {
+  IMAGE_REL_ARM_ABSOLUTE = 0x0000,
+  IMAGE_REL_ARM_ADDR32 = 0x0001,
+  IMAGE_REL_ARM_ADDR32NB = 0x0002,
+  IMAGE_REL_ARM_BRANCH24 = 0x0003,
+  IMAGE_REL_ARM_BRANCH11 = 0x0004,
+  IMAGE_REL_ARM_TOKEN = 0x0005,
+  IMAGE_REL_ARM_BLX24 = 0x0008,
+  IMAGE_REL_ARM_BLX11 = 0x0009,
+  IMAGE_REL_ARM_REL32 = 0x000A,
+  IMAGE_REL_ARM_SECTION = 0x000E,
+  IMAGE_REL_ARM_SECREL = 0x000F,
+  IMAGE_REL_ARM_MOV32A = 0x0010,
+  IMAGE_REL_ARM_MOV32T = 0x0011,
+  IMAGE_REL_ARM_BRANCH20T = 0x0012,
+  IMAGE_REL_ARM_BRANCH24T = 0x0014,
+  IMAGE_REL_ARM_BLX23T = 0x0015,
+  IMAGE_REL_ARM_PAIR = 0x0016,
+};
+
+enum RelocationTypesARM64 : unsigned {
+  IMAGE_REL_ARM64_ABSOLUTE = 0x0000,
+  IMAGE_REL_ARM64_ADDR32 = 0x0001,
+  IMAGE_REL_ARM64_ADDR32NB = 0x0002,
+  IMAGE_REL_ARM64_BRANCH26 = 0x0003,
+  IMAGE_REL_ARM64_PAGEBASE_REL21 = 0x0004,
+  IMAGE_REL_ARM64_REL21 = 0x0005,
+  IMAGE_REL_ARM64_PAGEOFFSET_12A = 0x0006,
+  IMAGE_REL_ARM64_PAGEOFFSET_12L = 0x0007,
+  IMAGE_REL_ARM64_SECREL = 0x0008,
+  IMAGE_REL_ARM64_SECREL_LOW12A = 0x0009,
+  IMAGE_REL_ARM64_SECREL_HIGH12A = 0x000A,
+  IMAGE_REL_ARM64_SECREL_LOW12L = 0x000B,
+  IMAGE_REL_ARM64_TOKEN = 0x000C,
+  IMAGE_REL_ARM64_SECTION = 0x000D,
+  IMAGE_REL_ARM64_ADDR64 = 0x000E,
+  IMAGE_REL_ARM64_BRANCH19 = 0x000F,
+  IMAGE_REL_ARM64_BRANCH14 = 0x0010,
+  IMAGE_REL_ARM64_REL32 = 0x0011,
+};
+
+enum COMDATType : uint8_t {
+  IMAGE_COMDAT_SELECT_NODUPLICATES = 1,
+  IMAGE_COMDAT_SELECT_ANY,
+  IMAGE_COMDAT_SELECT_SAME_SIZE,
+  IMAGE_COMDAT_SELECT_EXACT_MATCH,
+  IMAGE_COMDAT_SELECT_ASSOCIATIVE,
+  IMAGE_COMDAT_SELECT_LARGEST,
+  IMAGE_COMDAT_SELECT_NEWEST
+};
+
+// Auxiliary Symbol Formats
+struct AuxiliaryFunctionDefinition {
+  uint32_t TagIndex;
+  uint32_t TotalSize;
+  uint32_t PointerToLinenumber;
+  uint32_t PointerToNextFunction;
+  char unused[2];
+};
+
+struct AuxiliarybfAndefSymbol {
+  uint8_t unused1[4];
+  uint16_t Linenumber;
+  uint8_t unused2[6];
+  uint32_t PointerToNextFunction;
+  uint8_t unused3[2];
+};
+
+struct AuxiliaryWeakExternal {
+  uint32_t TagIndex;
+  uint32_t Characteristics;
+  uint8_t unused[10];
+};
+
+enum WeakExternalCharacteristics : unsigned {
+  IMAGE_WEAK_EXTERN_SEARCH_NOLIBRARY = 1,
+  IMAGE_WEAK_EXTERN_SEARCH_LIBRARY = 2,
+  IMAGE_WEAK_EXTERN_SEARCH_ALIAS = 3
+};
+
+struct AuxiliarySectionDefinition {
+  uint32_t Length;
+  uint16_t NumberOfRelocations;
+  uint16_t NumberOfLinenumbers;
+  uint32_t CheckSum;
+  uint32_t Number;
+  uint8_t Selection;
+  char unused;
+};
+
+struct AuxiliaryCLRToken {
+  uint8_t AuxType;
+  uint8_t unused1;
+  uint32_t SymbolTableIndex;
+  char unused2[12];
+};
+
+union Auxiliary {
+  AuxiliaryFunctionDefinition FunctionDefinition;
+  AuxiliarybfAndefSymbol bfAndefSymbol;
+  AuxiliaryWeakExternal WeakExternal;
+  AuxiliarySectionDefinition SectionDefinition;
+};
+
+/// The Import Directory Table.
+///
+/// There is a single array of these and one entry per imported DLL.
+struct ImportDirectoryTableEntry {
+  uint32_t ImportLookupTableRVA;
+  uint32_t TimeDateStamp;
+  uint32_t ForwarderChain;
+  uint32_t NameRVA;
+  uint32_t ImportAddressTableRVA;
+};
+
+/// The PE32 Import Lookup Table.
+///
+/// There is an array of these for each imported DLL. It represents either
+/// the ordinal to import from the target DLL, or a name to lookup and import
+/// from the target DLL.
+///
+/// This also happens to be the same format used by the Import Address Table
+/// when it is initially written out to the image.
+struct ImportLookupTableEntry32 {
+  uint32_t data;
+
+  /// Is this entry specified by ordinal, or name?
+  bool isOrdinal() const { return data & 0x80000000; }
+
+  /// Get the ordinal value of this entry. isOrdinal must be true.
+  uint16_t getOrdinal() const {
+    assert(isOrdinal() && "ILT entry is not an ordinal!");
+    return data & 0xFFFF;
+  }
+
+  /// Set the ordinal value and set isOrdinal to true.
+  void setOrdinal(uint16_t o) {
+    data = o;
+    data |= 0x80000000;
+  }
+
+  /// Get the Hint/Name entry RVA. isOrdinal must be false.
+  uint32_t getHintNameRVA() const {
+    assert(!isOrdinal() && "ILT entry is not a Hint/Name RVA!");
+    return data;
+  }
+
+  /// Set the Hint/Name entry RVA and set isOrdinal to false.
+  void setHintNameRVA(uint32_t rva) { data = rva; }
+};
+
+/// The DOS compatible header at the front of all PEs.
+struct DOSHeader {
+  uint16_t Magic;
+  uint16_t UsedBytesInTheLastPage;
+  uint16_t FileSizeInPages;
+  uint16_t NumberOfRelocationItems;
+  uint16_t HeaderSizeInParagraphs;
+  uint16_t MinimumExtraParagraphs;
+  uint16_t MaximumExtraParagraphs;
+  uint16_t InitialRelativeSS;
+  uint16_t InitialSP;
+  uint16_t Checksum;
+  uint16_t InitialIP;
+  uint16_t InitialRelativeCS;
+  uint16_t AddressOfRelocationTable;
+  uint16_t OverlayNumber;
+  uint16_t Reserved[4];
+  uint16_t OEMid;
+  uint16_t OEMinfo;
+  uint16_t Reserved2[10];
+  uint32_t AddressOfNewExeHeader;
+};
+
+struct PE32Header {
+  enum { PE32 = 0x10b, PE32_PLUS = 0x20b };
+
+  uint16_t Magic;
+  uint8_t MajorLinkerVersion;
+  uint8_t MinorLinkerVersion;
+  uint32_t SizeOfCode;
+  uint32_t SizeOfInitializedData;
+  uint32_t SizeOfUninitializedData;
+  uint32_t AddressOfEntryPoint; // RVA
+  uint32_t BaseOfCode;          // RVA
+  uint32_t BaseOfData;          // RVA
+  uint32_t ImageBase;
+  uint32_t SectionAlignment;
+  uint32_t FileAlignment;
+  uint16_t MajorOperatingSystemVersion;
+  uint16_t MinorOperatingSystemVersion;
+  uint16_t MajorImageVersion;
+  uint16_t MinorImageVersion;
+  uint16_t MajorSubsystemVersion;
+  uint16_t MinorSubsystemVersion;
+  uint32_t Win32VersionValue;
+  uint32_t SizeOfImage;
+  uint32_t SizeOfHeaders;
+  uint32_t CheckSum;
+  uint16_t Subsystem;
+  // FIXME: This should be DllCharacteristics to match the COFF spec.
+  uint16_t DLLCharacteristics;
+  uint32_t SizeOfStackReserve;
+  uint32_t SizeOfStackCommit;
+  uint32_t SizeOfHeapReserve;
+  uint32_t SizeOfHeapCommit;
+  uint32_t LoaderFlags;
+  // FIXME: This should be NumberOfRvaAndSizes to match the COFF spec.
+  uint32_t NumberOfRvaAndSize;
+};
+
+struct DataDirectory {
+  uint32_t RelativeVirtualAddress;
+  uint32_t Size;
+};
+
+enum DataDirectoryIndex : unsigned {
+  EXPORT_TABLE = 0,
+  IMPORT_TABLE,
+  RESOURCE_TABLE,
+  EXCEPTION_TABLE,
+  CERTIFICATE_TABLE,
+  BASE_RELOCATION_TABLE,
+  DEBUG_DIRECTORY,
+  ARCHITECTURE,
+  GLOBAL_PTR,
+  TLS_TABLE,
+  LOAD_CONFIG_TABLE,
+  BOUND_IMPORT,
+  IAT,
+  DELAY_IMPORT_DESCRIPTOR,
+  CLR_RUNTIME_HEADER,
+
+  NUM_DATA_DIRECTORIES
+};
+
+enum WindowsSubsystem : unsigned {
+  IMAGE_SUBSYSTEM_UNKNOWN = 0, ///< An unknown subsystem.
+  IMAGE_SUBSYSTEM_NATIVE = 1,  ///< Device drivers and native Windows processes
+  IMAGE_SUBSYSTEM_WINDOWS_GUI = 2,      ///< The Windows GUI subsystem.
+  IMAGE_SUBSYSTEM_WINDOWS_CUI = 3,      ///< The Windows character subsystem.
+  IMAGE_SUBSYSTEM_OS2_CUI = 5,          ///< The OS/2 character subsytem.
+  IMAGE_SUBSYSTEM_POSIX_CUI = 7,        ///< The POSIX character subsystem.
+  IMAGE_SUBSYSTEM_NATIVE_WINDOWS = 8,   ///< Native Windows 9x driver.
+  IMAGE_SUBSYSTEM_WINDOWS_CE_GUI = 9,   ///< Windows CE.
+  IMAGE_SUBSYSTEM_EFI_APPLICATION = 10, ///< An EFI application.
+  IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER = 11, ///< An EFI driver with boot
+                                                ///  services.
+  IMAGE_SUBSYSTEM_EFI_RUNTIME_DRIVER = 12,      ///< An EFI drive
