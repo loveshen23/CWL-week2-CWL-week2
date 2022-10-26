@@ -609,4 +609,121 @@ enum WindowsSubsystem : unsigned {
   IMAGE_SUBSYSTEM_EFI_APPLICATION = 10, ///< An EFI application.
   IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER = 11, ///< An EFI driver with boot
                                                 ///  services.
-  IMAGE_SUBSYSTEM_EFI_RUNTIME_DRIVER = 12,      ///< An EFI drive
+  IMAGE_SUBSYSTEM_EFI_RUNTIME_DRIVER = 12,      ///< An EFI driver with run-time
+                                                ///  services.
+  IMAGE_SUBSYSTEM_EFI_ROM = 13,                 ///< An EFI ROM image.
+  IMAGE_SUBSYSTEM_XBOX = 14,                    ///< XBOX.
+  IMAGE_SUBSYSTEM_WINDOWS_BOOT_APPLICATION = 16 ///< A BCD application.
+};
+
+enum DLLCharacteristics : unsigned {
+  /// ASLR with 64 bit address space.
+  IMAGE_DLL_CHARACTERISTICS_HIGH_ENTROPY_VA = 0x0020,
+  /// DLL can be relocated at load time.
+  IMAGE_DLL_CHARACTERISTICS_DYNAMIC_BASE = 0x0040,
+  /// Code integrity checks are enforced.
+  IMAGE_DLL_CHARACTERISTICS_FORCE_INTEGRITY = 0x0080,
+  ///< Image is NX compatible.
+  IMAGE_DLL_CHARACTERISTICS_NX_COMPAT = 0x0100,
+  /// Isolation aware, but do not isolate the image.
+  IMAGE_DLL_CHARACTERISTICS_NO_ISOLATION = 0x0200,
+  /// Does not use structured exception handling (SEH). No SEH handler may be
+  /// called in this image.
+  IMAGE_DLL_CHARACTERISTICS_NO_SEH = 0x0400,
+  /// Do not bind the image.
+  IMAGE_DLL_CHARACTERISTICS_NO_BIND = 0x0800,
+  ///< Image should execute in an AppContainer.
+  IMAGE_DLL_CHARACTERISTICS_APPCONTAINER = 0x1000,
+  ///< A WDM driver.
+  IMAGE_DLL_CHARACTERISTICS_WDM_DRIVER = 0x2000,
+  ///< Image supports Control Flow Guard.
+  IMAGE_DLL_CHARACTERISTICS_GUARD_CF = 0x4000,
+  /// Terminal Server aware.
+  IMAGE_DLL_CHARACTERISTICS_TERMINAL_SERVER_AWARE = 0x8000
+};
+
+enum DebugType : unsigned {
+  IMAGE_DEBUG_TYPE_UNKNOWN = 0,
+  IMAGE_DEBUG_TYPE_COFF = 1,
+  IMAGE_DEBUG_TYPE_CODEVIEW = 2,
+  IMAGE_DEBUG_TYPE_FPO = 3,
+  IMAGE_DEBUG_TYPE_MISC = 4,
+  IMAGE_DEBUG_TYPE_EXCEPTION = 5,
+  IMAGE_DEBUG_TYPE_FIXUP = 6,
+  IMAGE_DEBUG_TYPE_OMAP_TO_SRC = 7,
+  IMAGE_DEBUG_TYPE_OMAP_FROM_SRC = 8,
+  IMAGE_DEBUG_TYPE_BORLAND = 9,
+  IMAGE_DEBUG_TYPE_RESERVED10 = 10,
+  IMAGE_DEBUG_TYPE_CLSID = 11,
+  IMAGE_DEBUG_TYPE_VC_FEATURE = 12,
+  IMAGE_DEBUG_TYPE_POGO = 13,
+  IMAGE_DEBUG_TYPE_ILTCG = 14,
+  IMAGE_DEBUG_TYPE_MPX = 15,
+  IMAGE_DEBUG_TYPE_REPRO = 16,
+};
+
+enum BaseRelocationType : unsigned {
+  IMAGE_REL_BASED_ABSOLUTE = 0,
+  IMAGE_REL_BASED_HIGH = 1,
+  IMAGE_REL_BASED_LOW = 2,
+  IMAGE_REL_BASED_HIGHLOW = 3,
+  IMAGE_REL_BASED_HIGHADJ = 4,
+  IMAGE_REL_BASED_MIPS_JMPADDR = 5,
+  IMAGE_REL_BASED_ARM_MOV32A = 5,
+  IMAGE_REL_BASED_ARM_MOV32T = 7,
+  IMAGE_REL_BASED_MIPS_JMPADDR16 = 9,
+  IMAGE_REL_BASED_DIR64 = 10
+};
+
+enum ImportType : unsigned {
+  IMPORT_CODE = 0,
+  IMPORT_DATA = 1,
+  IMPORT_CONST = 2
+};
+
+enum ImportNameType : unsigned {
+  /// Import is by ordinal. This indicates that the value in the Ordinal/Hint
+  /// field of the import header is the import's ordinal. If this constant is
+  /// not specified, then the Ordinal/Hint field should always be interpreted
+  /// as the import's hint.
+  IMPORT_ORDINAL = 0,
+  /// The import name is identical to the public symbol name
+  IMPORT_NAME = 1,
+  /// The import name is the public symbol name, but skipping the leading ?,
+  /// @, or optionally _.
+  IMPORT_NAME_NOPREFIX = 2,
+  /// The import name is the public symbol name, but skipping the leading ?,
+  /// @, or optionally _, and truncating at the first @.
+  IMPORT_NAME_UNDECORATE = 3
+};
+
+struct ImportHeader {
+  uint16_t Sig1; ///< Must be IMAGE_FILE_MACHINE_UNKNOWN (0).
+  uint16_t Sig2; ///< Must be 0xFFFF.
+  uint16_t Version;
+  uint16_t Machine;
+  uint32_t TimeDateStamp;
+  uint32_t SizeOfData;
+  uint16_t OrdinalHint;
+  uint16_t TypeInfo;
+
+  ImportType getType() const { return static_cast<ImportType>(TypeInfo & 0x3); }
+
+  ImportNameType getNameType() const {
+    return static_cast<ImportNameType>((TypeInfo & 0x1C) >> 2);
+  }
+};
+
+enum CodeViewIdentifiers {
+  DEBUG_SECTION_MAGIC = 0x4,
+  DEBUG_HASHES_SECTION_MAGIC = 0x133C9C5
+};
+
+inline bool isReservedSectionNumber(int32_t SectionNumber) {
+  return SectionNumber <= 0;
+}
+
+} // End namespace COFF.
+} // End namespace llvm.
+
+#endif
