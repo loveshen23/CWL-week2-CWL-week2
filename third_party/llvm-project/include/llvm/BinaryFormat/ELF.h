@@ -407,4 +407,356 @@ enum {
 
 // ELF Relocation types for AArch64
 enum {
-#include "ELFRelocs/AA
+#include "ELFRelocs/AArch64.def"
+};
+
+// ARM Specific e_flags
+enum : unsigned {
+  EF_ARM_SOFT_FLOAT = 0x00000200U,     // Legacy pre EABI_VER5
+  EF_ARM_ABI_FLOAT_SOFT = 0x00000200U, // EABI_VER5
+  EF_ARM_VFP_FLOAT = 0x00000400U,      // Legacy pre EABI_VER5
+  EF_ARM_ABI_FLOAT_HARD = 0x00000400U, // EABI_VER5
+  EF_ARM_EABI_UNKNOWN = 0x00000000U,
+  EF_ARM_EABI_VER1 = 0x01000000U,
+  EF_ARM_EABI_VER2 = 0x02000000U,
+  EF_ARM_EABI_VER3 = 0x03000000U,
+  EF_ARM_EABI_VER4 = 0x04000000U,
+  EF_ARM_EABI_VER5 = 0x05000000U,
+  EF_ARM_EABIMASK = 0xFF000000U
+};
+
+// ELF Relocation types for ARM
+enum {
+#include "ELFRelocs/ARM.def"
+};
+
+// ARC Specific e_flags
+enum : unsigned {
+  EF_ARC_MACH_MSK = 0x000000ff,
+  EF_ARC_OSABI_MSK = 0x00000f00,
+  E_ARC_MACH_ARC600 = 0x00000002,
+  E_ARC_MACH_ARC601 = 0x00000004,
+  E_ARC_MACH_ARC700 = 0x00000003,
+  EF_ARC_CPU_ARCV2EM = 0x00000005,
+  EF_ARC_CPU_ARCV2HS = 0x00000006,
+  E_ARC_OSABI_ORIG = 0x00000000,
+  E_ARC_OSABI_V2 = 0x00000200,
+  E_ARC_OSABI_V3 = 0x00000300,
+  E_ARC_OSABI_V4 = 0x00000400,
+  EF_ARC_PIC = 0x00000100
+};
+
+// ELF Relocation types for ARC
+enum {
+#include "ELFRelocs/ARC.def"
+};
+
+// AVR specific e_flags
+enum : unsigned {
+  EF_AVR_ARCH_AVR1 = 1,
+  EF_AVR_ARCH_AVR2 = 2,
+  EF_AVR_ARCH_AVR25 = 25,
+  EF_AVR_ARCH_AVR3 = 3,
+  EF_AVR_ARCH_AVR31 = 31,
+  EF_AVR_ARCH_AVR35 = 35,
+  EF_AVR_ARCH_AVR4 = 4,
+  EF_AVR_ARCH_AVR5 = 5,
+  EF_AVR_ARCH_AVR51 = 51,
+  EF_AVR_ARCH_AVR6 = 6,
+  EF_AVR_ARCH_AVRTINY = 100,
+  EF_AVR_ARCH_XMEGA1 = 101,
+  EF_AVR_ARCH_XMEGA2 = 102,
+  EF_AVR_ARCH_XMEGA3 = 103,
+  EF_AVR_ARCH_XMEGA4 = 104,
+  EF_AVR_ARCH_XMEGA5 = 105,
+  EF_AVR_ARCH_XMEGA6 = 106,
+  EF_AVR_ARCH_XMEGA7 = 107
+};
+
+// ELF Relocation types for AVR
+enum {
+#include "ELFRelocs/AVR.def"
+};
+
+// Mips Specific e_flags
+enum : unsigned {
+  EF_MIPS_NOREORDER = 0x00000001, // Don't reorder instructions
+  EF_MIPS_PIC = 0x00000002,       // Position independent code
+  EF_MIPS_CPIC = 0x00000004,      // Call object with Position independent code
+  EF_MIPS_ABI2 = 0x00000020,      // File uses N32 ABI
+  EF_MIPS_32BITMODE = 0x00000100, // Code compiled for a 64-bit machine
+                                  // in 32-bit mode
+  EF_MIPS_FP64 = 0x00000200,      // Code compiled for a 32-bit machine
+                                  // but uses 64-bit FP registers
+  EF_MIPS_NAN2008 = 0x00000400,   // Uses IEE 754-2008 NaN encoding
+
+  // ABI flags
+  EF_MIPS_ABI_O32 = 0x00001000, // This file follows the first MIPS 32 bit ABI
+  EF_MIPS_ABI_O64 = 0x00002000, // O32 ABI extended for 64-bit architecture.
+  EF_MIPS_ABI_EABI32 = 0x00003000, // EABI in 32 bit mode.
+  EF_MIPS_ABI_EABI64 = 0x00004000, // EABI in 64 bit mode.
+  EF_MIPS_ABI = 0x0000f000,        // Mask for selecting EF_MIPS_ABI_ variant.
+
+  // MIPS machine variant
+  EF_MIPS_MACH_NONE = 0x00000000,    // A standard MIPS implementation.
+  EF_MIPS_MACH_3900 = 0x00810000,    // Toshiba R3900
+  EF_MIPS_MACH_4010 = 0x00820000,    // LSI R4010
+  EF_MIPS_MACH_4100 = 0x00830000,    // NEC VR4100
+  EF_MIPS_MACH_4650 = 0x00850000,    // MIPS R4650
+  EF_MIPS_MACH_4120 = 0x00870000,    // NEC VR4120
+  EF_MIPS_MACH_4111 = 0x00880000,    // NEC VR4111/VR4181
+  EF_MIPS_MACH_SB1 = 0x008a0000,     // Broadcom SB-1
+  EF_MIPS_MACH_OCTEON = 0x008b0000,  // Cavium Networks Octeon
+  EF_MIPS_MACH_XLR = 0x008c0000,     // RMI Xlr
+  EF_MIPS_MACH_OCTEON2 = 0x008d0000, // Cavium Networks Octeon2
+  EF_MIPS_MACH_OCTEON3 = 0x008e0000, // Cavium Networks Octeon3
+  EF_MIPS_MACH_5400 = 0x00910000,    // NEC VR5400
+  EF_MIPS_MACH_5900 = 0x00920000,    // MIPS R5900
+  EF_MIPS_MACH_5500 = 0x00980000,    // NEC VR5500
+  EF_MIPS_MACH_9000 = 0x00990000,    // Unknown
+  EF_MIPS_MACH_LS2E = 0x00a00000,    // ST Microelectronics Loongson 2E
+  EF_MIPS_MACH_LS2F = 0x00a10000,    // ST Microelectronics Loongson 2F
+  EF_MIPS_MACH_LS3A = 0x00a20000,    // Loongson 3A
+  EF_MIPS_MACH = 0x00ff0000,         // EF_MIPS_MACH_xxx selection mask
+
+  // ARCH_ASE
+  EF_MIPS_MICROMIPS = 0x02000000,     // microMIPS
+  EF_MIPS_ARCH_ASE_M16 = 0x04000000,  // Has Mips-16 ISA extensions
+  EF_MIPS_ARCH_ASE_MDMX = 0x08000000, // Has MDMX multimedia extensions
+  EF_MIPS_ARCH_ASE = 0x0f000000,      // Mask for EF_MIPS_ARCH_ASE_xxx flags
+
+  // ARCH
+  EF_MIPS_ARCH_1 = 0x00000000,    // MIPS1 instruction set
+  EF_MIPS_ARCH_2 = 0x10000000,    // MIPS2 instruction set
+  EF_MIPS_ARCH_3 = 0x20000000,    // MIPS3 instruction set
+  EF_MIPS_ARCH_4 = 0x30000000,    // MIPS4 instruction set
+  EF_MIPS_ARCH_5 = 0x40000000,    // MIPS5 instruction set
+  EF_MIPS_ARCH_32 = 0x50000000,   // MIPS32 instruction set per linux not elf.h
+  EF_MIPS_ARCH_64 = 0x60000000,   // MIPS64 instruction set per linux not elf.h
+  EF_MIPS_ARCH_32R2 = 0x70000000, // mips32r2, mips32r3, mips32r5
+  EF_MIPS_ARCH_64R2 = 0x80000000, // mips64r2, mips64r3, mips64r5
+  EF_MIPS_ARCH_32R6 = 0x90000000, // mips32r6
+  EF_MIPS_ARCH_64R6 = 0xa0000000, // mips64r6
+  EF_MIPS_ARCH = 0xf0000000       // Mask for applying EF_MIPS_ARCH_ variant
+};
+
+// ELF Relocation types for Mips
+enum {
+#include "ELFRelocs/Mips.def"
+};
+
+// Special values for the st_other field in the symbol table entry for MIPS.
+enum {
+  STO_MIPS_OPTIONAL = 0x04,  // Symbol whose definition is optional
+  STO_MIPS_PLT = 0x08,       // PLT entry related dynamic table record
+  STO_MIPS_PIC = 0x20,       // PIC func in an object mixes PIC/non-PIC
+  STO_MIPS_MICROMIPS = 0x80, // MIPS Specific ISA for MicroMips
+  STO_MIPS_MIPS16 = 0xf0     // MIPS Specific ISA for Mips16
+};
+
+// .MIPS.options section descriptor kinds
+enum {
+  ODK_NULL = 0,       // Undefined
+  ODK_REGINFO = 1,    // Register usage information
+  ODK_EXCEPTIONS = 2, // Exception processing options
+  ODK_PAD = 3,        // Section padding options
+  ODK_HWPATCH = 4,    // Hardware patches applied
+  ODK_FILL = 5,       // Linker fill value
+  ODK_TAGS = 6,       // Space for tool identification
+  ODK_HWAND = 7,      // Hardware AND patches applied
+  ODK_HWOR = 8,       // Hardware OR patches applied
+  ODK_GP_GROUP = 9,   // GP group to use for text/data sections
+  ODK_IDENT = 10,     // ID information
+  ODK_PAGESIZE = 11   // Page size information
+};
+
+// Hexagon-specific e_flags
+enum {
+  // Object processor version flags, bits[11:0]
+  EF_HEXAGON_MACH_V2 = 0x00000001,  // Hexagon V2
+  EF_HEXAGON_MACH_V3 = 0x00000002,  // Hexagon V3
+  EF_HEXAGON_MACH_V4 = 0x00000003,  // Hexagon V4
+  EF_HEXAGON_MACH_V5 = 0x00000004,  // Hexagon V5
+  EF_HEXAGON_MACH_V55 = 0x00000005, // Hexagon V55
+  EF_HEXAGON_MACH_V60 = 0x00000060, // Hexagon V60
+  EF_HEXAGON_MACH_V62 = 0x00000062, // Hexagon V62
+  EF_HEXAGON_MACH_V65 = 0x00000065, // Hexagon V65
+  EF_HEXAGON_MACH_V66 = 0x00000066, // Hexagon V66
+
+  // Highest ISA version flags
+  EF_HEXAGON_ISA_MACH = 0x00000000, // Same as specified in bits[11:0]
+                                    // of e_flags
+  EF_HEXAGON_ISA_V2 = 0x00000010,   // Hexagon V2 ISA
+  EF_HEXAGON_ISA_V3 = 0x00000020,   // Hexagon V3 ISA
+  EF_HEXAGON_ISA_V4 = 0x00000030,   // Hexagon V4 ISA
+  EF_HEXAGON_ISA_V5 = 0x00000040,   // Hexagon V5 ISA
+  EF_HEXAGON_ISA_V55 = 0x00000050,  // Hexagon V55 ISA
+  EF_HEXAGON_ISA_V60 = 0x00000060,  // Hexagon V60 ISA
+  EF_HEXAGON_ISA_V62 = 0x00000062,  // Hexagon V62 ISA
+  EF_HEXAGON_ISA_V65 = 0x00000065,  // Hexagon V65 ISA
+  EF_HEXAGON_ISA_V66 = 0x00000066,  // Hexagon V66 ISA
+};
+
+// Hexagon-specific section indexes for common small data
+enum {
+  SHN_HEXAGON_SCOMMON = 0xff00,   // Other access sizes
+  SHN_HEXAGON_SCOMMON_1 = 0xff01, // Byte-sized access
+  SHN_HEXAGON_SCOMMON_2 = 0xff02, // Half-word-sized access
+  SHN_HEXAGON_SCOMMON_4 = 0xff03, // Word-sized access
+  SHN_HEXAGON_SCOMMON_8 = 0xff04  // Double-word-size access
+};
+
+// ELF Relocation types for Hexagon
+enum {
+#include "ELFRelocs/Hexagon.def"
+};
+
+// ELF Relocation type for Lanai.
+enum {
+#include "ELFRelocs/Lanai.def"
+};
+
+// RISCV Specific e_flags
+enum : unsigned {
+  EF_RISCV_RVC = 0x0001,
+  EF_RISCV_FLOAT_ABI = 0x0006,
+  EF_RISCV_FLOAT_ABI_SOFT = 0x0000,
+  EF_RISCV_FLOAT_ABI_SINGLE = 0x0002,
+  EF_RISCV_FLOAT_ABI_DOUBLE = 0x0004,
+  EF_RISCV_FLOAT_ABI_QUAD = 0x0006,
+  EF_RISCV_RVE = 0x0008
+};
+
+// ELF Relocation types for RISC-V
+enum {
+#include "ELFRelocs/RISCV.def"
+};
+
+// ELF Relocation types for S390/zSeries
+enum {
+#include "ELFRelocs/SystemZ.def"
+};
+
+// ELF Relocation type for Sparc.
+enum {
+#include "ELFRelocs/Sparc.def"
+};
+
+// AMDGPU specific e_flags.
+enum : unsigned {
+  // Processor selection mask for EF_AMDGPU_MACH_* values.
+  EF_AMDGPU_MACH = 0x0ff,
+
+  // Not specified processor.
+  EF_AMDGPU_MACH_NONE = 0x000,
+
+  // R600-based processors.
+
+  // Radeon HD 2000/3000 Series (R600).
+  EF_AMDGPU_MACH_R600_R600 = 0x001,
+  EF_AMDGPU_MACH_R600_R630 = 0x002,
+  EF_AMDGPU_MACH_R600_RS880 = 0x003,
+  EF_AMDGPU_MACH_R600_RV670 = 0x004,
+  // Radeon HD 4000 Series (R700).
+  EF_AMDGPU_MACH_R600_RV710 = 0x005,
+  EF_AMDGPU_MACH_R600_RV730 = 0x006,
+  EF_AMDGPU_MACH_R600_RV770 = 0x007,
+  // Radeon HD 5000 Series (Evergreen).
+  EF_AMDGPU_MACH_R600_CEDAR = 0x008,
+  EF_AMDGPU_MACH_R600_CYPRESS = 0x009,
+  EF_AMDGPU_MACH_R600_JUNIPER = 0x00a,
+  EF_AMDGPU_MACH_R600_REDWOOD = 0x00b,
+  EF_AMDGPU_MACH_R600_SUMO = 0x00c,
+  // Radeon HD 6000 Series (Northern Islands).
+  EF_AMDGPU_MACH_R600_BARTS = 0x00d,
+  EF_AMDGPU_MACH_R600_CAICOS = 0x00e,
+  EF_AMDGPU_MACH_R600_CAYMAN = 0x00f,
+  EF_AMDGPU_MACH_R600_TURKS = 0x010,
+
+  // Reserved for R600-based processors.
+  EF_AMDGPU_MACH_R600_RESERVED_FIRST = 0x011,
+  EF_AMDGPU_MACH_R600_RESERVED_LAST = 0x01f,
+
+  // First/last R600-based processors.
+  EF_AMDGPU_MACH_R600_FIRST = EF_AMDGPU_MACH_R600_R600,
+  EF_AMDGPU_MACH_R600_LAST = EF_AMDGPU_MACH_R600_TURKS,
+
+  // AMDGCN-based processors.
+
+  // AMDGCN GFX6.
+  EF_AMDGPU_MACH_AMDGCN_GFX600 = 0x020,
+  EF_AMDGPU_MACH_AMDGCN_GFX601 = 0x021,
+  // AMDGCN GFX7.
+  EF_AMDGPU_MACH_AMDGCN_GFX700 = 0x022,
+  EF_AMDGPU_MACH_AMDGCN_GFX701 = 0x023,
+  EF_AMDGPU_MACH_AMDGCN_GFX702 = 0x024,
+  EF_AMDGPU_MACH_AMDGCN_GFX703 = 0x025,
+  EF_AMDGPU_MACH_AMDGCN_GFX704 = 0x026,
+  // AMDGCN GFX8.
+  EF_AMDGPU_MACH_AMDGCN_GFX801 = 0x028,
+  EF_AMDGPU_MACH_AMDGCN_GFX802 = 0x029,
+  EF_AMDGPU_MACH_AMDGCN_GFX803 = 0x02a,
+  EF_AMDGPU_MACH_AMDGCN_GFX810 = 0x02b,
+  // AMDGCN GFX9.
+  EF_AMDGPU_MACH_AMDGCN_GFX900 = 0x02c,
+  EF_AMDGPU_MACH_AMDGCN_GFX902 = 0x02d,
+  EF_AMDGPU_MACH_AMDGCN_GFX904 = 0x02e,
+  EF_AMDGPU_MACH_AMDGCN_GFX906 = 0x02f,
+  EF_AMDGPU_MACH_AMDGCN_GFX908 = 0x030,
+  EF_AMDGPU_MACH_AMDGCN_GFX909 = 0x031,
+  // AMDGCN GFX10.
+  EF_AMDGPU_MACH_AMDGCN_GFX1010 = 0x033,
+  EF_AMDGPU_MACH_AMDGCN_GFX1011 = 0x034,
+  EF_AMDGPU_MACH_AMDGCN_GFX1012 = 0x035,
+
+  // Reserved for AMDGCN-based processors.
+  EF_AMDGPU_MACH_AMDGCN_RESERVED0 = 0x027,
+  EF_AMDGPU_MACH_AMDGCN_RESERVED1 = 0x032,
+
+  // First/last AMDGCN-based processors.
+  EF_AMDGPU_MACH_AMDGCN_FIRST = EF_AMDGPU_MACH_AMDGCN_GFX600,
+  EF_AMDGPU_MACH_AMDGCN_LAST = EF_AMDGPU_MACH_AMDGCN_GFX1012,
+
+  // Indicates if the "xnack" target feature is enabled for all code contained
+  // in the object.
+  EF_AMDGPU_XNACK = 0x100,
+  // Indicates if the "sram-ecc" target feature is enabled for all code
+  // contained in the object.
+  EF_AMDGPU_SRAM_ECC = 0x200,
+};
+
+// ELF Relocation types for AMDGPU
+enum {
+#include "ELFRelocs/AMDGPU.def"
+};
+
+// ELF Relocation types for BPF
+enum {
+#include "ELFRelocs/BPF.def"
+};
+
+// MSP430 specific e_flags
+enum : unsigned {
+  EF_MSP430_MACH_MSP430x11 = 11,
+  EF_MSP430_MACH_MSP430x11x1 = 110,
+  EF_MSP430_MACH_MSP430x12 = 12,
+  EF_MSP430_MACH_MSP430x13 = 13,
+  EF_MSP430_MACH_MSP430x14 = 14,
+  EF_MSP430_MACH_MSP430x15 = 15,
+  EF_MSP430_MACH_MSP430x16 = 16,
+  EF_MSP430_MACH_MSP430x20 = 20,
+  EF_MSP430_MACH_MSP430x22 = 22,
+  EF_MSP430_MACH_MSP430x23 = 23,
+  EF_MSP430_MACH_MSP430x24 = 24,
+  EF_MSP430_MACH_MSP430x26 = 26,
+  EF_MSP430_MACH_MSP430x31 = 31,
+  EF_MSP430_MACH_MSP430x32 = 32,
+  EF_MSP430_MACH_MSP430x33 = 33,
+  EF_MSP430_MACH_MSP430x41 = 41,
+  EF_MSP430_MACH_MSP430x42 = 42,
+  EF_MSP430_MACH_MSP430x43 = 43,
+  EF_MSP430_MACH_MSP430x44 = 44,
+  EF_MSP430_MACH_MSP430X = 45,
+  EF_MSP430_MACH_MSP430x46 = 46,
+  EF_MSP430_MACH_MSP430x47 = 47,
+  EF_MSP430_MACH_MSP430x54 = 5
