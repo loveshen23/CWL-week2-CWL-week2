@@ -759,4 +759,293 @@ enum : unsigned {
   EF_MSP430_MACH_MSP430X = 45,
   EF_MSP430_MACH_MSP430x46 = 46,
   EF_MSP430_MACH_MSP430x47 = 47,
-  EF_MSP430_MACH_MSP430x54 = 5
+  EF_MSP430_MACH_MSP430x54 = 54,
+};
+
+// ELF Relocation types for MSP430
+enum {
+#include "ELFRelocs/MSP430.def"
+};
+
+#undef ELF_RELOC
+
+// Section header.
+struct Elf32_Shdr {
+  Elf32_Word sh_name;      // Section name (index into string table)
+  Elf32_Word sh_type;      // Section type (SHT_*)
+  Elf32_Word sh_flags;     // Section flags (SHF_*)
+  Elf32_Addr sh_addr;      // Address where section is to be loaded
+  Elf32_Off sh_offset;     // File offset of section data, in bytes
+  Elf32_Word sh_size;      // Size of section, in bytes
+  Elf32_Word sh_link;      // Section type-specific header table index link
+  Elf32_Word sh_info;      // Section type-specific extra information
+  Elf32_Word sh_addralign; // Section address alignment
+  Elf32_Word sh_entsize;   // Size of records contained within the section
+};
+
+// Section header for ELF64 - same fields as ELF32, different types.
+struct Elf64_Shdr {
+  Elf64_Word sh_name;
+  Elf64_Word sh_type;
+  Elf64_Xword sh_flags;
+  Elf64_Addr sh_addr;
+  Elf64_Off sh_offset;
+  Elf64_Xword sh_size;
+  Elf64_Word sh_link;
+  Elf64_Word sh_info;
+  Elf64_Xword sh_addralign;
+  Elf64_Xword sh_entsize;
+};
+
+// Special section indices.
+enum {
+  SHN_UNDEF = 0,          // Undefined, missing, irrelevant, or meaningless
+  SHN_LORESERVE = 0xff00, // Lowest reserved index
+  SHN_LOPROC = 0xff00,    // Lowest processor-specific index
+  SHN_HIPROC = 0xff1f,    // Highest processor-specific index
+  SHN_LOOS = 0xff20,      // Lowest operating system-specific index
+  SHN_HIOS = 0xff3f,      // Highest operating system-specific index
+  SHN_ABS = 0xfff1,       // Symbol has absolute value; does not need relocation
+  SHN_COMMON = 0xfff2,    // FORTRAN COMMON or C external global variables
+  SHN_XINDEX = 0xffff,    // Mark that the index is >= SHN_LORESERVE
+  SHN_HIRESERVE = 0xffff  // Highest reserved index
+};
+
+// Section types.
+enum : unsigned {
+  SHT_NULL = 0,                         // No associated section (inactive entry).
+  SHT_PROGBITS = 1,                     // Program-defined contents.
+  SHT_SYMTAB = 2,                       // Symbol table.
+  SHT_STRTAB = 3,                       // String table.
+  SHT_RELA = 4,                         // Relocation entries; explicit addends.
+  SHT_HASH = 5,                         // Symbol hash table.
+  SHT_DYNAMIC = 6,                      // Information for dynamic linking.
+  SHT_NOTE = 7,                         // Information about the file.
+  SHT_NOBITS = 8,                       // Data occupies no space in the file.
+  SHT_REL = 9,                          // Relocation entries; no explicit addends.
+  SHT_SHLIB = 10,                       // Reserved.
+  SHT_DYNSYM = 11,                      // Symbol table.
+  SHT_INIT_ARRAY = 14,                  // Pointers to initialization functions.
+  SHT_FINI_ARRAY = 15,                  // Pointers to termination functions.
+  SHT_PREINIT_ARRAY = 16,               // Pointers to pre-init functions.
+  SHT_GROUP = 17,                       // Section group.
+  SHT_SYMTAB_SHNDX = 18,                // Indices for SHN_XINDEX entries.
+  // Experimental support for SHT_RELR sections. For details, see proposal
+  // at https://groups.google.com/forum/#!topic/generic-abi/bX460iggiKg
+  SHT_RELR = 19,                        // Relocation entries; only offsets.
+  SHT_LOOS = 0x60000000,                // Lowest operating system-specific type.
+  // Android packed relocation section types.
+  // https://android.googlesource.com/platform/bionic/+/6f12bfece5dcc01325e0abba56a46b1bcf991c69/tools/relocation_packer/src/elf_file.cc#37
+  SHT_ANDROID_REL = 0x60000001,
+  SHT_ANDROID_RELA = 0x60000002,
+  SHT_LLVM_ODRTAB = 0x6fff4c00,         // LLVM ODR table.
+  SHT_LLVM_LINKER_OPTIONS = 0x6fff4c01, // LLVM Linker Options.
+  SHT_LLVM_CALL_GRAPH_PROFILE = 0x6fff4c02, // LLVM Call Graph Profile.
+  SHT_LLVM_ADDRSIG = 0x6fff4c03,        // List of address-significant symbols
+                                        // for safe ICF.
+  SHT_LLVM_DEPENDENT_LIBRARIES = 0x6fff4c04, // LLVM Dependent Library Specifiers.
+  SHT_LLVM_SYMPART = 0x6fff4c05,        // Symbol partition specification.
+  SHT_LLVM_PART_EHDR = 0x6fff4c06,      // ELF header for loadable partition.
+  SHT_LLVM_PART_PHDR = 0x6fff4c07,      // Phdrs for loadable partition.
+  // Android's experimental support for SHT_RELR sections.
+  // https://android.googlesource.com/platform/bionic/+/b7feec74547f84559a1467aca02708ff61346d2a/libc/include/elf.h#512
+  SHT_ANDROID_RELR = 0x6fffff00,        // Relocation entries; only offsets.
+  SHT_GNU_ATTRIBUTES = 0x6ffffff5,      // Object attributes.
+  SHT_GNU_HASH = 0x6ffffff6,            // GNU-style hash table.
+  SHT_GNU_verdef = 0x6ffffffd,          // GNU version definitions.
+  SHT_GNU_verneed = 0x6ffffffe,         // GNU version references.
+  SHT_GNU_versym = 0x6fffffff,          // GNU symbol versions table.
+  SHT_HIOS = 0x6fffffff,                // Highest operating system-specific type.
+  SHT_LOPROC = 0x70000000,              // Lowest processor arch-specific type.
+  // Fixme: All this is duplicated in MCSectionELF. Why??
+  // Exception Index table
+  SHT_ARM_EXIDX = 0x70000001U,
+  // BPABI DLL dynamic linking pre-emption map
+  SHT_ARM_PREEMPTMAP = 0x70000002U,
+  //  Object file compatibility attributes
+  SHT_ARM_ATTRIBUTES = 0x70000003U,
+  SHT_ARM_DEBUGOVERLAY = 0x70000004U,
+  SHT_ARM_OVERLAYSECTION = 0x70000005U,
+  SHT_HEX_ORDERED = 0x70000000,         // Link editor is to sort the entries in
+                                        // this section based on their sizes
+  SHT_X86_64_UNWIND = 0x70000001,       // Unwind information
+
+  SHT_MIPS_REGINFO = 0x70000006,        // Register usage information
+  SHT_MIPS_OPTIONS = 0x7000000d,        // General options
+  SHT_MIPS_DWARF = 0x7000001e,          // DWARF debugging section.
+  SHT_MIPS_ABIFLAGS = 0x7000002a,       // ABI information.
+
+  SHT_MSP430_ATTRIBUTES = 0x70000003U,
+
+  SHT_HIPROC = 0x7fffffff,              // Highest processor arch-specific type.
+  SHT_LOUSER = 0x80000000,              // Lowest type reserved for applications.
+  SHT_HIUSER = 0xffffffff               // Highest type reserved for applications.
+};
+
+// Section flags.
+enum : unsigned {
+  // Section data should be writable during execution.
+  SHF_WRITE = 0x1,
+
+  // Section occupies memory during program execution.
+  SHF_ALLOC = 0x2,
+
+  // Section contains executable machine instructions.
+  SHF_EXECINSTR = 0x4,
+
+  // The data in this section may be merged.
+  SHF_MERGE = 0x10,
+
+  // The data in this section is null-terminated strings.
+  SHF_STRINGS = 0x20,
+
+  // A field in this section holds a section header table index.
+  SHF_INFO_LINK = 0x40U,
+
+  // Adds special ordering requirements for link editors.
+  SHF_LINK_ORDER = 0x80U,
+
+  // This section requires special OS-specific processing to avoid incorrect
+  // behavior.
+  SHF_OS_NONCONFORMING = 0x100U,
+
+  // This section is a member of a section group.
+  SHF_GROUP = 0x200U,
+
+  // This section holds Thread-Local Storage.
+  SHF_TLS = 0x400U,
+
+  // Identifies a section containing compressed data.
+  SHF_COMPRESSED = 0x800U,
+
+  // This section is excluded from the final executable or shared library.
+  SHF_EXCLUDE = 0x80000000U,
+
+  // Start of target-specific flags.
+
+  SHF_MASKOS = 0x0ff00000,
+
+  // Bits indicating processor-specific flags.
+  SHF_MASKPROC = 0xf0000000,
+
+  /// All sections with the "d" flag are grouped together by the linker to form
+  /// the data section and the dp register is set to the start of the section by
+  /// the boot code.
+  XCORE_SHF_DP_SECTION = 0x10000000,
+
+  /// All sections with the "c" flag are grouped together by the linker to form
+  /// the constant pool and the cp register is set to the start of the constant
+  /// pool by the boot code.
+  XCORE_SHF_CP_SECTION = 0x20000000,
+
+  // If an object file section does not have this flag set, then it may not hold
+  // more than 2GB and can be freely referred to in objects using smaller code
+  // models. Otherwise, only objects using larger code models can refer to them.
+  // For example, a medium code model object can refer to data in a section that
+  // sets this flag besides being able to refer to data in a section that does
+  // not set it; likewise, a small code model object can refer only to code in a
+  // section that does not set this flag.
+  SHF_X86_64_LARGE = 0x10000000,
+
+  // All sections with the GPREL flag are grouped into a global data area
+  // for faster accesses
+  SHF_HEX_GPREL = 0x10000000,
+
+  // Section contains text/data which may be replicated in other sections.
+  // Linker must retain only one copy.
+  SHF_MIPS_NODUPES = 0x01000000,
+
+  // Linker must generate implicit hidden weak names.
+  SHF_MIPS_NAMES = 0x02000000,
+
+  // Section data local to process.
+  SHF_MIPS_LOCAL = 0x04000000,
+
+  // Do not strip this section.
+  SHF_MIPS_NOSTRIP = 0x08000000,
+
+  // Section must be part of global data area.
+  SHF_MIPS_GPREL = 0x10000000,
+
+  // This section should be merged.
+  SHF_MIPS_MERGE = 0x20000000,
+
+  // Address size to be inferred from section entry size.
+  SHF_MIPS_ADDR = 0x40000000,
+
+  // Section data is string data by default.
+  SHF_MIPS_STRING = 0x80000000,
+
+  // Make code section unreadable when in execute-only mode
+  SHF_ARM_PURECODE = 0x20000000
+};
+
+// Section Group Flags
+enum : unsigned {
+  GRP_COMDAT = 0x1,
+  GRP_MASKOS = 0x0ff00000,
+  GRP_MASKPROC = 0xf0000000
+};
+
+// Symbol table entries for ELF32.
+struct Elf32_Sym {
+  Elf32_Word st_name;     // Symbol name (index into string table)
+  Elf32_Addr st_value;    // Value or address associated with the symbol
+  Elf32_Word st_size;     // Size of the symbol
+  unsigned char st_info;  // Symbol's type and binding attributes
+  unsigned char st_other; // Must be zero; reserved
+  Elf32_Half st_shndx;    // Which section (header table index) it's defined in
+
+  // These accessors and mutators correspond to the ELF32_ST_BIND,
+  // ELF32_ST_TYPE, and ELF32_ST_INFO macros defined in the ELF specification:
+  unsigned char getBinding() const { return st_info >> 4; }
+  unsigned char getType() const { return st_info & 0x0f; }
+  void setBinding(unsigned char b) { setBindingAndType(b, getType()); }
+  void setType(unsigned char t) { setBindingAndType(getBinding(), t); }
+  void setBindingAndType(unsigned char b, unsigned char t) {
+    st_info = (b << 4) + (t & 0x0f);
+  }
+};
+
+// Symbol table entries for ELF64.
+struct Elf64_Sym {
+  Elf64_Word st_name;     // Symbol name (index into string table)
+  unsigned char st_info;  // Symbol's type and binding attributes
+  unsigned char st_other; // Must be zero; reserved
+  Elf64_Half st_shndx;    // Which section (header tbl index) it's defined in
+  Elf64_Addr st_value;    // Value or address associated with the symbol
+  Elf64_Xword st_size;    // Size of the symbol
+
+  // These accessors and mutators are identical to those defined for ELF32
+  // symbol table entries.
+  unsigned char getBinding() const { return st_info >> 4; }
+  unsigned char getType() const { return st_info & 0x0f; }
+  void setBinding(unsigned char b) { setBindingAndType(b, getType()); }
+  void setType(unsigned char t) { setBindingAndType(getBinding(), t); }
+  void setBindingAndType(unsigned char b, unsigned char t) {
+    st_info = (b << 4) + (t & 0x0f);
+  }
+};
+
+// The size (in bytes) of symbol table entries.
+enum {
+  SYMENTRY_SIZE32 = 16, // 32-bit symbol entry size
+  SYMENTRY_SIZE64 = 24  // 64-bit symbol entry size.
+};
+
+// Symbol bindings.
+enum {
+  STB_LOCAL = 0,  // Local symbol, not visible outside obj file containing def
+  STB_GLOBAL = 1, // Global symbol, visible to all object files being combined
+  STB_WEAK = 2,   // Weak symbol, like global but lower-precedence
+  STB_GNU_UNIQUE = 10,
+  STB_LOOS = 10,   // Lowest operating system-specific binding type
+  STB_HIOS = 12,   // Highest operating system-specific binding type
+  STB_LOPROC = 13, // Lowest processor-specific binding type
+  STB_HIPROC = 15  // Highest processor-specific binding type
+};
+
+// Symbol types.
+enum {
+  STT_NOTYPE = 0,     // Symbol's type is not specified
+  STT_OBJECT = 1,     // Symbol is a data object (variable, arr
