@@ -1048,4 +1048,268 @@ enum {
 // Symbol types.
 enum {
   STT_NOTYPE = 0,     // Symbol's type is not specified
-  STT_OBJECT = 1,     // Symbol is a data object (variable, arr
+  STT_OBJECT = 1,     // Symbol is a data object (variable, array, etc.)
+  STT_FUNC = 2,       // Symbol is executable code (function, etc.)
+  STT_SECTION = 3,    // Symbol refers to a section
+  STT_FILE = 4,       // Local, absolute symbol that refers to a file
+  STT_COMMON = 5,     // An uninitialized common block
+  STT_TLS = 6,        // Thread local data object
+  STT_GNU_IFUNC = 10, // GNU indirect function
+  STT_LOOS = 10,      // Lowest operating system-specific symbol type
+  STT_HIOS = 12,      // Highest operating system-specific symbol type
+  STT_LOPROC = 13,    // Lowest processor-specific symbol type
+  STT_HIPROC = 15,    // Highest processor-specific symbol type
+
+  // AMDGPU symbol types
+  STT_AMDGPU_HSA_KERNEL = 10
+};
+
+enum {
+  STV_DEFAULT = 0,  // Visibility is specified by binding type
+  STV_INTERNAL = 1, // Defined by processor supplements
+  STV_HIDDEN = 2,   // Not visible to other components
+  STV_PROTECTED = 3 // Visible in other components but not preemptable
+};
+
+// Symbol number.
+enum { STN_UNDEF = 0 };
+
+// Special relocation symbols used in the MIPS64 ELF relocation entries
+enum {
+  RSS_UNDEF = 0, // None
+  RSS_GP = 1,    // Value of gp
+  RSS_GP0 = 2,   // Value of gp used to create object being relocated
+  RSS_LOC = 3    // Address of location being relocated
+};
+
+// Relocation entry, without explicit addend.
+struct Elf32_Rel {
+  Elf32_Addr r_offset; // Location (file byte offset, or program virtual addr)
+  Elf32_Word r_info;   // Symbol table index and type of relocation to apply
+
+  // These accessors and mutators correspond to the ELF32_R_SYM, ELF32_R_TYPE,
+  // and ELF32_R_INFO macros defined in the ELF specification:
+  Elf32_Word getSymbol() const { return (r_info >> 8); }
+  unsigned char getType() const { return (unsigned char)(r_info & 0x0ff); }
+  void setSymbol(Elf32_Word s) { setSymbolAndType(s, getType()); }
+  void setType(unsigned char t) { setSymbolAndType(getSymbol(), t); }
+  void setSymbolAndType(Elf32_Word s, unsigned char t) {
+    r_info = (s << 8) + t;
+  }
+};
+
+// Relocation entry with explicit addend.
+struct Elf32_Rela {
+  Elf32_Addr r_offset;  // Location (file byte offset, or program virtual addr)
+  Elf32_Word r_info;    // Symbol table index and type of relocation to apply
+  Elf32_Sword r_addend; // Compute value for relocatable field by adding this
+
+  // These accessors and mutators correspond to the ELF32_R_SYM, ELF32_R_TYPE,
+  // and ELF32_R_INFO macros defined in the ELF specification:
+  Elf32_Word getSymbol() const { return (r_info >> 8); }
+  unsigned char getType() const { return (unsigned char)(r_info & 0x0ff); }
+  void setSymbol(Elf32_Word s) { setSymbolAndType(s, getType()); }
+  void setType(unsigned char t) { setSymbolAndType(getSymbol(), t); }
+  void setSymbolAndType(Elf32_Word s, unsigned char t) {
+    r_info = (s << 8) + t;
+  }
+};
+
+// Relocation entry without explicit addend or info (relative relocations only).
+typedef Elf32_Word Elf32_Relr; // offset/bitmap for relative relocations
+
+// Relocation entry, without explicit addend.
+struct Elf64_Rel {
+  Elf64_Addr r_offset; // Location (file byte offset, or program virtual addr).
+  Elf64_Xword r_info;  // Symbol table index and type of relocation to apply.
+
+  // These accessors and mutators correspond to the ELF64_R_SYM, ELF64_R_TYPE,
+  // and ELF64_R_INFO macros defined in the ELF specification:
+  Elf64_Word getSymbol() const { return (r_info >> 32); }
+  Elf64_Word getType() const { return (Elf64_Word)(r_info & 0xffffffffL); }
+  void setSymbol(Elf64_Word s) { setSymbolAndType(s, getType()); }
+  void setType(Elf64_Word t) { setSymbolAndType(getSymbol(), t); }
+  void setSymbolAndType(Elf64_Word s, Elf64_Word t) {
+    r_info = ((Elf64_Xword)s << 32) + (t & 0xffffffffL);
+  }
+};
+
+// Relocation entry with explicit addend.
+struct Elf64_Rela {
+  Elf64_Addr r_offset; // Location (file byte offset, or program virtual addr).
+  Elf64_Xword r_info;  // Symbol table index and type of relocation to apply.
+  Elf64_Sxword r_addend; // Compute value for relocatable field by adding this.
+
+  // These accessors and mutators correspond to the ELF64_R_SYM, ELF64_R_TYPE,
+  // and ELF64_R_INFO macros defined in the ELF specification:
+  Elf64_Word getSymbol() const { return (r_info >> 32); }
+  Elf64_Word getType() const { return (Elf64_Word)(r_info & 0xffffffffL); }
+  void setSymbol(Elf64_Word s) { setSymbolAndType(s, getType()); }
+  void setType(Elf64_Word t) { setSymbolAndType(getSymbol(), t); }
+  void setSymbolAndType(Elf64_Word s, Elf64_Word t) {
+    r_info = ((Elf64_Xword)s << 32) + (t & 0xffffffffL);
+  }
+};
+
+// Relocation entry without explicit addend or info (relative relocations only).
+typedef Elf64_Xword Elf64_Relr; // offset/bitmap for relative relocations
+
+// Program header for ELF32.
+struct Elf32_Phdr {
+  Elf32_Word p_type;   // Type of segment
+  Elf32_Off p_offset;  // File offset where segment is located, in bytes
+  Elf32_Addr p_vaddr;  // Virtual address of beginning of segment
+  Elf32_Addr p_paddr;  // Physical address of beginning of segment (OS-specific)
+  Elf32_Word p_filesz; // Num. of bytes in file image of segment (may be zero)
+  Elf32_Word p_memsz;  // Num. of bytes in mem image of segment (may be zero)
+  Elf32_Word p_flags;  // Segment flags
+  Elf32_Word p_align;  // Segment alignment constraint
+};
+
+// Program header for ELF64.
+struct Elf64_Phdr {
+  Elf64_Word p_type;    // Type of segment
+  Elf64_Word p_flags;   // Segment flags
+  Elf64_Off p_offset;   // File offset where segment is located, in bytes
+  Elf64_Addr p_vaddr;   // Virtual address of beginning of segment
+  Elf64_Addr p_paddr;   // Physical addr of beginning of segment (OS-specific)
+  Elf64_Xword p_filesz; // Num. of bytes in file image of segment (may be zero)
+  Elf64_Xword p_memsz;  // Num. of bytes in mem image of segment (may be zero)
+  Elf64_Xword p_align;  // Segment alignment constraint
+};
+
+// Segment types.
+enum {
+  PT_NULL = 0,            // Unused segment.
+  PT_LOAD = 1,            // Loadable segment.
+  PT_DYNAMIC = 2,         // Dynamic linking information.
+  PT_INTERP = 3,          // Interpreter pathname.
+  PT_NOTE = 4,            // Auxiliary information.
+  PT_SHLIB = 5,           // Reserved.
+  PT_PHDR = 6,            // The program header table itself.
+  PT_TLS = 7,             // The thread-local storage template.
+  PT_LOOS = 0x60000000,   // Lowest operating system-specific pt entry type.
+  PT_HIOS = 0x6fffffff,   // Highest operating system-specific pt entry type.
+  PT_LOPROC = 0x70000000, // Lowest processor-specific program hdr entry type.
+  PT_HIPROC = 0x7fffffff, // Highest processor-specific program hdr entry type.
+
+  // x86-64 program header types.
+  // These all contain stack unwind tables.
+  PT_GNU_EH_FRAME = 0x6474e550,
+  PT_SUNW_EH_FRAME = 0x6474e550,
+  PT_SUNW_UNWIND = 0x6464e550,
+
+  PT_GNU_STACK = 0x6474e551, // Indicates stack executability.
+  PT_GNU_RELRO = 0x6474e552, // Read-only after relocation.
+
+  PT_OPENBSD_RANDOMIZE = 0x65a3dbe6, // Fill with random data.
+  PT_OPENBSD_WXNEEDED = 0x65a3dbe7,  // Program does W^X violations.
+  PT_OPENBSD_BOOTDATA = 0x65a41be6,  // Section for boot arguments.
+
+  // ARM program header types.
+  PT_ARM_ARCHEXT = 0x70000000, // Platform architecture compatibility info
+  // These all contain stack unwind tables.
+  PT_ARM_EXIDX = 0x70000001,
+  PT_ARM_UNWIND = 0x70000001,
+
+  // MIPS program header types.
+  PT_MIPS_REGINFO = 0x70000000,  // Register usage information.
+  PT_MIPS_RTPROC = 0x70000001,   // Runtime procedure table.
+  PT_MIPS_OPTIONS = 0x70000002,  // Options segment.
+  PT_MIPS_ABIFLAGS = 0x70000003, // Abiflags segment.
+};
+
+// Segment flag bits.
+enum : unsigned {
+  PF_X = 1,                // Execute
+  PF_W = 2,                // Write
+  PF_R = 4,                // Read
+  PF_MASKOS = 0x0ff00000,  // Bits for operating system-specific semantics.
+  PF_MASKPROC = 0xf0000000 // Bits for processor-specific semantics.
+};
+
+// Dynamic table entry for ELF32.
+struct Elf32_Dyn {
+  Elf32_Sword d_tag; // Type of dynamic table entry.
+  union {
+    Elf32_Word d_val; // Integer value of entry.
+    Elf32_Addr d_ptr; // Pointer value of entry.
+  } d_un;
+};
+
+// Dynamic table entry for ELF64.
+struct Elf64_Dyn {
+  Elf64_Sxword d_tag; // Type of dynamic table entry.
+  union {
+    Elf64_Xword d_val; // Integer value of entry.
+    Elf64_Addr d_ptr;  // Pointer value of entry.
+  } d_un;
+};
+
+// Dynamic table entry tags.
+enum {
+#define DYNAMIC_TAG(name, value) DT_##name = value,
+#include "DynamicTags.def"
+#undef DYNAMIC_TAG
+};
+
+// DT_FLAGS values.
+enum {
+  DF_ORIGIN = 0x01,    // The object may reference $ORIGIN.
+  DF_SYMBOLIC = 0x02,  // Search the shared lib before searching the exe.
+  DF_TEXTREL = 0x04,   // Relocations may modify a non-writable segment.
+  DF_BIND_NOW = 0x08,  // Process all relocations on load.
+  DF_STATIC_TLS = 0x10 // Reject attempts to load dynamically.
+};
+
+// State flags selectable in the `d_un.d_val' element of the DT_FLAGS_1 entry.
+enum {
+  DF_1_NOW = 0x00000001,       // Set RTLD_NOW for this object.
+  DF_1_GLOBAL = 0x00000002,    // Set RTLD_GLOBAL for this object.
+  DF_1_GROUP = 0x00000004,     // Set RTLD_GROUP for this object.
+  DF_1_NODELETE = 0x00000008,  // Set RTLD_NODELETE for this object.
+  DF_1_LOADFLTR = 0x00000010,  // Trigger filtee loading at runtime.
+  DF_1_INITFIRST = 0x00000020, // Set RTLD_INITFIRST for this object.
+  DF_1_NOOPEN = 0x00000040,    // Set RTLD_NOOPEN for this object.
+  DF_1_ORIGIN = 0x00000080,    // $ORIGIN must be handled.
+  DF_1_DIRECT = 0x00000100,    // Direct binding enabled.
+  DF_1_TRANS = 0x00000200,
+  DF_1_INTERPOSE = 0x00000400,  // Object is used to interpose.
+  DF_1_NODEFLIB = 0x00000800,   // Ignore default lib search path.
+  DF_1_NODUMP = 0x00001000,     // Object can't be dldump'ed.
+  DF_1_CONFALT = 0x00002000,    // Configuration alternative created.
+  DF_1_ENDFILTEE = 0x00004000,  // Filtee terminates filters search.
+  DF_1_DISPRELDNE = 0x00008000, // Disp reloc applied at build time.
+  DF_1_DISPRELPND = 0x00010000, // Disp reloc applied at run-time.
+  DF_1_NODIRECT = 0x00020000,   // Object has no-direct binding.
+  DF_1_IGNMULDEF = 0x00040000,
+  DF_1_NOKSYMS = 0x00080000,
+  DF_1_NOHDR = 0x00100000,
+  DF_1_EDITED = 0x00200000, // Object is modified after built.
+  DF_1_NORELOC = 0x00400000,
+  DF_1_SYMINTPOSE = 0x00800000, // Object has individual interposers.
+  DF_1_GLOBAUDIT = 0x01000000,  // Global auditing required.
+  DF_1_SINGLETON = 0x02000000   // Singleton symbols are used.
+};
+
+// DT_MIPS_FLAGS values.
+enum {
+  RHF_NONE = 0x00000000,                   // No flags.
+  RHF_QUICKSTART = 0x00000001,             // Uses shortcut pointers.
+  RHF_NOTPOT = 0x00000002,                 // Hash size is not a power of two.
+  RHS_NO_LIBRARY_REPLACEMENT = 0x00000004, // Ignore LD_LIBRARY_PATH.
+  RHF_NO_MOVE = 0x00000008,                // DSO address may not be relocated.
+  RHF_SGI_ONLY = 0x00000010,               // SGI specific features.
+  RHF_GUARANTEE_INIT = 0x00000020,         // Guarantee that .init will finish
+                                           // executing before any non-init
+                                           // code in DSO is called.
+  RHF_DELTA_C_PLUS_PLUS = 0x00000040,      // Contains Delta C++ code.
+  RHF_GUARANTEE_START_INIT = 0x00000080,   // Guarantee that .init will start
+                                           // executing before any non-init
+                                           // code in DSO is called.
+  RHF_PIXIE = 0x00000100,                  // Generated by pixie.
+  RHF_DEFAULT_DELAY_LOAD = 0x00000200,     // Delay-load DSO by default.
+  RHF_REQUICKSTART = 0x00000400,           // Object may be requickstarted
+  RHF_REQUICKSTARTED = 0x00000800,         // Object has been requickstarted
+  RHF_CORD = 0x00001000,                   // Generated by cord.
+  RHF_NO_UNRES_UN
