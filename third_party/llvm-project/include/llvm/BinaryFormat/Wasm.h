@@ -209,4 +209,181 @@ enum : unsigned {
   WASM_SEC_MEMORY = 5,     // Memory attributes
   WASM_SEC_GLOBAL = 6,     // Global declarations
   WASM_SEC_EXPORT = 7,     // Exports
-  WASM_SEC_START = 8,      /
+  WASM_SEC_START = 8,      // Start function declaration
+  WASM_SEC_ELEM = 9,       // Elements section
+  WASM_SEC_CODE = 10,      // Function bodies (code)
+  WASM_SEC_DATA = 11,      // Data segments
+  WASM_SEC_DATACOUNT = 12, // Data segment count
+  WASM_SEC_EVENT = 13      // Event declarations
+};
+
+// Type immediate encodings used in various contexts.
+enum : unsigned {
+  WASM_TYPE_I32 = 0x7F,
+  WASM_TYPE_I64 = 0x7E,
+  WASM_TYPE_F32 = 0x7D,
+  WASM_TYPE_F64 = 0x7C,
+  WASM_TYPE_V128 = 0x7B,
+  WASM_TYPE_FUNCREF = 0x70,
+  WASM_TYPE_FUNC = 0x60,
+  WASM_TYPE_NORESULT = 0x40, // for blocks with no result values
+};
+
+// Kinds of externals (for imports and exports).
+enum : unsigned {
+  WASM_EXTERNAL_FUNCTION = 0x0,
+  WASM_EXTERNAL_TABLE = 0x1,
+  WASM_EXTERNAL_MEMORY = 0x2,
+  WASM_EXTERNAL_GLOBAL = 0x3,
+  WASM_EXTERNAL_EVENT = 0x4,
+};
+
+// Opcodes used in initializer expressions.
+enum : unsigned {
+  WASM_OPCODE_END = 0x0b,
+  WASM_OPCODE_CALL = 0x10,
+  WASM_OPCODE_LOCAL_GET = 0x20,
+  WASM_OPCODE_GLOBAL_GET = 0x23,
+  WASM_OPCODE_GLOBAL_SET = 0x24,
+  WASM_OPCODE_I32_STORE = 0x36,
+  WASM_OPCODE_I32_CONST = 0x41,
+  WASM_OPCODE_I64_CONST = 0x42,
+  WASM_OPCODE_F32_CONST = 0x43,
+  WASM_OPCODE_F64_CONST = 0x44,
+  WASM_OPCODE_I32_ADD = 0x6a,
+};
+
+// Opcodes used in synthetic functions.
+enum : unsigned {
+  WASM_OPCODE_IF = 0x04,
+  WASM_OPCODE_ELSE = 0x05,
+  WASM_OPCODE_DROP = 0x1a,
+  WASM_OPCODE_MISC_PREFIX = 0xfc,
+  WASM_OPCODE_MEMORY_INIT = 0x08,
+  WASM_OPCODE_DATA_DROP = 0x09,
+  WASM_OPCODE_ATOMICS_PREFIX = 0xfe,
+  WASM_OPCODE_ATOMIC_NOTIFY = 0x00,
+  WASM_OPCODE_I32_ATOMIC_WAIT = 0x01,
+  WASM_OPCODE_I32_ATOMIC_STORE = 0x17,
+  WASM_OPCODE_I32_RMW_CMPXCHG = 0x48,
+};
+
+enum : unsigned {
+  WASM_LIMITS_FLAG_HAS_MAX = 0x1,
+  WASM_LIMITS_FLAG_IS_SHARED = 0x2,
+};
+
+enum : unsigned {
+  WASM_SEGMENT_IS_PASSIVE = 0x01,
+  WASM_SEGMENT_HAS_MEMINDEX = 0x02,
+};
+
+// Feature policy prefixes used in the custom "target_features" section
+enum : uint8_t {
+  WASM_FEATURE_PREFIX_USED = '+',
+  WASM_FEATURE_PREFIX_REQUIRED = '=',
+  WASM_FEATURE_PREFIX_DISALLOWED = '-',
+};
+
+// Kind codes used in the custom "name" section
+enum : unsigned {
+  WASM_NAMES_FUNCTION = 0x1,
+  WASM_NAMES_LOCAL = 0x2,
+};
+
+// Kind codes used in the custom "linking" section
+enum : unsigned {
+  WASM_SEGMENT_INFO = 0x5,
+  WASM_INIT_FUNCS = 0x6,
+  WASM_COMDAT_INFO = 0x7,
+  WASM_SYMBOL_TABLE = 0x8,
+};
+
+// Kind codes used in the custom "linking" section in the WASM_COMDAT_INFO
+enum : unsigned {
+  WASM_COMDAT_DATA = 0x0,
+  WASM_COMDAT_FUNCTION = 0x1,
+};
+
+// Kind codes used in the custom "linking" section in the WASM_SYMBOL_TABLE
+enum WasmSymbolType : unsigned {
+  WASM_SYMBOL_TYPE_FUNCTION = 0x0,
+  WASM_SYMBOL_TYPE_DATA = 0x1,
+  WASM_SYMBOL_TYPE_GLOBAL = 0x2,
+  WASM_SYMBOL_TYPE_SECTION = 0x3,
+  WASM_SYMBOL_TYPE_EVENT = 0x4,
+};
+
+// Kinds of event attributes.
+enum WasmEventAttribute : unsigned {
+  WASM_EVENT_ATTRIBUTE_EXCEPTION = 0x0,
+};
+
+const unsigned WASM_SYMBOL_BINDING_MASK = 0x3;
+const unsigned WASM_SYMBOL_VISIBILITY_MASK = 0xc;
+
+const unsigned WASM_SYMBOL_BINDING_GLOBAL = 0x0;
+const unsigned WASM_SYMBOL_BINDING_WEAK = 0x1;
+const unsigned WASM_SYMBOL_BINDING_LOCAL = 0x2;
+const unsigned WASM_SYMBOL_VISIBILITY_DEFAULT = 0x0;
+const unsigned WASM_SYMBOL_VISIBILITY_HIDDEN = 0x4;
+const unsigned WASM_SYMBOL_UNDEFINED = 0x10;
+const unsigned WASM_SYMBOL_EXPORTED = 0x20;
+const unsigned WASM_SYMBOL_EXPLICIT_NAME = 0x40;
+const unsigned WASM_SYMBOL_NO_STRIP = 0x80;
+
+#define WASM_RELOC(name, value) name = value,
+
+enum : unsigned {
+#include "WasmRelocs.def"
+};
+
+#undef WASM_RELOC
+
+// Subset of types that a value can have
+enum class ValType {
+  I32 = WASM_TYPE_I32,
+  I64 = WASM_TYPE_I64,
+  F32 = WASM_TYPE_F32,
+  F64 = WASM_TYPE_F64,
+  V128 = WASM_TYPE_V128,
+};
+
+struct WasmSignature {
+  SmallVector<ValType, 1> Returns;
+  SmallVector<ValType, 4> Params;
+  // Support empty and tombstone instances, needed by DenseMap.
+  enum { Plain, Empty, Tombstone } State = Plain;
+
+  WasmSignature(SmallVector<ValType, 1> &&InReturns,
+                SmallVector<ValType, 4> &&InParams)
+      : Returns(InReturns), Params(InParams) {}
+  WasmSignature() = default;
+};
+
+// Useful comparison operators
+inline bool operator==(const WasmSignature &LHS, const WasmSignature &RHS) {
+  return LHS.State == RHS.State && LHS.Returns == RHS.Returns &&
+         LHS.Params == RHS.Params;
+}
+
+inline bool operator!=(const WasmSignature &LHS, const WasmSignature &RHS) {
+  return !(LHS == RHS);
+}
+
+inline bool operator==(const WasmGlobalType &LHS, const WasmGlobalType &RHS) {
+  return LHS.Type == RHS.Type && LHS.Mutable == RHS.Mutable;
+}
+
+inline bool operator!=(const WasmGlobalType &LHS, const WasmGlobalType &RHS) {
+  return !(LHS == RHS);
+}
+
+std::string toString(WasmSymbolType type);
+std::string relocTypetoString(uint32_t type);
+bool relocTypeHasAddend(uint32_t type);
+
+} // end namespace wasm
+} // end namespace llvm
+
+#endif
