@@ -269,4 +269,124 @@ public:
       return Prologue.getFileNameByIndex(FileIndex, CompDir, Kind, Result);
     }
 
-    /// Fills the Result argument with the file and
+    /// Fills the Result argument with the file and line information
+    /// corresponding to Address. Returns true on success.
+    bool getFileLineInfoForAddress(object::SectionedAddress Address,
+                                   const char *CompDir,
+                                   DILineInfoSpecifier::FileLineInfoKind Kind,
+                                   DILineInfo &Result) const;
+
+    void dump(raw_ostream &OS, DIDumpOptions DumpOptions) const;
+    void clear();
+
+    /// Parse prologue and all rows.
+    Error parse(
+        DWARFDataExtractor &DebugLineData, uint64_t *OffsetPtr,
+        const DWARFContext &Ctx, const DWARFUnit *U,
+        std::function<void(Error)> RecoverableErrorCallback,
+        raw_ostream *OS = nullptr);
+
+    using RowVector = std::vector<Row>;
+    using RowIter = RowVector::const_iterator;
+    using SequenceVector = std::vector<Sequence>;
+    using SequenceIter = SequenceVector::const_iterator;
+
+    struct Prologue Prologue;
+    RowVector Rows;
+    SequenceVector Sequences;
+
+  private:
+    uint32_t findRowInSeq(const DWARFDebugLine::Sequence &Seq,
+                          object::SectionedAddress Address) const;
+    Optional<StringRef>
+    getSourceByIndex(uint64_t FileIndex,
+                     DILineInfoSpecifier::FileLineInfoKind Kind) const;
+
+    uint32_t lookupAddressImpl(object::SectionedAddress Address) const;
+
+    bool lookupAddressRangeImpl(object::SectionedAddress Address, uint64_t Size,
+                                std::vector<uint32_t> &Result) const;
+  };
+
+  const LineTable *getLineTable(uint64_t Offset) const;
+  Expected<const LineTable *> getOrParseLineTable(
+      DWARFDataExtractor &DebugLineData, uint64_t Offset,
+      const DWARFContext &Ctx, const DWARFUnit *U,
+      std::function<void(Error)> RecoverableErrorCallback);
+
+  /// Helper to allow for parsing of an entire .debug_line section in sequence.
+  class SectionParser {
+  public:
+    using cu_range = DWARFUnitVector::iterator_range;
+    using tu_range = DWARFUnitVector::iterator_range;
+    using LineToUnitMap = std::map<uint64_t, DWARFUnit *>;
+
+    SectionParser(DWARFDataExtractor &Data, const DWARFContext &C, cu_range CUs,
+                  tu_range TUs);
+
+    /// Get the next line table from the section. Report any issues via the
+    /// callbacks.
+    ///
+    /// \param RecoverableErrorCallback - any issues that don't prevent further
+    /// parsing of the table will be reported through this callback.
+    /// \param UnrecoverableErrorCallback - any issues that prevent further
+    /// parsing of the table will be reported through this callback.
+    /// \param OS - if not null, the parser will print information about the
+    /// table as it parses it.
+    LineTable
+    parseNext(
+        function_ref<void(Error)> RecoverableErrorCallback,
+        function_ref<void(Error)> UnrecoverableErrorCallback,
+        raw_ostream *OS = nullptr);
+
+    /// Skip the current line table and go to the following line table (if
+    /// present) immediately.
+    ///
+    /// \param ErrorCallback - report any prologue parsing issues via this
+    /// callback.
+    void skip(function_ref<void(Error)> ErrorCallback);
+
+    /// Indicates if the parser has parsed as much as possible.
+    ///
+    /// \note Certain problems with the line table structure might mean that
+    /// parsing stops before the end of the section is reached.
+    bool done() const { return Done; }
+
+    /// Get the offset the parser has reached.
+    uint64_t getOffset() const { return Offset; }
+
+  private:
+    DWARFUnit *prepareToParse(uint64_t Offset);
+    void moveToNextTable(uint64_t OldOffset, const Prologue &P);
+
+    LineToUnitMap LineToUnit;
+
+    DWARFDataExtractor &DebugLineData;
+    const DWARFContext &Context;
+    uint64_t Offset = 0;
+    bool Done = false;
+  };
+
+private:
+  struct ParsingState {
+    ParsingState(struct LineTable *LT);
+
+    void resetRowAndSequence();
+    void appendRowToMatrix();
+
+    /// Line table we're currently parsing.
+    struct LineTable *LineTable;
+    struct Row Row;
+    struct Sequence Sequence;
+  };
+
+  using LineTableMapTy = std::map<uint64_t, LineTable>;
+  using LineTableIter = LineTableMapTy::iterator;
+  using LineTableConstIter = LineTableMapTy::const_iterator;
+
+  LineTableMapTy LineTableMap;
+};
+
+} // end namespace llvm
+
+#endif // LLVM_DEBUGINFO_DWARFDEBUGLINE_H
