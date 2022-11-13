@@ -234,4 +234,235 @@ public:
   /// mangled name (or short name, if mangled is missing). This name may be
   /// fetched from specification or abstract origin for this subprogram.
   /// Returns null if no name is found.
-  const char
+  const char *getSubroutineName(DINameKind Kind) const;
+
+  /// Return the DIE name resolving DW_AT_sepcification or DW_AT_abstract_origin
+  /// references if necessary. Returns null if no name is found.
+  const char *getName(DINameKind Kind) const;
+
+  /// Returns the declaration line (start line) for a DIE, assuming it specifies
+  /// a subprogram. This may be fetched from specification or abstract origin
+  /// for this subprogram by resolving DW_AT_sepcification or
+  /// DW_AT_abstract_origin references if necessary.
+  uint64_t getDeclLine() const;
+
+  /// Retrieves values of DW_AT_call_file, DW_AT_call_line and DW_AT_call_column
+  /// from DIE (or zeroes if they are missing). This function looks for
+  /// DW_AT_call attributes in this DIE only, it will not resolve the attribute
+  /// values in any DW_AT_specification or DW_AT_abstract_origin DIEs.
+  /// \param CallFile filled in with non-zero if successful, zero if there is no
+  /// DW_AT_call_file attribute in this DIE.
+  /// \param CallLine filled in with non-zero if successful, zero if there is no
+  /// DW_AT_call_line attribute in this DIE.
+  /// \param CallColumn filled in with non-zero if successful, zero if there is
+  /// no DW_AT_call_column attribute in this DIE.
+  /// \param CallDiscriminator filled in with non-zero if successful, zero if
+  /// there is no DW_AT_GNU_discriminator attribute in this DIE.
+  void getCallerFrame(uint32_t &CallFile, uint32_t &CallLine,
+                      uint32_t &CallColumn, uint32_t &CallDiscriminator) const;
+
+  class attribute_iterator;
+
+  /// Get an iterator range to all attributes in the current DIE only.
+  ///
+  /// \returns an iterator range for the attributes of the current DIE.
+  iterator_range<attribute_iterator> attributes() const;
+
+  class iterator;
+
+  iterator begin() const;
+  iterator end() const;
+
+  std::reverse_iterator<iterator> rbegin() const;
+  std::reverse_iterator<iterator> rend() const;
+
+  iterator_range<iterator> children() const;
+};
+
+class DWARFDie::attribute_iterator
+    : public iterator_facade_base<attribute_iterator, std::forward_iterator_tag,
+                                  const DWARFAttribute> {
+  /// The DWARF DIE we are extracting attributes from.
+  DWARFDie Die;
+  /// The value vended to clients via the operator*() or operator->().
+  DWARFAttribute AttrValue;
+  /// The attribute index within the abbreviation declaration in Die.
+  uint32_t Index;
+
+  friend bool operator==(const attribute_iterator &LHS,
+                         const attribute_iterator &RHS);
+
+  /// Update the attribute index and attempt to read the attribute value. If the
+  /// attribute is able to be read, update AttrValue and the Index member
+  /// variable. If the attribute value is not able to be read, an appropriate
+  /// error will be set if the Err member variable is non-NULL and the iterator
+  /// will be set to the end value so iteration stops.
+  void updateForIndex(const DWARFAbbreviationDeclaration &AbbrDecl, uint32_t I);
+
+public:
+  attribute_iterator() = delete;
+  explicit attribute_iterator(DWARFDie D, bool End);
+
+  attribute_iterator &operator++();
+  attribute_iterator &operator--();
+  explicit operator bool() const { return AttrValue.isValid(); }
+  const DWARFAttribute &operator*() const { return AttrValue; }
+};
+
+inline bool operator==(const DWARFDie::attribute_iterator &LHS,
+                       const DWARFDie::attribute_iterator &RHS) {
+  return LHS.Index == RHS.Index;
+}
+
+inline bool operator!=(const DWARFDie::attribute_iterator &LHS,
+                       const DWARFDie::attribute_iterator &RHS) {
+  return !(LHS == RHS);
+}
+
+inline bool operator==(const DWARFDie &LHS, const DWARFDie &RHS) {
+  return LHS.getDebugInfoEntry() == RHS.getDebugInfoEntry() &&
+         LHS.getDwarfUnit() == RHS.getDwarfUnit();
+}
+
+inline bool operator!=(const DWARFDie &LHS, const DWARFDie &RHS) {
+  return !(LHS == RHS);
+}
+
+inline bool operator<(const DWARFDie &LHS, const DWARFDie &RHS) {
+  return LHS.getOffset() < RHS.getOffset();
+}
+
+class DWARFDie::iterator
+    : public iterator_facade_base<iterator, std::bidirectional_iterator_tag,
+                                  const DWARFDie> {
+  DWARFDie Die;
+
+  friend std::reverse_iterator<llvm::DWARFDie::iterator>;
+  friend bool operator==(const DWARFDie::iterator &LHS,
+                         const DWARFDie::iterator &RHS);
+
+public:
+  iterator() = default;
+
+  explicit iterator(DWARFDie D) : Die(D) {}
+
+  iterator &operator++() {
+    Die = Die.getSibling();
+    return *this;
+  }
+
+  iterator &operator--() {
+    Die = Die.getPreviousSibling();
+    return *this;
+  }
+
+  const DWARFDie &operator*() const { return Die; }
+};
+
+inline bool operator==(const DWARFDie::iterator &LHS,
+                       const DWARFDie::iterator &RHS) {
+  return LHS.Die == RHS.Die;
+}
+
+inline bool operator!=(const DWARFDie::iterator &LHS,
+                       const DWARFDie::iterator &RHS) {
+  return !(LHS == RHS);
+}
+
+// These inline functions must follow the DWARFDie::iterator definition above
+// as they use functions from that class.
+inline DWARFDie::iterator DWARFDie::begin() const {
+  return iterator(getFirstChild());
+}
+
+inline DWARFDie::iterator DWARFDie::end() const {
+  return iterator(getLastChild());
+}
+
+inline iterator_range<DWARFDie::iterator> DWARFDie::children() const {
+  return make_range(begin(), end());
+}
+
+} // end namespace llvm
+
+namespace std {
+
+template <>
+class reverse_iterator<llvm::DWARFDie::iterator>
+    : public llvm::iterator_facade_base<
+          reverse_iterator<llvm::DWARFDie::iterator>,
+          bidirectional_iterator_tag, const llvm::DWARFDie> {
+
+private:
+  llvm::DWARFDie Die;
+  bool AtEnd;
+
+public:
+  reverse_iterator(llvm::DWARFDie::iterator It)
+      : Die(It.Die), AtEnd(!It.Die.getPreviousSibling()) {
+    if (!AtEnd)
+      Die = Die.getPreviousSibling();
+  }
+
+  llvm::DWARFDie::iterator base() const {
+    return llvm::DWARFDie::iterator(AtEnd ? Die : Die.getSibling());
+  }
+
+  reverse_iterator<llvm::DWARFDie::iterator> &operator++() {
+    assert(!AtEnd && "Incrementing rend");
+    llvm::DWARFDie D = Die.getPreviousSibling();
+    if (D)
+      Die = D;
+    else
+      AtEnd = true;
+    return *this;
+  }
+
+  reverse_iterator<llvm::DWARFDie::iterator> &operator--() {
+    if (AtEnd) {
+      AtEnd = false;
+      return *this;
+    }
+    Die = Die.getSibling();
+    assert(!Die.isNULL() && "Decrementing rbegin");
+    return *this;
+  }
+
+  const llvm::DWARFDie &operator*() const {
+    assert(Die.isValid());
+    return Die;
+  }
+
+  // FIXME: We should be able to specify the equals operator as a friend, but
+  //        that causes the compiler to think the operator overload is ambiguous
+  //        with the friend declaration and the actual definition as candidates.
+  bool equals(const reverse_iterator<llvm::DWARFDie::iterator> &RHS) const {
+    return Die == RHS.Die && AtEnd == RHS.AtEnd;
+  }
+};
+
+} // namespace std
+
+namespace llvm {
+
+inline bool operator==(const std::reverse_iterator<DWARFDie::iterator> &LHS,
+                       const std::reverse_iterator<DWARFDie::iterator> &RHS) {
+  return LHS.equals(RHS);
+}
+
+inline bool operator!=(const std::reverse_iterator<DWARFDie::iterator> &LHS,
+                       const std::reverse_iterator<DWARFDie::iterator> &RHS) {
+  return !(LHS == RHS);
+}
+
+inline std::reverse_iterator<DWARFDie::iterator> DWARFDie::rbegin() const {
+  return llvm::make_reverse_iterator(end());
+}
+
+inline std::reverse_iterator<DWARFDie::iterator> DWARFDie::rend() const {
+  return llvm::make_reverse_iterator(begin());
+}
+
+} // end namespace llvm
+
+#endif // LLVM_DEBUGINFO_DWARFDIE_H
