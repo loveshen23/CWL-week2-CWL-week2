@@ -132,4 +132,28 @@ public:
     assert(AddressSize == 8 || AddressSize == 4 || AddressSize == 2);
   }
 
-  iterator begin() co
+  iterator begin() const { return iterator(this, 0); }
+  iterator end() const { return iterator(this, Data.getData().size()); }
+
+  void print(raw_ostream &OS, const MCRegisterInfo *RegInfo, DWARFUnit *U,
+             bool IsEH = false) const;
+
+  bool verify(DWARFUnit *U);
+
+private:
+  DataExtractor Data;
+  uint16_t Version;
+  uint8_t AddressSize;
+};
+
+inline bool operator==(const DWARFExpression::iterator &LHS,
+                       const DWARFExpression::iterator &RHS) {
+  return LHS.Expr == RHS.Expr && LHS.Offset == RHS.Offset;
+}
+
+inline bool operator!=(const DWARFExpression::iterator &LHS,
+                       const DWARFExpression::iterator &RHS) {
+  return !(LHS == RHS);
+}
+}
+#endif
