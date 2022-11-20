@@ -285,4 +285,37 @@ inline uint64_t toAddress(const Optional<DWARFFormValue> &V, uint64_t Default) {
 ///
 /// \param V and optional DWARFFormValue to attempt to extract the value from.
 /// \returns an optional value that contains a value if the form value
-/// was valid and has a section offset form
+/// was valid and has a section offset form.
+inline Optional<uint64_t> toSectionOffset(const Optional<DWARFFormValue> &V) {
+  if (V)
+    return V->getAsSectionOffset();
+  return None;
+}
+
+/// Take an optional DWARFFormValue and extract a section offset.
+///
+/// \param V and optional DWARFFormValue to attempt to extract the value from.
+/// \param Default the default value to return in case of failure.
+/// \returns the extracted section offset value or Default if the V doesn't
+/// have a value or the form value's encoding wasn't a section offset form.
+inline uint64_t toSectionOffset(const Optional<DWARFFormValue> &V,
+                                uint64_t Default) {
+  return toSectionOffset(V).getValueOr(Default);
+}
+
+/// Take an optional DWARFFormValue and try to extract block data.
+///
+/// \param V and optional DWARFFormValue to attempt to extract the value from.
+/// \returns an optional value that contains a value if the form value
+/// was valid and has a block form.
+inline Optional<ArrayRef<uint8_t>> toBlock(const Optional<DWARFFormValue> &V) {
+  if (V)
+    return V->getAsBlock();
+  return None;
+}
+
+} // end namespace dwarf
+
+} // end namespace llvm
+
+#endif // LLVM_DEBUGINFO_DWARFFORMVALUE_H
