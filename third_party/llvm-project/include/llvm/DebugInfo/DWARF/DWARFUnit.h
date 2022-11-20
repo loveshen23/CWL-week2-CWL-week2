@@ -422,3 +422,107 @@ public:
       return RngListTable->getOffsetEntry(Index);
     return None;
   }
+
+  Expected<DWARFAddressRangesVector> collectAddressRanges();
+
+  /// Returns subprogram DIE with address range encompassing the provided
+  /// address. The pointer is alive as long as parsed compile unit DIEs are not
+  /// cleared.
+  DWARFDie getSubroutineForAddress(uint64_t Address);
+
+  /// getInlinedChainForAddress - fetches inlined chain for a given address.
+  /// Returns empty chain if there is no subprogram containing address. The
+  /// chain is valid as long as parsed compile unit DIEs are not cleared.
+  void getInlinedChainForAddress(uint64_t Address,
+                                 SmallVectorImpl<DWARFDie> &InlinedChain);
+
+  /// Return the DWARFUnitVector containing this unit.
+  const DWARFUnitVector &getUnitVector() const { return UnitVector; }
+
+  /// Returns the number of DIEs in the unit. Parses the unit
+  /// if necessary.
+  unsigned getNumDIEs() {
+    extractDIEsIfNeeded(false);
+    return DieArray.size();
+  }
+
+  /// Return the index of a DIE inside the unit's DIE vector.
+  ///
+  /// It is illegal to call this method with a DIE that hasn't be
+  /// created by this unit. In other word, it's illegal to call this
+  /// method on a DIE that isn't accessible by following
+  /// children/sibling links starting from this unit's getUnitDIE().
+  uint32_t getDIEIndex(const DWARFDie &D) {
+    return getDIEIndex(D.getDebugInfoEntry());
+  }
+
+  /// Return the DIE object at the given index.
+  DWARFDie getDIEAtIndex(unsigned Index) {
+    assert(Index < DieArray.size());
+    return DWARFDie(this, &DieArray[Index]);
+  }
+
+  DWARFDie getParent(const DWARFDebugInfoEntry *Die);
+  DWARFDie getSibling(const DWARFDebugInfoEntry *Die);
+  DWARFDie getPreviousSibling(const DWARFDebugInfoEntry *Die);
+  DWARFDie getFirstChild(const DWARFDebugInfoEntry *Die);
+  DWARFDie getLastChild(const DWARFDebugInfoEntry *Die);
+
+  /// Return the DIE object for a given offset inside the
+  /// unit's DIE vector.
+  ///
+  /// The unit needs to have its DIEs extracted for this method to work.
+  DWARFDie getDIEForOffset(uint64_t Offset) {
+    extractDIEsIfNeeded(false);
+    assert(!DieArray.empty());
+    auto It =
+        llvm::partition_point(DieArray, [=](const DWARFDebugInfoEntry &DIE) {
+          return DIE.getOffset() < Offset;
+        });
+    if (It != DieArray.end() && It->getOffset() == Offset)
+      return DWARFDie(this, &*It);
+    return DWARFDie();
+  }
+
+  uint32_t getLineTableOffset() const {
+    if (auto IndexEntry = Header.getIndexEntry())
+      if (const auto *Contrib = IndexEntry->getOffset(DW_SECT_LINE))
+        return Contrib->Offset;
+    return 0;
+  }
+
+  die_iterator_range dies() {
+    extractDIEsIfNeeded(false);
+    return die_iterator_range(DieArray.begin(), DieArray.end());
+  }
+
+  virtual void dump(raw_ostream &OS, DIDumpOptions DumpOpts) = 0;
+
+  Error tryExtractDIEsIfNeeded(bool CUDieOnly);
+
+private:
+  /// Size in bytes of the .debug_info data associated with this compile unit.
+  size_t getDebugInfoSize() const {
+    return Header.getLength() + Header.getUnitLengthFieldByteSize() -
+           getHeaderSize();
+  }
+
+  /// extractDIEsIfNeeded - Parses a compile unit and indexes its DIEs if it
+  /// hasn't already been done
+  void extractDIEsIfNeeded(bool CUDieOnly);
+
+  /// extractDIEsToVector - Appends all parsed DIEs to a vector.
+  void extractDIEsToVector(bool AppendCUDie, bool AppendNonCUDIEs,
+                           std::vector<DWARFDebugInfoEntry> &DIEs) const;
+
+  /// clearDIEs - Clear parsed DIEs to keep memory usage low.
+  void clearDIEs(bool KeepCUDie);
+
+  /// parseDWO - Parses .dwo file for current compile unit. Returns true if
+  /// it was actually constructed.
+  bool parseDWO();
+};
+
+} // end namespace llvm
+
+#endif // LLVM_DEBUGINFO_DWARF_DWARFUNIT_H
