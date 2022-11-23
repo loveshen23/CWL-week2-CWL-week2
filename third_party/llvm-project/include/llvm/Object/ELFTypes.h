@@ -727,4 +727,37 @@ template <class ELFT> struct Elf_Mips_Options {
   LLVM_ELF_IMPORT_TYPES_ELFT(ELFT)
   uint8_t kind;     // Determines interpretation of variable part of descriptor
   uint8_t size;     // Byte size of descriptor, including this header
-  Elf_Hal
+  Elf_Half section; // Section header index of section affected,
+                    // or 0 for global options
+  Elf_Word info;    // Kind-specific information
+
+  Elf_Mips_RegInfo<ELFT> &getRegInfo() {
+    assert(kind == ELF::ODK_REGINFO);
+    return *reinterpret_cast<Elf_Mips_RegInfo<ELFT> *>(
+        (uint8_t *)this + sizeof(Elf_Mips_Options));
+  }
+  const Elf_Mips_RegInfo<ELFT> &getRegInfo() const {
+    return const_cast<Elf_Mips_Options *>(this)->getRegInfo();
+  }
+};
+
+// .MIPS.abiflags section content
+template <class ELFT> struct Elf_Mips_ABIFlags {
+  LLVM_ELF_IMPORT_TYPES_ELFT(ELFT)
+  Elf_Half version;  // Version of the structure
+  uint8_t isa_level; // ISA level: 1-5, 32, and 64
+  uint8_t isa_rev;   // ISA revision (0 for MIPS I - MIPS V)
+  uint8_t gpr_size;  // General purpose registers size
+  uint8_t cpr1_size; // Co-processor 1 registers size
+  uint8_t cpr2_size; // Co-processor 2 registers size
+  uint8_t fp_abi;    // Floating-point ABI flag
+  Elf_Word isa_ext;  // Processor-specific extension
+  Elf_Word ases;     // ASEs flags
+  Elf_Word flags1;   // General flags
+  Elf_Word flags2;   // General flags
+};
+
+} // end namespace object.
+} // end namespace llvm.
+
+#endif // LLVM_OBJECT_ELFTYPES_H
