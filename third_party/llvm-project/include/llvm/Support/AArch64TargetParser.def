@@ -1,0 +1,66 @@
+//===- AARCH64TargetParser.def - AARCH64 target parsing defines ---------*- C++ -*-===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
+// This file provides defines to build up the AARCH64 target parser's logic.
+//
+//===----------------------------------------------------------------------===//
+
+// NOTE: NO INCLUDE GUARD DESIRED!
+
+#ifndef AARCH64_ARCH
+#define AARCH64_ARCH(NAME, ID, CPU_ATTR, SUB_ARCH, ARCH_ATTR, ARCH_FPU, ARCH_BASE_EXT)
+#endif
+AARCH64_ARCH("invalid", INVALID, "", "",
+             ARMBuildAttrs::CPUArch::v8_A, FK_NONE, AArch64::AEK_NONE)
+AARCH64_ARCH("armv8-a", ARMV8A, "8-A", "v8", ARMBuildAttrs::CPUArch::v8_A,
+             FK_CRYPTO_NEON_FP_ARMV8,
+             (AArch64::AEK_CRYPTO | AArch64::AEK_FP | AArch64::AEK_SIMD))
+AARCH64_ARCH("armv8.1-a", ARMV8_1A, "8.1-A", "v8.1a",
+             ARMBuildAttrs::CPUArch::v8_A, FK_CRYPTO_NEON_FP_ARMV8,
+             (AArch64::AEK_CRC | AArch64::AEK_CRYPTO | AArch64::AEK_FP |
+              AArch64::AEK_SIMD | AArch64::AEK_LSE | AArch64::AEK_RDM))
+AARCH64_ARCH("armv8.2-a", ARMV8_2A, "8.2-A", "v8.2a",
+             ARMBuildAttrs::CPUArch::v8_A, FK_CRYPTO_NEON_FP_ARMV8,
+             (AArch64::AEK_CRC | AArch64::AEK_CRYPTO | AArch64::AEK_FP |
+              AArch64::AEK_SIMD | AArch64::AEK_RAS | AArch64::AEK_LSE |
+              AArch64::AEK_RDM))
+AARCH64_ARCH("armv8.3-a", ARMV8_3A, "8.3-A", "v8.3a",
+             ARMBuildAttrs::CPUArch::v8_A, FK_CRYPTO_NEON_FP_ARMV8,
+             (AArch64::AEK_CRC | AArch64::AEK_CRYPTO | AArch64::AEK_FP |
+              AArch64::AEK_SIMD | AArch64::AEK_RAS | AArch64::AEK_LSE |
+              AArch64::AEK_RDM | AArch64::AEK_RCPC))
+AARCH64_ARCH("armv8.4-a", ARMV8_4A, "8.4-A", "v8.4a",
+             ARMBuildAttrs::CPUArch::v8_A, FK_CRYPTO_NEON_FP_ARMV8,
+             (AArch64::AEK_CRC | AArch64::AEK_CRYPTO | AArch64::AEK_FP |
+              AArch64::AEK_SIMD | AArch64::AEK_RAS | AArch64::AEK_LSE |
+              AArch64::AEK_RDM | AArch64::AEK_RCPC | AArch64::AEK_DOTPROD))
+AARCH64_ARCH("armv8.5-a", ARMV8_5A, "8.5-A", "v8.5a",
+             ARMBuildAttrs::CPUArch::v8_A, FK_CRYPTO_NEON_FP_ARMV8,
+             (AArch64::AEK_CRC | AArch64::AEK_CRYPTO | AArch64::AEK_FP |
+              AArch64::AEK_SIMD | AArch64::AEK_RAS | AArch64::AEK_LSE |
+              AArch64::AEK_RDM | AArch64::AEK_RCPC | AArch64::AEK_DOTPROD))
+#undef AARCH64_ARCH
+
+#ifndef AARCH64_ARCH_EXT_NAME
+#define AARCH64_ARCH_EXT_NAME(NAME, ID, FEATURE, NEGFEATURE)
+#endif
+// FIXME: This would be nicer were it tablegen
+AARCH64_ARCH_EXT_NAME("invalid",      AArch64::AEK_INVALID,     nullptr,  nullptr)
+AARCH64_ARCH_EXT_NAME("none",         AArch64::AEK_NONE,        nullptr,  nullptr)
+AARCH64_ARCH_EXT_NAME("crc",          AArch64::AEK_CRC,         "+crc",   "-crc")
+AARCH64_ARCH_EXT_NAME("lse",          AArch64::AEK_LSE,         "+lse",   "-lse")
+AARCH64_ARCH_EXT_NAME("rdm",          AArch64::AEK_RDM,         "+rdm",   "-rdm")
+AARCH64_ARCH_EXT_NAME("crypto",       AArch64::AEK_CRYPTO,      "+crypto","-crypto")
+AARCH64_ARCH_EXT_NAME("sm4",          AArch64::AEK_SM4,         "+sm4",   "-sm4")
+AARCH64_ARCH_EXT_NAME("sha3",         AArch64::AEK_SHA3,        "+sha3",  "-sha3")
+AARCH64_ARCH_EXT_NAME("sha2",         AArch64::AEK_SHA2,        "+sha2",  "-sha2")
+AARCH64_ARCH_EXT_NAME("aes",          AArch64::AEK_AES,         "+aes",   "-aes")
+AARCH64_ARCH_EXT_NAME("dotprod",      AArch64::AEK_DOTPROD,     "+dotprod","-dotprod")
+AARCH64_ARCH_EXT_NAME("fp",           AArch64::AEK_FP,          "+fp-armv8",  "-fp-armv8")
+AARCH64_ARCH_EXT_NAME("simd",         AArch64::AEK_SIMD,        "+neon",  "-neon")
+AARCH64_ARCH_EXT_NAME("fp16",         AArch64::AEK_FP16,        "+fullfp

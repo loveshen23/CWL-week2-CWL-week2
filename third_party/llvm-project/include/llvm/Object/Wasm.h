@@ -225,4 +225,132 @@ private:
   wasm::WasmFunction &getDefinedFunction(uint32_t Index);
   const wasm::WasmFunction &getDefinedFunction(uint32_t Index) const;
   wasm::WasmGlobal &getDefinedGlobal(uint32_t Index);
-  wasm::Wa
+  wasm::WasmEvent &getDefinedEvent(uint32_t Index);
+
+  const WasmSection &getWasmSection(DataRefImpl Ref) const;
+  const wasm::WasmRelocation &getWasmRelocation(DataRefImpl Ref) const;
+
+  Error parseSection(WasmSection &Sec);
+  Error parseCustomSection(WasmSection &Sec, ReadContext &Ctx);
+
+  // Standard section types
+  Error parseTypeSection(ReadContext &Ctx);
+  Error parseImportSection(ReadContext &Ctx);
+  Error parseFunctionSection(ReadContext &Ctx);
+  Error parseTableSection(ReadContext &Ctx);
+  Error parseMemorySection(ReadContext &Ctx);
+  Error parseGlobalSection(ReadContext &Ctx);
+  Error parseEventSection(ReadContext &Ctx);
+  Error parseExportSection(ReadContext &Ctx);
+  Error parseStartSection(ReadContext &Ctx);
+  Error parseElemSection(ReadContext &Ctx);
+  Error parseCodeSection(ReadContext &Ctx);
+  Error parseDataSection(ReadContext &Ctx);
+  Error parseDataCountSection(ReadContext &Ctx);
+
+  // Custom section types
+  Error parseDylinkSection(ReadContext &Ctx);
+  Error parseNameSection(ReadContext &Ctx);
+  Error parseLinkingSection(ReadContext &Ctx);
+  Error parseLinkingSectionSymtab(ReadContext &Ctx);
+  Error parseLinkingSectionComdat(ReadContext &Ctx);
+  Error parseProducersSection(ReadContext &Ctx);
+  Error parseTargetFeaturesSection(ReadContext &Ctx);
+  Error parseRelocSection(StringRef Name, ReadContext &Ctx);
+
+  wasm::WasmObjectHeader Header;
+  std::vector<WasmSection> Sections;
+  wasm::WasmDylinkInfo DylinkInfo;
+  wasm::WasmProducerInfo ProducerInfo;
+  std::vector<wasm::WasmFeatureEntry> TargetFeatures;
+  std::vector<wasm::WasmSignature> Signatures;
+  std::vector<uint32_t> FunctionTypes;
+  std::vector<wasm::WasmTable> Tables;
+  std::vector<wasm::WasmLimits> Memories;
+  std::vector<wasm::WasmGlobal> Globals;
+  std::vector<wasm::WasmEvent> Events;
+  std::vector<wasm::WasmImport> Imports;
+  std::vector<wasm::WasmExport> Exports;
+  std::vector<wasm::WasmElemSegment> ElemSegments;
+  std::vector<WasmSegment> DataSegments;
+  llvm::Optional<size_t> DataCount;
+  std::vector<wasm::WasmFunction> Functions;
+  std::vector<WasmSymbol> Symbols;
+  std::vector<wasm::WasmFunctionName> DebugNames;
+  uint32_t StartFunction = -1;
+  bool HasLinkingSection = false;
+  bool HasDylinkSection = false;
+  wasm::WasmLinkingData LinkingData;
+  uint32_t NumImportedGlobals = 0;
+  uint32_t NumImportedFunctions = 0;
+  uint32_t NumImportedEvents = 0;
+  uint32_t CodeSection = 0;
+  uint32_t DataSection = 0;
+  uint32_t GlobalSection = 0;
+  uint32_t EventSection = 0;
+};
+
+class WasmSectionOrderChecker {
+public:
+  // We define orders for all core wasm sections and known custom sections.
+  enum : int {
+    // Sentinel, must be zero
+    WASM_SEC_ORDER_NONE = 0,
+
+    // Core sections
+    WASM_SEC_ORDER_TYPE,
+    WASM_SEC_ORDER_IMPORT,
+    WASM_SEC_ORDER_FUNCTION,
+    WASM_SEC_ORDER_TABLE,
+    WASM_SEC_ORDER_MEMORY,
+    WASM_SEC_ORDER_GLOBAL,
+    WASM_SEC_ORDER_EVENT,
+    WASM_SEC_ORDER_EXPORT,
+    WASM_SEC_ORDER_START,
+    WASM_SEC_ORDER_ELEM,
+    WASM_SEC_ORDER_DATACOUNT,
+    WASM_SEC_ORDER_CODE,
+    WASM_SEC_ORDER_DATA,
+
+    // Custom sections
+    // "dylink" should be the very first section in the module
+    WASM_SEC_ORDER_DYLINK,
+    // "linking" section requires DATA section in order to validate data symbols
+    WASM_SEC_ORDER_LINKING,
+    // Must come after "linking" section in order to validate reloc indexes.
+    WASM_SEC_ORDER_RELOC,
+    // "name" section must appear after DATA. Comes after "linking" to allow
+    // symbol table to set default function name.
+    WASM_SEC_ORDER_NAME,
+    // "producers" section must appear after "name" section.
+    WASM_SEC_ORDER_PRODUCERS,
+    // "target_features" section must appear after producers section
+    WASM_SEC_ORDER_TARGET_FEATURES,
+
+    // Must be last
+    WASM_NUM_SEC_ORDERS
+
+  };
+
+  // Sections that may or may not be present, but cannot be predecessors
+  static int DisallowedPredecessors[WASM_NUM_SEC_ORDERS][WASM_NUM_SEC_ORDERS];
+
+  bool isValidSectionOrder(unsigned ID, StringRef CustomSectionName = "");
+
+private:
+  bool Seen[WASM_NUM_SEC_ORDERS] = {}; // Sections that have been seen already
+
+  // Returns -1 for unknown sections.
+  int getSectionOrder(unsigned ID, StringRef CustomSectionName = "");
+};
+
+} // end namespace object
+
+inline raw_ostream &operator<<(raw_ostream &OS, const object::WasmSymbol &Sym) {
+  Sym.print(OS);
+  return OS;
+}
+
+} // end namespace llvm
+
+#endif // LLVM_OBJECT_WASM_H
