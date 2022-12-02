@@ -193,4 +193,75 @@ template <typename T> struct ArchNames {
   const char *SubArchCStr;
   size_t SubArchLength;
   unsigned DefaultFPU;
-  un
+  unsigned ArchBaseExtensions;
+  T ID;
+  ARMBuildAttrs::CPUArch ArchAttr; // Arch ID in build attributes.
+
+  StringRef getName() const { return StringRef(NameCStr, NameLength); }
+
+  // CPU class in build attributes.
+  StringRef getCPUAttr() const { return StringRef(CPUAttrCStr, CPUAttrLength); }
+
+  // Sub-Arch name.
+  StringRef getSubArch() const { return StringRef(SubArchCStr, SubArchLength); }
+};
+
+static const ArchNames<ArchKind> ARCHNames[] = {
+#define ARM_ARCH(NAME, ID, CPU_ATTR, SUB_ARCH, ARCH_ATTR, ARCH_FPU,            \
+                 ARCH_BASE_EXT)                                                \
+  {NAME,         sizeof(NAME) - 1,                                             \
+   CPU_ATTR,     sizeof(CPU_ATTR) - 1,                                         \
+   SUB_ARCH,     sizeof(SUB_ARCH) - 1,                                         \
+   ARCH_FPU,     ARCH_BASE_EXT,                                                \
+   ArchKind::ID, ARCH_ATTR},
+#include "llvm/Support/ARMTargetParser.def"
+};
+
+// Information by ID
+StringRef getFPUName(unsigned FPUKind);
+FPUVersion getFPUVersion(unsigned FPUKind);
+NeonSupportLevel getFPUNeonSupportLevel(unsigned FPUKind);
+FPURestriction getFPURestriction(unsigned FPUKind);
+
+// FIXME: These should be moved to TargetTuple once it exists
+bool getFPUFeatures(unsigned FPUKind, std::vector<StringRef> &Features);
+bool getHWDivFeatures(unsigned HWDivKind, std::vector<StringRef> &Features);
+bool getExtensionFeatures(unsigned Extensions,
+                          std::vector<StringRef> &Features);
+
+StringRef getArchName(ArchKind AK);
+unsigned getArchAttr(ArchKind AK);
+StringRef getCPUAttr(ArchKind AK);
+StringRef getSubArch(ArchKind AK);
+StringRef getArchExtName(unsigned ArchExtKind);
+StringRef getArchExtFeature(StringRef ArchExt);
+bool appendArchExtFeatures(StringRef CPU, ARM::ArchKind AK, StringRef ArchExt,
+                           std::vector<StringRef> &Features);
+StringRef getHWDivName(unsigned HWDivKind);
+
+// Information by Name
+unsigned getDefaultFPU(StringRef CPU, ArchKind AK);
+unsigned getDefaultExtensions(StringRef CPU, ArchKind AK);
+StringRef getDefaultCPU(StringRef Arch);
+StringRef getCanonicalArchName(StringRef Arch);
+StringRef getFPUSynonym(StringRef FPU);
+StringRef getArchSynonym(StringRef Arch);
+
+// Parser
+unsigned parseHWDiv(StringRef HWDiv);
+unsigned parseFPU(StringRef FPU);
+ArchKind parseArch(StringRef Arch);
+unsigned parseArchExt(StringRef ArchExt);
+ArchKind parseCPUArch(StringRef CPU);
+ISAKind parseArchISA(StringRef Arch);
+EndianKind parseArchEndian(StringRef Arch);
+ProfileKind parseArchProfile(StringRef Arch);
+unsigned parseArchVersion(StringRef Arch);
+
+void fillValidCPUArchList(SmallVectorImpl<StringRef> &Values);
+StringRef computeDefaultTargetABI(const Triple &TT, StringRef CPU);
+
+} // namespace ARM
+} // namespace llvm
+
+#endif
