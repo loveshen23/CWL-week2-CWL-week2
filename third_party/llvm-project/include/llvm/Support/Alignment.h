@@ -233,4 +233,171 @@ inline MaybeAlign commonAlignment(MaybeAlign A, uint64_t Offset) {
 }
 
 /// Returns a representation of the alignment that encodes undefined as 0.
-inline unsigned encode(MaybeAlign A) { ret
+inline unsigned encode(MaybeAlign A) { return A ? A->ShiftValue + 1 : 0; }
+
+/// Dual operation of the encode function above.
+inline MaybeAlign decodeMaybeAlign(unsigned Value) {
+  if (Value == 0)
+    return MaybeAlign();
+  Align Out;
+  Out.ShiftValue = Value - 1;
+  return Out;
+}
+
+/// Returns a representation of the alignment, the encoded value is positive by
+/// definition.
+inline unsigned encode(Align A) { return encode(MaybeAlign(A)); }
+
+/// Comparisons between Align and scalars. Rhs must be positive.
+inline bool operator==(Align Lhs, uint64_t Rhs) {
+  ALIGN_CHECK_ISPOSITIVE(Rhs);
+  return Lhs.value() == Rhs;
+}
+inline bool operator!=(Align Lhs, uint64_t Rhs) {
+  ALIGN_CHECK_ISPOSITIVE(Rhs);
+  return Lhs.value() != Rhs;
+}
+inline bool operator<=(Align Lhs, uint64_t Rhs) {
+  ALIGN_CHECK_ISPOSITIVE(Rhs);
+  return Lhs.value() <= Rhs;
+}
+inline bool operator>=(Align Lhs, uint64_t Rhs) {
+  ALIGN_CHECK_ISPOSITIVE(Rhs);
+  return Lhs.value() >= Rhs;
+}
+inline bool operator<(Align Lhs, uint64_t Rhs) {
+  ALIGN_CHECK_ISPOSITIVE(Rhs);
+  return Lhs.value() < Rhs;
+}
+inline bool operator>(Align Lhs, uint64_t Rhs) {
+  ALIGN_CHECK_ISPOSITIVE(Rhs);
+  return Lhs.value() > Rhs;
+}
+
+/// Comparisons between MaybeAlign and scalars.
+inline bool operator==(MaybeAlign Lhs, uint64_t Rhs) {
+  return Lhs ? (*Lhs).value() == Rhs : Rhs == 0;
+}
+inline bool operator!=(MaybeAlign Lhs, uint64_t Rhs) {
+  return Lhs ? (*Lhs).value() != Rhs : Rhs != 0;
+}
+inline bool operator<=(MaybeAlign Lhs, uint64_t Rhs) {
+  ALIGN_CHECK_ISSET(Lhs);
+  ALIGN_CHECK_ISPOSITIVE(Rhs);
+  return (*Lhs).value() <= Rhs;
+}
+inline bool operator>=(MaybeAlign Lhs, uint64_t Rhs) {
+  ALIGN_CHECK_ISSET(Lhs);
+  ALIGN_CHECK_ISPOSITIVE(Rhs);
+  return (*Lhs).value() >= Rhs;
+}
+inline bool operator<(MaybeAlign Lhs, uint64_t Rhs) {
+  ALIGN_CHECK_ISSET(Lhs);
+  ALIGN_CHECK_ISPOSITIVE(Rhs);
+  return (*Lhs).value() < Rhs;
+}
+inline bool operator>(MaybeAlign Lhs, uint64_t Rhs) {
+  ALIGN_CHECK_ISSET(Lhs);
+  ALIGN_CHECK_ISPOSITIVE(Rhs);
+  return (*Lhs).value() > Rhs;
+}
+
+/// Comparisons operators between Align.
+inline bool operator==(Align Lhs, Align Rhs) {
+  return Lhs.ShiftValue == Rhs.ShiftValue;
+}
+inline bool operator!=(Align Lhs, Align Rhs) {
+  return Lhs.ShiftValue != Rhs.ShiftValue;
+}
+inline bool operator<=(Align Lhs, Align Rhs) {
+  return Lhs.ShiftValue <= Rhs.ShiftValue;
+}
+inline bool operator>=(Align Lhs, Align Rhs) {
+  return Lhs.ShiftValue >= Rhs.ShiftValue;
+}
+inline bool operator<(Align Lhs, Align Rhs) {
+  return Lhs.ShiftValue < Rhs.ShiftValue;
+}
+inline bool operator>(Align Lhs, Align Rhs) {
+  return Lhs.ShiftValue > Rhs.ShiftValue;
+}
+
+/// Comparisons operators between Align and MaybeAlign.
+inline bool operator==(Align Lhs, MaybeAlign Rhs) {
+  ALIGN_CHECK_ISSET(Rhs);
+  return Lhs.value() == (*Rhs).value();
+}
+inline bool operator!=(Align Lhs, MaybeAlign Rhs) {
+  ALIGN_CHECK_ISSET(Rhs);
+  return Lhs.value() != (*Rhs).value();
+}
+inline bool operator<=(Align Lhs, MaybeAlign Rhs) {
+  ALIGN_CHECK_ISSET(Rhs);
+  return Lhs.value() <= (*Rhs).value();
+}
+inline bool operator>=(Align Lhs, MaybeAlign Rhs) {
+  ALIGN_CHECK_ISSET(Rhs);
+  return Lhs.value() >= (*Rhs).value();
+}
+inline bool operator<(Align Lhs, MaybeAlign Rhs) {
+  ALIGN_CHECK_ISSET(Rhs);
+  return Lhs.value() < (*Rhs).value();
+}
+inline bool operator>(Align Lhs, MaybeAlign Rhs) {
+  ALIGN_CHECK_ISSET(Rhs);
+  return Lhs.value() > (*Rhs).value();
+}
+
+/// Comparisons operators between MaybeAlign and Align.
+inline bool operator==(MaybeAlign Lhs, Align Rhs) {
+  ALIGN_CHECK_ISSET(Lhs);
+  return Lhs && (*Lhs).value() == Rhs.value();
+}
+inline bool operator!=(MaybeAlign Lhs, Align Rhs) {
+  ALIGN_CHECK_ISSET(Lhs);
+  return Lhs && (*Lhs).value() != Rhs.value();
+}
+inline bool operator<=(MaybeAlign Lhs, Align Rhs) {
+  ALIGN_CHECK_ISSET(Lhs);
+  return Lhs && (*Lhs).value() <= Rhs.value();
+}
+inline bool operator>=(MaybeAlign Lhs, Align Rhs) {
+  ALIGN_CHECK_ISSET(Lhs);
+  return Lhs && (*Lhs).value() >= Rhs.value();
+}
+inline bool operator<(MaybeAlign Lhs, Align Rhs) {
+  ALIGN_CHECK_ISSET(Lhs);
+  return Lhs && (*Lhs).value() < Rhs.value();
+}
+inline bool operator>(MaybeAlign Lhs, Align Rhs) {
+  ALIGN_CHECK_ISSET(Lhs);
+  return Lhs && (*Lhs).value() > Rhs.value();
+}
+
+inline Align operator/(Align Lhs, uint64_t Divisor) {
+  assert(llvm::isPowerOf2_64(Divisor) &&
+         "Divisor must be positive and a power of 2");
+  assert(Lhs != 1 && "Can't halve byte alignment");
+  return Align(Lhs.value() / Divisor);
+}
+
+inline MaybeAlign operator/(MaybeAlign Lhs, uint64_t Divisor) {
+  assert(llvm::isPowerOf2_64(Divisor) &&
+         "Divisor must be positive and a power of 2");
+  return Lhs ? Lhs.getValue() / Divisor : MaybeAlign();
+}
+
+inline Align max(MaybeAlign Lhs, Align Rhs) {
+  return Lhs && *Lhs > Rhs ? *Lhs : Rhs;
+}
+
+inline Align max(Align Lhs, MaybeAlign Rhs) {
+  return Rhs && *Rhs > Lhs ? *Rhs : Lhs;
+}
+
+#undef ALIGN_CHECK_ISPOSITIVE
+#undef ALIGN_CHECK_ISSET
+
+} // namespace llvm
+
+#endif // LLVM_SUPPORT_ALIGNMENT_H_
