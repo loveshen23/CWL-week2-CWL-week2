@@ -139,4 +139,33 @@ private:
     return {D.count(), detail::unit<Period>::value};
   }
 
-  static bool consumeS
+  static bool consumeShowUnit(StringRef &Style) {
+    if (Style.empty())
+      return true;
+    if (Style.consume_front("-"))
+      return false;
+    if (Style.consume_front("+"))
+      return true;
+    assert(0 && "Unrecognised duration format");
+    return true;
+  }
+
+public:
+  static void format(const Dur &D, llvm::raw_ostream &Stream, StringRef Style) {
+    InternalRep count;
+    StringRef unit;
+    std::tie(count, unit) = consumeUnit(Style, D);
+    bool show_unit = consumeShowUnit(Style);
+
+    format_provider<InternalRep>::format(count, Stream, Style);
+
+    if (show_unit) {
+      assert(!unit.empty());
+      Stream << " " << unit;
+    }
+  }
+};
+
+} // namespace llvm
+
+#endif // LLVM_SUPPORT_CHRONO_H
