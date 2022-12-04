@@ -176,4 +176,98 @@ public:
     // This is well-defined for any case except where offset is strictly
     // greater than the current length.  If offset is equal to the current
     // length, we can still grow.  If offset is beyond the current length, we
-    // would have to decide how to deal with the intermediate uninit
+    // would have to decide how to deal with the intermediate uninitialized
+    // bytes.  So we punt on that case for simplicity and just say it's an
+    // error.
+    if (Offset > getLength())
+      return make_error<BinaryStreamError>(stream_error_code::invalid_offset);
+
+    uint32_t RequiredSize = Offset + Buffer.size();
+    if (RequiredSize > Data.size())
+      Data.resize(RequiredSize);
+
+    ::memcpy(Data.data() + Offset, Buffer.data(), Buffer.size());
+    return Error::success();
+  }
+
+  Error commit() override { return Error::success(); }
+
+  /// Return the properties of this stream.
+  virtual BinaryStreamFlags getFlags() const override {
+    return BSF_Write | BSF_Append;
+  }
+
+  MutableArrayRef<uint8_t> data() { return Data; }
+};
+
+/// An implementation of WritableBinaryStream backed by an llvm
+/// FileOutputBuffer.
+class FileBufferByteStream : public WritableBinaryStream {
+private:
+  class StreamImpl : public MutableBinaryByteStream {
+  public:
+    StreamImpl(std::unique_ptr<FileOutputBuffer> Buffer,
+               llvm::support::endianness Endian)
+        : MutableBinaryByteStream(
+              MutableArrayRef<uint8_t>(Buffer->getBufferStart(),
+                                       Buffer->getBufferEnd()),
+              Endian),
+          FileBuffer(std::move(Buffer)) {}
+
+    Error commit() override {
+      if (FileBuffer->commit())
+        return make_error<BinaryStreamError>(
+            stream_error_code::filesystem_error);
+      return Error::success();
+    }
+
+    /// Returns a pointer to the start of the buffer.
+    uint8_t *getBufferStart() const { return FileBuffer->getBufferStart(); }
+
+    /// Returns a pointer to the end of the buffer.
+    uint8_t *getBufferEnd() const { return FileBuffer->getBufferEnd(); }
+
+  private:
+    std::unique_ptr<FileOutputBuffer> FileBuffer;
+  };
+
+public:
+  FileBufferByteStream(std::unique_ptr<FileOutputBuffer> Buffer,
+                       llvm::support::endianness Endian)
+      : Impl(std::move(Buffer), Endian) {}
+
+  llvm::support::endianness getEndian() const override {
+    return Impl.getEndian();
+  }
+
+  Error readBytes(uint32_t Offset, uint32_t Size,
+                  ArrayRef<uint8_t> &Buffer) override {
+    return Impl.readBytes(Offset, Size, Buffer);
+  }
+
+  Error readLongestContiguousChunk(uint32_t Offset,
+                                   ArrayRef<uint8_t> &Buffer) override {
+    return Impl.readLongestContiguousChunk(Offset, Buffer);
+  }
+
+  uint32_t getLength() override { return Impl.getLength(); }
+
+  Error writeBytes(uint32_t Offset, ArrayRef<uint8_t> Data) override {
+    return Impl.writeBytes(Offset, Data);
+  }
+
+  Error commit() override { return Impl.commit(); }
+
+  /// Returns a pointer to the start of the buffer.
+  uint8_t *getBufferStart() const { return Impl.getBufferStart(); }
+
+  /// Returns a pointer to the end of the buffer.
+  uint8_t *getBufferEnd() const { return Impl.getBufferEnd(); }
+
+private:
+  StreamImpl Impl;
+};
+
+} // end namespace llvm
+
+#endif // LLVM_SUPPORT_BYTESTREAM_H
