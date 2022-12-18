@@ -266,4 +266,320 @@
 #elif LLVM_HAS_CPP_ATTRIBUTE(gnu::fallthrough)
 #define LLVM_FALLTHROUGH [[gnu::fallthrough]]
 #elif __has_attribute(fallthrough)
-#define LLVM_FALLTHROUGH __attribu
+#define LLVM_FALLTHROUGH __attribute__((fallthrough))
+#elif LLVM_HAS_CPP_ATTRIBUTE(clang::fallthrough)
+#define LLVM_FALLTHROUGH [[clang::fallthrough]]
+#else
+#define LLVM_FALLTHROUGH
+#endif
+
+/// LLVM_REQUIRE_CONSTANT_INITIALIZATION - Apply this to globals to ensure that
+/// they are constant initialized.
+#if LLVM_HAS_CPP_ATTRIBUTE(clang::require_constant_initialization)
+#define LLVM_REQUIRE_CONSTANT_INITIALIZATION                                   \
+  [[clang::require_constant_initialization]]
+#else
+#define LLVM_REQUIRE_CONSTANT_INITIALIZATION
+#endif
+
+/// LLVM_EXTENSION - Support compilers where we have a keyword to suppress
+/// pedantic diagnostics.
+#ifdef __GNUC__
+#define LLVM_EXTENSION __extension__
+#else
+#define LLVM_EXTENSION
+#endif
+
+// LLVM_ATTRIBUTE_DEPRECATED(decl, "message")
+#if __has_feature(attribute_deprecated_with_message)
+# define LLVM_ATTRIBUTE_DEPRECATED(decl, message) \
+  decl __attribute__((deprecated(message)))
+#elif defined(__GNUC__)
+# define LLVM_ATTRIBUTE_DEPRECATED(decl, message) \
+  decl __attribute__((deprecated))
+#elif defined(_MSC_VER)
+# define LLVM_ATTRIBUTE_DEPRECATED(decl, message) \
+  __declspec(deprecated(message)) decl
+#else
+# define LLVM_ATTRIBUTE_DEPRECATED(decl, message) \
+  decl
+#endif
+
+/// LLVM_BUILTIN_UNREACHABLE - On compilers which support it, expands
+/// to an expression which states that it is undefined behavior for the
+/// compiler to reach this point.  Otherwise is not defined.
+#if __has_builtin(__builtin_unreachable) || LLVM_GNUC_PREREQ(4, 5, 0)
+# define LLVM_BUILTIN_UNREACHABLE __builtin_unreachable()
+#elif defined(_MSC_VER)
+# define LLVM_BUILTIN_UNREACHABLE __assume(false)
+#endif
+
+/// LLVM_BUILTIN_TRAP - On compilers which support it, expands to an expression
+/// which causes the program to exit abnormally.
+#if __has_builtin(__builtin_trap) || LLVM_GNUC_PREREQ(4, 3, 0)
+# define LLVM_BUILTIN_TRAP __builtin_trap()
+#elif defined(_MSC_VER)
+// The __debugbreak intrinsic is supported by MSVC, does not require forward
+// declarations involving platform-specific typedefs (unlike RaiseException),
+// results in a call to vectored exception handlers, and encodes to a short
+// instruction that still causes the trapping behavior we want.
+# define LLVM_BUILTIN_TRAP __debugbreak()
+#else
+# define LLVM_BUILTIN_TRAP *(volatile int*)0x11 = 0
+#endif
+
+/// LLVM_BUILTIN_DEBUGTRAP - On compilers which support it, expands to
+/// an expression which causes the program to break while running
+/// under a debugger.
+#if __has_builtin(__builtin_debugtrap)
+# define LLVM_BUILTIN_DEBUGTRAP __builtin_debugtrap()
+#elif defined(_MSC_VER)
+// The __debugbreak intrinsic is supported by MSVC and breaks while
+// running under the debugger, and also supports invoking a debugger
+// when the OS is configured appropriately.
+# define LLVM_BUILTIN_DEBUGTRAP __debugbreak()
+#else
+// Just continue execution when built with compilers that have no
+// support. This is a debugging aid and not intended to force the
+// program to abort if encountered.
+# define LLVM_BUILTIN_DEBUGTRAP
+#endif
+
+/// \macro LLVM_ASSUME_ALIGNED
+/// Returns a pointer with an assumed alignment.
+#if __has_builtin(__builtin_assume_aligned) || LLVM_GNUC_PREREQ(4, 7, 0)
+# define LLVM_ASSUME_ALIGNED(p, a) __builtin_assume_aligned(p, a)
+#elif defined(LLVM_BUILTIN_UNREACHABLE)
+// As of today, clang does not support __builtin_assume_aligned.
+# define LLVM_ASSUME_ALIGNED(p, a) \
+           (((uintptr_t(p) % (a)) == 0) ? (p) : (LLVM_BUILTIN_UNREACHABLE, (p)))
+#else
+# define LLVM_ASSUME_ALIGNED(p, a) (p)
+#endif
+
+/// \macro LLVM_PACKED
+/// Used to specify a packed structure.
+/// LLVM_PACKED(
+///    struct A {
+///      int i;
+///      int j;
+///      int k;
+///      long long l;
+///   });
+///
+/// LLVM_PACKED_START
+/// struct B {
+///   int i;
+///   int j;
+///   int k;
+///   long long l;
+/// };
+/// LLVM_PACKED_END
+#ifdef _MSC_VER
+# define LLVM_PACKED(d) __pragma(pack(push, 1)) d __pragma(pack(pop))
+# define LLVM_PACKED_START __pragma(pack(push, 1))
+# define LLVM_PACKED_END   __pragma(pack(pop))
+#else
+# define LLVM_PACKED(d) d __attribute__((packed))
+# define LLVM_PACKED_START _Pragma("pack(push, 1)")
+# define LLVM_PACKED_END   _Pragma("pack(pop)")
+#endif
+
+/// \macro LLVM_PTR_SIZE
+/// A constant integer equivalent to the value of sizeof(void*).
+/// Generally used in combination with alignas or when doing computation in the
+/// preprocessor.
+#ifdef __SIZEOF_POINTER__
+# define LLVM_PTR_SIZE __SIZEOF_POINTER__
+#elif defined(_WIN64)
+# define LLVM_PTR_SIZE 8
+#elif defined(_WIN32)
+# define LLVM_PTR_SIZE 4
+#elif defined(_MSC_VER)
+# error "could not determine LLVM_PTR_SIZE as a constant int for MSVC"
+#else
+# define LLVM_PTR_SIZE sizeof(void *)
+#endif
+
+/// \macro LLVM_MEMORY_SANITIZER_BUILD
+/// Whether LLVM itself is built with MemorySanitizer instrumentation.
+#if __has_feature(memory_sanitizer)
+# define LLVM_MEMORY_SANITIZER_BUILD 1
+# include <sanitizer/msan_interface.h>
+#else
+# define LLVM_MEMORY_SANITIZER_BUILD 0
+# define __msan_allocated_memory(p, size)
+# define __msan_unpoison(p, size)
+#endif
+
+/// \macro LLVM_ADDRESS_SANITIZER_BUILD
+/// Whether LLVM itself is built with AddressSanitizer instrumentation.
+#if __has_feature(address_sanitizer) || defined(__SANITIZE_ADDRESS__)
+# define LLVM_ADDRESS_SANITIZER_BUILD 1
+# include <sanitizer/asan_interface.h>
+#else
+# define LLVM_ADDRESS_SANITIZER_BUILD 0
+# define __asan_poison_memory_region(p, size)
+# define __asan_unpoison_memory_region(p, size)
+#endif
+
+/// \macro LLVM_THREAD_SANITIZER_BUILD
+/// Whether LLVM itself is built with ThreadSanitizer instrumentation.
+#if __has_feature(thread_sanitizer) || defined(__SANITIZE_THREAD__)
+# define LLVM_THREAD_SANITIZER_BUILD 1
+#else
+# define LLVM_THREAD_SANITIZER_BUILD 0
+#endif
+
+#if LLVM_THREAD_SANITIZER_BUILD
+// Thread Sanitizer is a tool that finds races in code.
+// See http://code.google.com/p/data-race-test/wiki/DynamicAnnotations .
+// tsan detects these exact functions by name.
+#ifdef __cplusplus
+extern "C" {
+#endif
+void AnnotateHappensAfter(const char *file, int line, const volatile void *cv);
+void AnnotateHappensBefore(const char *file, int line, const volatile void *cv);
+void AnnotateIgnoreWritesBegin(const char *file, int line);
+void AnnotateIgnoreWritesEnd(const char *file, int line);
+#ifdef __cplusplus
+}
+#endif
+
+// This marker is used to define a happens-before arc. The race detector will
+// infer an arc from the begin to the end when they share the same pointer
+// argument.
+# define TsanHappensBefore(cv) AnnotateHappensBefore(__FILE__, __LINE__, cv)
+
+// This marker defines the destination of a happens-before arc.
+# define TsanHappensAfter(cv) AnnotateHappensAfter(__FILE__, __LINE__, cv)
+
+// Ignore any races on writes between here and the next TsanIgnoreWritesEnd.
+# define TsanIgnoreWritesBegin() AnnotateIgnoreWritesBegin(__FILE__, __LINE__)
+
+// Resume checking for racy writes.
+# define TsanIgnoreWritesEnd() AnnotateIgnoreWritesEnd(__FILE__, __LINE__)
+#else
+# define TsanHappensBefore(cv)
+# define TsanHappensAfter(cv)
+# define TsanIgnoreWritesBegin()
+# define TsanIgnoreWritesEnd()
+#endif
+
+/// \macro LLVM_NO_SANITIZE
+/// Disable a particular sanitizer for a function.
+#if __has_attribute(no_sanitize)
+#define LLVM_NO_SANITIZE(KIND) __attribute__((no_sanitize(KIND)))
+#else
+#define LLVM_NO_SANITIZE(KIND)
+#endif
+
+/// Mark debug helper function definitions like dump() that should not be
+/// stripped from debug builds.
+/// Note that you should also surround dump() functions with
+/// `#if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)` so they do always
+/// get stripped in release builds.
+// FIXME: Move this to a private config.h as it's not usable in public headers.
+#if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
+#define LLVM_DUMP_METHOD LLVM_ATTRIBUTE_NOINLINE LLVM_ATTRIBUTE_USED
+#else
+#define LLVM_DUMP_METHOD LLVM_ATTRIBUTE_NOINLINE
+#endif
+
+/// \macro LLVM_PRETTY_FUNCTION
+/// Gets a user-friendly looking function signature for the current scope
+/// using the best available method on each platform.  The exact format of the
+/// resulting string is implementation specific and non-portable, so this should
+/// only be used, for example, for logging or diagnostics.
+#if defined(_MSC_VER)
+#define LLVM_PRETTY_FUNCTION __FUNCSIG__
+#elif defined(__GNUC__) || defined(__clang__)
+#define LLVM_PRETTY_FUNCTION __PRETTY_FUNCTION__
+#else
+#define LLVM_PRETTY_FUNCTION __func__
+#endif
+
+/// \macro LLVM_THREAD_LOCAL
+/// A thread-local storage specifier which can be used with globals,
+/// extern globals, and static globals.
+///
+/// This is essentially an extremely restricted analog to C++11's thread_local
+/// support, and uses that when available. However, it falls back on
+/// platform-specific or vendor-provided extensions when necessary. These
+/// extensions don't support many of the C++11 thread_local's features. You
+/// should only use this for PODs that you can statically initialize to
+/// some constant value. In almost all circumstances this is most appropriate
+/// for use with a pointer, integer, or small aggregation of pointers and
+/// integers.
+#if LLVM_ENABLE_THREADS
+#if __has_feature(cxx_thread_local)
+#define LLVM_THREAD_LOCAL thread_local
+#elif defined(_MSC_VER)
+// MSVC supports this with a __declspec.
+#define LLVM_THREAD_LOCAL __declspec(thread)
+#else
+// Clang, GCC, and other compatible compilers used __thread prior to C++11 and
+// we only need the restricted functionality that provides.
+#define LLVM_THREAD_LOCAL __thread
+#endif
+#else // !LLVM_ENABLE_THREADS
+// If threading is disabled entirely, this compiles to nothing and you get
+// a normal global variable.
+#define LLVM_THREAD_LOCAL
+#endif
+
+/// \macro LLVM_ENABLE_EXCEPTIONS
+/// Whether LLVM is built with exception support.
+#if __has_feature(cxx_exceptions)
+#define LLVM_ENABLE_EXCEPTIONS 1
+#elif defined(__GNUC__) && defined(__EXCEPTIONS)
+#define LLVM_ENABLE_EXCEPTIONS 1
+#elif defined(_MSC_VER) && defined(_CPPUNWIND)
+#define LLVM_ENABLE_EXCEPTIONS 1
+#endif
+
+#ifdef __cplusplus
+namespace llvm {
+
+/// Allocate a buffer of memory with the given size and alignment.
+///
+/// When the compiler supports aligned operator new, this will use it to to
+/// handle even over-aligned allocations.
+///
+/// However, this doesn't make any attempt to leverage the fancier techniques
+/// like posix_memalign due to portability. It is mostly intended to allow
+/// compatibility with platforms that, after aligned allocation was added, use
+/// reduced default alignment.
+inline void *allocate_buffer(size_t Size, size_t Alignment) {
+  return ::operator new(Size
+#ifdef __cpp_aligned_new
+                        ,
+                        std::align_val_t(Alignment)
+#endif
+  );
+}
+
+/// Deallocate a buffer of memory with the given size and alignment.
+///
+/// If supported, this will used the sized delete operator. Also if supported,
+/// this will pass the alignment to the delete operator.
+///
+/// The pointer must have been allocated with the corresponding new operator,
+/// most likely using the above helper.
+inline void deallocate_buffer(void *Ptr, size_t Size, size_t Alignment) {
+  ::operator delete(Ptr
+#ifdef __cpp_sized_deallocation
+                    ,
+                    Size
+#endif
+#ifdef __cpp_aligned_new
+                    ,
+                    std::align_val_t(Alignment)
+#endif
+  );
+}
+
+} // End namespace llvm
+
+#endif // __cplusplus
+#endif
