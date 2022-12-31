@@ -1032,4 +1032,320 @@ inline bool errorToBool(Error Err) {
 ///
 /// This helper is for use with the Error-as-out-parameter idiom, where an error
 /// is passed to a function or method by reference, rather than being returned.
-/// In such cases it is helpful to set t
+/// In such cases it is helpful to set the checked bit on entry to the function
+/// so that the error can be written to (unchecked Errors abort on assignment)
+/// and clear the checked bit on exit so that clients cannot accidentally forget
+/// to check the result. This helper performs these actions automatically using
+/// RAII:
+///
+///   @code{.cpp}
+///   Result foo(Error &Err) {
+///     ErrorAsOutParameter ErrAsOutParam(&Err); // 'Checked' flag set
+///     // <body of foo>
+///     // <- 'Checked' flag auto-cleared when ErrAsOutParam is destructed.
+///   }
+///   @endcode
+///
+/// ErrorAsOutParameter takes an Error* rather than Error& so that it can be
+/// used with optional Errors (Error pointers that are allowed to be null). If
+/// ErrorAsOutParameter took an Error reference, an instance would have to be
+/// created inside every condition that verified that Error was non-null. By
+/// taking an Error pointer we can just create one instance at the top of the
+/// function.
+class ErrorAsOutParameter {
+public:
+  ErrorAsOutParameter(Error *Err) : Err(Err) {
+    // Raise the checked bit if Err is success.
+    if (Err)
+      (void)!!*Err;
+  }
+
+  ~ErrorAsOutParameter() {
+    // Clear the checked bit.
+    if (Err && !*Err)
+      *Err = Error::success();
+  }
+
+private:
+  Error *Err;
+};
+
+/// Helper for Expected<T>s used as out-parameters.
+///
+/// See ErrorAsOutParameter.
+template <typename T>
+class ExpectedAsOutParameter {
+public:
+  ExpectedAsOutParameter(Expected<T> *ValOrErr)
+    : ValOrErr(ValOrErr) {
+    if (ValOrErr)
+      (void)!!*ValOrErr;
+  }
+
+  ~ExpectedAsOutParameter() {
+    if (ValOrErr)
+      ValOrErr->setUnchecked();
+  }
+
+private:
+  Expected<T> *ValOrErr;
+};
+
+/// This class wraps a std::error_code in a Error.
+///
+/// This is useful if you're writing an interface that returns a Error
+/// (or Expected) and you want to call code that still returns
+/// std::error_codes.
+class ECError : public ErrorInfo<ECError> {
+  friend Error errorCodeToError(std::error_code);
+
+  virtual void anchor() override;
+
+public:
+  void setErrorCode(std::error_code EC) { this->EC = EC; }
+  std::error_code convertToErrorCode() const override { return EC; }
+  void log(raw_ostream &OS) const override { OS << EC.message(); }
+
+  // Used by ErrorInfo::classID.
+  static char ID;
+
+protected:
+  ECError() = default;
+  ECError(std::error_code EC) : EC(EC) {}
+
+  std::error_code EC;
+};
+
+/// The value returned by this function can be returned from convertToErrorCode
+/// for Error values where no sensible translation to std::error_code exists.
+/// It should only be used in this situation, and should never be used where a
+/// sensible conversion to std::error_code is available, as attempts to convert
+/// to/from this error will result in a fatal error. (i.e. it is a programmatic
+///error to try to convert such a value).
+std::error_code inconvertibleErrorCode();
+
+/// Helper for converting an std::error_code to a Error.
+Error errorCodeToError(std::error_code EC);
+
+/// Helper for converting an ECError to a std::error_code.
+///
+/// This method requires that Err be Error() or an ECError, otherwise it
+/// will trigger a call to abort().
+std::error_code errorToErrorCode(Error Err);
+
+/// Convert an ErrorOr<T> to an Expected<T>.
+template <typename T> Expected<T> errorOrToExpected(ErrorOr<T> &&EO) {
+  if (auto EC = EO.getError())
+    return errorCodeToError(EC);
+  return std::move(*EO);
+}
+
+/// Convert an Expected<T> to an ErrorOr<T>.
+template <typename T> ErrorOr<T> expectedToErrorOr(Expected<T> &&E) {
+  if (auto Err = E.takeError())
+    return errorToErrorCode(std::move(Err));
+  return std::move(*E);
+}
+
+/// This class wraps a string in an Error.
+///
+/// StringError is useful in cases where the client is not expected to be able
+/// to consume the specific error message programmatically (for example, if the
+/// error message is to be presented to the user).
+///
+/// StringError can also be used when additional information is to be printed
+/// along with a error_code message. Depending on the constructor called, this
+/// class can either display:
+///    1. the error_code message (ECError behavior)
+///    2. a string
+///    3. the error_code message and a string
+///
+/// These behaviors are useful when subtyping is required; for example, when a
+/// specific library needs an explicit error type. In the example below,
+/// PDBError is derived from StringError:
+///
+///   @code{.cpp}
+///   Expected<int> foo() {
+///      return llvm::make_error<PDBError>(pdb_error_code::dia_failed_loading,
+///                                        "Additional information");
+///   }
+///   @endcode
+///
+class StringError : public ErrorInfo<StringError> {
+public:
+  static char ID;
+
+  // Prints EC + S and converts to EC
+  StringError(std::error_code EC, const Twine &S = Twine());
+
+  // Prints S and converts to EC
+  StringError(const Twine &S, std::error_code EC);
+
+  void log(raw_ostream &OS) const override;
+  std::error_code convertToErrorCode() const override;
+
+  const std::string &getMessage() const { return Msg; }
+
+private:
+  std::string Msg;
+  std::error_code EC;
+  const bool PrintMsgOnly = false;
+};
+
+/// Create formatted StringError object.
+template <typename... Ts>
+inline Error createStringError(std::error_code EC, char const *Fmt,
+                               const Ts &... Vals) {
+  std::string Buffer;
+  raw_string_ostream Stream(Buffer);
+  Stream << format(Fmt, Vals...);
+  return make_error<StringError>(Stream.str(), EC);
+}
+
+Error createStringError(std::error_code EC, char const *Msg);
+
+inline Error createStringError(std::error_code EC, const Twine &S) {
+  return createStringError(EC, S.str().c_str());
+}
+
+template <typename... Ts>
+inline Error createStringError(std::errc EC, char const *Fmt,
+                               const Ts &... Vals) {
+  return createStringError(std::make_error_code(EC), Fmt, Vals...);
+}
+
+/// This class wraps a filename and another Error.
+///
+/// In some cases, an error needs to live along a 'source' name, in order to
+/// show more detailed information to the user.
+class FileError final : public ErrorInfo<FileError> {
+
+  friend Error createFileError(const Twine &, Error);
+  friend Error createFileError(const Twine &, size_t, Error);
+
+public:
+  void log(raw_ostream &OS) const override {
+    assert(Err && !FileName.empty() && "Trying to log after takeError().");
+    OS << "'" << FileName << "': ";
+    if (Line.hasValue())
+      OS << "line " << Line.getValue() << ": ";
+    Err->log(OS);
+  }
+
+  Error takeError() { return Error(std::move(Err)); }
+
+  std::error_code convertToErrorCode() const override;
+
+  // Used by ErrorInfo::classID.
+  static char ID;
+
+private:
+  FileError(const Twine &F, Optional<size_t> LineNum,
+            std::unique_ptr<ErrorInfoBase> E) {
+    assert(E && "Cannot create FileError from Error success value.");
+    assert(!F.isTriviallyEmpty() &&
+           "The file name provided to FileError must not be empty.");
+    FileName = F.str();
+    Err = std::move(E);
+    Line = std::move(LineNum);
+  }
+
+  static Error build(const Twine &F, Optional<size_t> Line, Error E) {
+    return Error(
+        std::unique_ptr<FileError>(new FileError(F, Line, E.takePayload())));
+  }
+
+  std::string FileName;
+  Optional<size_t> Line;
+  std::unique_ptr<ErrorInfoBase> Err;
+};
+
+/// Concatenate a source file path and/or name with an Error. The resulting
+/// Error is unchecked.
+inline Error createFileError(const Twine &F, Error E) {
+  return FileError::build(F, Optional<size_t>(), std::move(E));
+}
+
+/// Concatenate a source file path and/or name with line number and an Error.
+/// The resulting Error is unchecked.
+inline Error createFileError(const Twine &F, size_t Line, Error E) {
+  return FileError::build(F, Optional<size_t>(Line), std::move(E));
+}
+
+/// Concatenate a source file path and/or name with a std::error_code 
+/// to form an Error object.
+inline Error createFileError(const Twine &F, std::error_code EC) {
+  return createFileError(F, errorCodeToError(EC));
+}
+
+/// Concatenate a source file path and/or name with line number and
+/// std::error_code to form an Error object.
+inline Error createFileError(const Twine &F, size_t Line, std::error_code EC) {
+  return createFileError(F, Line, errorCodeToError(EC));
+}
+
+Error createFileError(const Twine &F, ErrorSuccess) = delete;
+
+/// Helper for check-and-exit error handling.
+///
+/// For tool use only. NOT FOR USE IN LIBRARY CODE.
+///
+class ExitOnError {
+public:
+  /// Create an error on exit helper.
+  ExitOnError(std::string Banner = "", int DefaultErrorExitCode = 1)
+      : Banner(std::move(Banner)),
+        GetExitCode([=](const Error &) { return DefaultErrorExitCode; }) {}
+
+  /// Set the banner string for any errors caught by operator().
+  void setBanner(std::string Banner) { this->Banner = std::move(Banner); }
+
+  /// Set the exit-code mapper function.
+  void setExitCodeMapper(std::function<int(const Error &)> GetExitCode) {
+    this->GetExitCode = std::move(GetExitCode);
+  }
+
+  /// Check Err. If it's in a failure state log the error(s) and exit.
+  void operator()(Error Err) const { checkError(std::move(Err)); }
+
+  /// Check E. If it's in a success state then return the contained value. If
+  /// it's in a failure state log the error(s) and exit.
+  template <typename T> T operator()(Expected<T> &&E) const {
+    checkError(E.takeError());
+    return std::move(*E);
+  }
+
+  /// Check E. If it's in a success state then return the contained reference. If
+  /// it's in a failure state log the error(s) and exit.
+  template <typename T> T& operator()(Expected<T&> &&E) const {
+    checkError(E.takeError());
+    return *E;
+  }
+
+private:
+  void checkError(Error Err) const {
+    if (Err) {
+      int ExitCode = GetExitCode(Err);
+      logAllUnhandledErrors(std::move(Err), errs(), Banner);
+      exit(ExitCode);
+    }
+  }
+
+  std::string Banner;
+  std::function<int(const Error &)> GetExitCode;
+};
+
+/// Conversion from Error to LLVMErrorRef for C error bindings.
+inline LLVMErrorRef wrap(Error Err) {
+  return reinterpret_cast<LLVMErrorRef>(Err.takePayload().release());
+}
+
+/// Conversion from LLVMErrorRef to Error for C error bindings.
+inline Error unwrap(LLVMErrorRef ErrRef) {
+  return Error(std::unique_ptr<ErrorInfoBase>(
+      reinterpret_cast<ErrorInfoBase *>(ErrRef)));
+}
+
+} // end namespace llvm
+
+#endif // LLVM_SUPPORT_ERROR_H
