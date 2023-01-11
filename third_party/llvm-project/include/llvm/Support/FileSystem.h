@@ -1219,3 +1219,227 @@ class directory_entry {
   file_type Type = file_type::type_unknown; // Most platforms can provide this.
   bool FollowSymlinks = true;               // Affects the behavior of status().
   basic_file_status Status;                 // If available.
+
+public:
+  explicit directory_entry(const Twine &Path, bool FollowSymlinks = true,
+                           file_type Type = file_type::type_unknown,
+                           basic_file_status Status = basic_file_status())
+      : Path(Path.str()), Type(Type), FollowSymlinks(FollowSymlinks),
+        Status(Status) {}
+
+  directory_entry() = default;
+
+  void replace_filename(const Twine &Filename, file_type Type,
+                        basic_file_status Status = basic_file_status());
+
+  const std::string &path() const { return Path; }
+  // Get basic information about entry file (a subset of fs::status()).
+  // On most platforms this is a stat() call.
+  // On windows the information was already retrieved from the directory.
+  ErrorOr<basic_file_status> status() const;
+  // Get the type of this file.
+  // On most platforms (Linux/Mac/Windows/BSD), this was already retrieved.
+  // On some platforms (e.g. Solaris) this is a stat() call.
+  file_type type() const {
+    if (Type != file_type::type_unknown)
+      return Type;
+    auto S = status();
+    return S ? S->type() : file_type::type_unknown;
+  }
+
+  bool operator==(const directory_entry& RHS) const { return Path == RHS.Path; }
+  bool operator!=(const directory_entry& RHS) const { return !(*this == RHS); }
+  bool operator< (const directory_entry& RHS) const;
+  bool operator<=(const directory_entry& RHS) const;
+  bool operator> (const directory_entry& RHS) const;
+  bool operator>=(const directory_entry& RHS) const;
+};
+
+namespace detail {
+
+  struct DirIterState;
+
+  std::error_code directory_iterator_construct(DirIterState &, StringRef, bool);
+  std::error_code directory_iterator_increment(DirIterState &);
+  std::error_code directory_iterator_destruct(DirIterState &);
+
+  /// Keeps state for the directory_iterator.
+  struct DirIterState {
+    ~DirIterState() {
+      directory_iterator_destruct(*this);
+    }
+
+    intptr_t IterationHandle = 0;
+    directory_entry CurrentEntry;
+  };
+
+} // end namespace detail
+
+/// directory_iterator - Iterates through the entries in path. There is no
+/// operator++ because we need an error_code. If it's really needed we can make
+/// it call report_fatal_error on error.
+class directory_iterator {
+  std::shared_ptr<detail::DirIterState> State;
+  bool FollowSymlinks = true;
+
+public:
+  explicit directory_iterator(const Twine &path, std::error_code &ec,
+                              bool follow_symlinks = true)
+      : FollowSymlinks(follow_symlinks) {
+    State = std::make_shared<detail::DirIterState>();
+    SmallString<128> path_storage;
+    ec = detail::directory_iterator_construct(
+        *State, path.toStringRef(path_storage), FollowSymlinks);
+  }
+
+  explicit directory_iterator(const directory_entry &de, std::error_code &ec,
+                              bool follow_symlinks = true)
+      : FollowSymlinks(follow_symlinks) {
+    State = std::make_shared<detail::DirIterState>();
+    ec = detail::directory_iterator_construct(
+        *State, de.path(), FollowSymlinks);
+  }
+
+  /// Construct end iterator.
+  directory_iterator() = default;
+
+  // No operator++ because we need error_code.
+  directory_iterator &increment(std::error_code &ec) {
+    ec = directory_iterator_increment(*State);
+    return *this;
+  }
+
+  const directory_entry &operator*() const { return State->CurrentEntry; }
+  const directory_entry *operator->() const { return &State->CurrentEntry; }
+
+  bool operator==(const directory_iterator &RHS) const {
+    if (State == RHS.State)
+      return true;
+    if (!RHS.State)
+      return State->CurrentEntry == directory_entry();
+    if (!State)
+      return RHS.State->CurrentEntry == directory_entry();
+    return State->CurrentEntry == RHS.State->CurrentEntry;
+  }
+
+  bool operator!=(const directory_iterator &RHS) const {
+    return !(*this == RHS);
+  }
+};
+
+namespace detail {
+
+  /// Keeps state for the recursive_directory_iterator.
+  struct RecDirIterState {
+    std::stack<directory_iterator, std::vector<directory_iterator>> Stack;
+    uint16_t Level = 0;
+    bool HasNoPushRequest = false;
+  };
+
+} // end namespace detail
+
+/// recursive_directory_iterator - Same as directory_iterator except for it
+/// recurses down into child directories.
+class recursive_directory_iterator {
+  std::shared_ptr<detail::RecDirIterState> State;
+  bool Follow;
+
+public:
+  recursive_directory_iterator() = default;
+  explicit recursive_directory_iterator(const Twine &path, std::error_code &ec,
+                                        bool follow_symlinks = true)
+      : State(std::make_shared<detail::RecDirIterState>()),
+        Follow(follow_symlinks) {
+    State->Stack.push(directory_iterator(path, ec, Follow));
+    if (State->Stack.top() == directory_iterator())
+      State.reset();
+  }
+
+  // No operator++ because we need error_code.
+  recursive_directory_iterator &increment(std::error_code &ec) {
+    const directory_iterator end_itr = {};
+
+    if (State->HasNoPushRequest)
+      State->HasNoPushRequest = false;
+    else {
+      file_type type = State->Stack.top()->type();
+      if (type == file_type::symlink_file && Follow) {
+        // Resolve the symlink: is it a directory to recurse into?
+        ErrorOr<basic_file_status> status = State->Stack.top()->status();
+        if (status)
+          type = status->type();
+        // Otherwise broken symlink, and we'll continue.
+      }
+      if (type == file_type::directory_file) {
+        State->Stack.push(directory_iterator(*State->Stack.top(), ec, Follow));
+        if (State->Stack.top() != end_itr) {
+          ++State->Level;
+          return *this;
+        }
+        State->Stack.pop();
+      }
+    }
+
+    while (!State->Stack.empty()
+           && State->Stack.top().increment(ec) == end_itr) {
+      State->Stack.pop();
+      --State->Level;
+    }
+
+    // Check if we are done. If so, create an end iterator.
+    if (State->Stack.empty())
+      State.reset();
+
+    return *this;
+  }
+
+  const directory_entry &operator*() const { return *State->Stack.top(); }
+  const directory_entry *operator->() const { return &*State->Stack.top(); }
+
+  // observers
+  /// Gets the current level. Starting path is at level 0.
+  int level() const { return State->Level; }
+
+  /// Returns true if no_push has been called for this directory_entry.
+  bool no_push_request() const { return State->HasNoPushRequest; }
+
+  // modifiers
+  /// Goes up one level if Level > 0.
+  void pop() {
+    assert(State && "Cannot pop an end iterator!");
+    assert(State->Level > 0 && "Cannot pop an iterator with level < 1");
+
+    const directory_iterator end_itr = {};
+    std::error_code ec;
+    do {
+      if (ec)
+        report_fatal_error("Error incrementing directory iterator.");
+      State->Stack.pop();
+      --State->Level;
+    } while (!State->Stack.empty()
+             && State->Stack.top().increment(ec) == end_itr);
+
+    // Check if we are done. If so, create an end iterator.
+    if (State->Stack.empty())
+      State.reset();
+  }
+
+  /// Does not go down into the current directory_entry.
+  void no_push() { State->HasNoPushRequest = true; }
+
+  bool operator==(const recursive_directory_iterator &RHS) const {
+    return State == RHS.State;
+  }
+
+  bool operator!=(const recursive_directory_iterator &RHS) const {
+    return !(*this == RHS);
+  }
+};
+
+/// @}
+
+} // end namespace fs
+} // end namespace sys
+} // end namespace llvm
+
+#endif // LLVM_SUPPORT_FILESYSTEM_H
