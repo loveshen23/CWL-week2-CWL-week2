@@ -207,4 +207,104 @@ public:
   void PrintMessage(raw_ostream &OS, const SMDiagnostic &Diagnostic,
                     bool ShowColors = true) const;
 
-  /// Return an SMDiagnostic at the specified location with th
+  /// Return an SMDiagnostic at the specified location with the specified
+  /// string.
+  ///
+  /// \param Msg If non-null, the kind of message (e.g., "error") which is
+  /// prefixed to the message.
+  SMDiagnostic GetMessage(SMLoc Loc, DiagKind Kind, const Twine &Msg,
+                          ArrayRef<SMRange> Ranges = None,
+                          ArrayRef<SMFixIt> FixIts = None) const;
+
+  /// Prints the names of included files and the line of the file they were
+  /// included from. A diagnostic handler can use this before printing its
+  /// custom formatted message.
+  ///
+  /// \param IncludeLoc The location of the include.
+  /// \param OS the raw_ostream to print on.
+  void PrintIncludeStack(SMLoc IncludeLoc, raw_ostream &OS) const;
+};
+
+/// Represents a single fixit, a replacement of one range of text with another.
+class SMFixIt {
+  SMRange Range;
+
+  std::string Text;
+
+public:
+  // FIXME: Twine.str() is not very efficient.
+  SMFixIt(SMLoc Loc, const Twine &Insertion)
+    : Range(Loc, Loc), Text(Insertion.str()) {
+    assert(Loc.isValid());
+  }
+
+  // FIXME: Twine.str() is not very efficient.
+  SMFixIt(SMRange R, const Twine &Replacement)
+    : Range(R), Text(Replacement.str()) {
+    assert(R.isValid());
+  }
+
+  StringRef getText() const { return Text; }
+  SMRange getRange() const { return Range; }
+
+  bool operator<(const SMFixIt &Other) const {
+    if (Range.Start.getPointer() != Other.Range.Start.getPointer())
+      return Range.Start.getPointer() < Other.Range.Start.getPointer();
+    if (Range.End.getPointer() != Other.Range.End.getPointer())
+      return Range.End.getPointer() < Other.Range.End.getPointer();
+    return Text < Other.Text;
+  }
+};
+
+/// Instances of this class encapsulate one diagnostic report, allowing
+/// printing to a raw_ostream as a caret diagnostic.
+class SMDiagnostic {
+  const SourceMgr *SM = nullptr;
+  SMLoc Loc;
+  std::string Filename;
+  int LineNo = 0;
+  int ColumnNo = 0;
+  SourceMgr::DiagKind Kind = SourceMgr::DK_Error;
+  std::string Message, LineContents;
+  std::vector<std::pair<unsigned, unsigned>> Ranges;
+  SmallVector<SMFixIt, 4> FixIts;
+
+public:
+  // Null diagnostic.
+  SMDiagnostic() = default;
+  // Diagnostic with no location (e.g. file not found, command line arg error).
+  SMDiagnostic(StringRef filename, SourceMgr::DiagKind Knd, StringRef Msg)
+    : Filename(filename), LineNo(-1), ColumnNo(-1), Kind(Knd), Message(Msg) {}
+
+  // Diagnostic with a location.
+  SMDiagnostic(const SourceMgr &sm, SMLoc L, StringRef FN,
+               int Line, int Col, SourceMgr::DiagKind Kind,
+               StringRef Msg, StringRef LineStr,
+               ArrayRef<std::pair<unsigned,unsigned>> Ranges,
+               ArrayRef<SMFixIt> FixIts = None);
+
+  const SourceMgr *getSourceMgr() const { return SM; }
+  SMLoc getLoc() const { return Loc; }
+  StringRef getFilename() const { return Filename; }
+  int getLineNo() const { return LineNo; }
+  int getColumnNo() const { return ColumnNo; }
+  SourceMgr::DiagKind getKind() const { return Kind; }
+  StringRef getMessage() const { return Message; }
+  StringRef getLineContents() const { return LineContents; }
+  ArrayRef<std::pair<unsigned, unsigned>> getRanges() const { return Ranges; }
+
+  void addFixIt(const SMFixIt &Hint) {
+    FixIts.push_back(Hint);
+  }
+
+  ArrayRef<SMFixIt> getFixIts() const {
+    return FixIts;
+  }
+
+  void print(const char *ProgName, raw_ostream &S, bool ShowColors = true,
+             bool ShowKindLabel = true) const;
+};
+
+} // end namespace llvm
+
+#endif // LLVM_SUPPORT_SOURCEMGR_H
