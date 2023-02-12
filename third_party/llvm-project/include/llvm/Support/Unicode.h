@@ -55,4 +55,16 @@ bool isPrintable(int UCS);
 ///   * ErrorNonPrintableCharacter (-1) if \p Text contains non-printable
 ///     characters (as identified by isPrintable);
 ///   * 0 for each non-spacing and enclosing combining mark;
-///   * 2 for each CJK character excluding halfwid
+///   * 2 for each CJK character excluding halfwidth forms;
+///   * 1 for each of the remaining characters.
+int columnWidthUTF8(StringRef Text);
+
+/// Fold input unicode character according the Simple unicode case folding
+/// rules.
+int foldCharSimple(int C);
+
+} // namespace unicode
+} // namespace sys
+} // namespace llvm
+
+#endif
