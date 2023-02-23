@@ -596,4 +596,117 @@ size_t raw_fd_ostream::preferred_buffer_size() const {
   return 0; // XXX BINARYEN
 }
 
-raw_ostream &raw_fd_ostream::changeColor(enum Colors col
+raw_ostream &raw_fd_ostream::changeColor(enum Colors colors, bool bold,
+                                         bool bg) {
+  if (!ColorEnabled)
+    return *this;
+
+  llvm_unreachable("color"); // XXX BINARYEN
+}
+
+raw_ostream &raw_fd_ostream::resetColor() {
+  if (!ColorEnabled)
+    return *this;
+
+  llvm_unreachable("color"); // XXX BINARYEN
+}
+
+raw_ostream &raw_fd_ostream::reverseColor() {
+  if (!ColorEnabled)
+    return *this;
+
+  llvm_unreachable("color"); // XXX BINARYEN
+}
+
+bool raw_fd_ostream::is_displayed() const {
+  llvm_unreachable("is_displayed"); // XXX BINARYEN
+}
+
+bool raw_fd_ostream::has_colors() const {
+  llvm_unreachable("is_displayed"); // XXX BINARYEN
+}
+
+void raw_fd_ostream::anchor() {}
+
+//===----------------------------------------------------------------------===//
+//  outs(), errs(), nulls()
+//===----------------------------------------------------------------------===//
+
+/// outs() - This returns a reference to a raw_ostream for standard output.
+/// Use it like: outs() << "foo" << "bar";
+raw_ostream &llvm::outs() {
+  // Set buffer settings to model stdout behavior.
+  std::error_code EC;
+  static raw_fd_ostream S("-", EC, sys::fs::OF_None);
+  assert(!EC);
+  return S;
+}
+
+/// errs() - This returns a reference to a raw_ostream for standard error.
+/// Use it like: errs() << "foo" << "bar";
+raw_ostream &llvm::errs() {
+  // Set standard error to be unbuffered by default.
+  const int fd = 2; // XXX BINARYEN: stderr, but it doesn't matter anyhow
+  static raw_fd_ostream S(fd, false, true);
+  return S;
+}
+
+/// nulls() - This returns a reference to a raw_ostream which discards output.
+raw_ostream &llvm::nulls() {
+  static raw_null_ostream S;
+  return S;
+}
+
+//===----------------------------------------------------------------------===//
+//  raw_string_ostream
+//===----------------------------------------------------------------------===//
+
+raw_string_ostream::~raw_string_ostream() {
+  flush();
+}
+
+void raw_string_ostream::write_impl(const char *Ptr, size_t Size) {
+  OS.append(Ptr, Size);
+}
+
+//===----------------------------------------------------------------------===//
+//  raw_svector_ostream
+//===----------------------------------------------------------------------===//
+
+uint64_t raw_svector_ostream::current_pos() const { return OS.size(); }
+
+void raw_svector_ostream::write_impl(const char *Ptr, size_t Size) {
+  OS.append(Ptr, Ptr + Size);
+}
+
+void raw_svector_ostream::pwrite_impl(const char *Ptr, size_t Size,
+                                      uint64_t Offset) {
+  memcpy(OS.data() + Offset, Ptr, Size);
+}
+
+//===----------------------------------------------------------------------===//
+//  raw_null_ostream
+//===----------------------------------------------------------------------===//
+
+raw_null_ostream::~raw_null_ostream() {
+#ifndef NDEBUG
+  // ~raw_ostream asserts that the buffer is empty. This isn't necessary
+  // with raw_null_ostream, but it's better to have raw_null_ostream follow
+  // the rules than to change the rules just for raw_null_ostream.
+  flush();
+#endif
+}
+
+void raw_null_ostream::write_impl(const char *Ptr, size_t Size) {
+}
+
+uint64_t raw_null_ostream::current_pos() const {
+  return 0;
+}
+
+void raw_null_ostream::pwrite_impl(const char *Ptr, size_t Size,
+                                   uint64_t Offset) {}
+
+void raw_pwrite_stream::anchor() {}
+
+void buffer_ostream::anchor() {}
